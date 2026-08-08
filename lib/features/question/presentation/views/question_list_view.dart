@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/state/view_state.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/widgets/app_logo.dart';
 import '../../../../core/widgets/app_state_views.dart';
 import '../../../../core/widgets/responsive_layout.dart';
 import '../../domain/usecases/get_questions_use_case.dart';
@@ -34,7 +35,22 @@ class _QuestionListScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('질문')),
+      appBar: AppBar(
+        // 좁은 화면에서는 워드마크가 길어 잘리므로 Q마크만 보여줍니다.
+        title: ResponsiveLayout(
+          compact: (_) => const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AppLogoMark(size: 28),
+              SizedBox(width: AppSpacing.sm),
+              Text('질문'),
+            ],
+          ),
+          // 워드마크가 2줄 락업(1024×366)이라 26px면 글자가 너무 작습니다.
+          // AppBar 기본 높이 56 안에서 36이 최대치에 가깝습니다.
+          medium: (_) => const AppLogo(height: 36),
+        ),
+      ),
       body: SafeArea(
         // 폭에 따라 "늘리는" 게 아니라 "레이아웃을 바꿉니다".
         child: ResponsiveLayout(

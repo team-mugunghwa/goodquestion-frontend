@@ -40,6 +40,27 @@ dev_dependencies:
   # 린트 규칙. analysis_options.yaml 에서 확장합니다
   flutter_lints: ^5.0.0
 
+  # 로고 하나로 Android/iOS 앱 아이콘 전체를 생성
+  flutter_launcher_icons: ^0.14.4
+
+# 앱 아이콘 생성 설정.
+# 로고를 바꾸면 아래 명령을 다시 돌리세요.
+#   dart run flutter_launcher_icons
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/logo_mark.png"
+
+  # iOS 아이콘은 투명도를 허용하지 않습니다. 흰 배경으로 채웁니다.
+  remove_alpha_ios: true
+  background_color_ios: "#ffffff"
+
+  # Android 어댑티브 아이콘: 기기 런처가 모양(원/사각/스퀘어클)을 정하므로
+  # 전경 이미지는 가장자리가 잘립니다. 그래서 여백을 더 준 별도 파일을 씁니다.
+  adaptive_icon_background: "#ffffff"
+  adaptive_icon_foreground: "assets/icons/app_icon_foreground.png"
+  min_sdk_android: 21
+
 flutter:
   uses-material-design: true
 
