@@ -17,6 +17,9 @@ dependencies:
   # DI — Repository / UseCase / DataSource 등 위젯과 무관한 객체
   get_it: ^8.0.3
 
+  # 라우팅 — 경로를 lib/core/router/ 한 곳에 선언합니다. 딥링크·경로 파라미터용
+  go_router: ^17.4.0
+
   # HTTP — 인터셉터로 토큰·에러·로깅을 한 곳에서 처리
   dio: ^5.7.0
 
