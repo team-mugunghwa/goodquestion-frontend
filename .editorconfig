@@ -1,0 +1,29 @@
+# 에디터/OS가 달라도 같은 결과가 나오게 합니다.
+# 이게 없으면 Windows/Mac 사용자 사이에서 줄바꿈(CRLF/LF) 차이로
+# diff가 "전체 파일 변경"으로 뜹니다.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.dart]
+indent_size = 2
+max_line_length = 100
+
+[*.{yaml,yml,json}]
+indent_size = 2
+
+[*.md]
+# 마크다운은 줄 끝 공백 2칸이 줄바꿈 의미라 예외
+trim_trailing_whitespace = false
+
+[*.{java,kt,gradle}]
+indent_size = 4
+
+[Makefile]
+indent_style = tab

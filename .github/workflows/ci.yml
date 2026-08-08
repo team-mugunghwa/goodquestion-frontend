@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# 같은 PR에 새 커밋이 올라오면 이전 실행을 취소해 러너 시간을 아낌
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: "3.44.9"
+
+jobs:
+  analyze:
+    name: 포맷 · 정적 분석 · 테스트
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: 패키지 설치
+        run: flutter pub get
+
+      - name: 포맷 검사
+        run: dart format --set-exit-if-changed .
+
+      - name: 정적 분석
+        # analysis_options.yaml 의 규칙 위반이 있으면 실패
+        run: flutter analyze --fatal-infos
+
+      - name: 테스트
+        run: flutter test --coverage
+
+      - name: 커버리지 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/lcov.info
+          if-no-files-found: ignore
+
+  build-android:
+    name: Android 빌드
+    runs-on: ubuntu-latest
+    needs: analyze
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: APK 빌드 (debug)
+        run: flutter build apk --debug
+
+  # iOS 빌드는 macOS 러너를 쓰며 무료 사용량을 10배로 소모합니다.
+  # main 에 머지될 때만 돌려 사용량을 아낍니다.
+  build-ios:
+    name: iOS 빌드
+    runs-on: macos-latest
+    needs: analyze
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: iOS 빌드 (서명 없음)
+        run: flutter build ios --debug --no-codesign
