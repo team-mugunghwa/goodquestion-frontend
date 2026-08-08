@@ -76,7 +76,12 @@ echo $JAVA_HOME  # Windows: echo $env:JAVA_HOME
 
 ## 3. 플랫폼 툴체인
 
-이 프로젝트의 타겟은 **Android + iOS**이고, **태블릿/iPad가 1순위**입니다.
+배포 타겟은 **Android + iOS**이고, **태블릿/iPad가 1순위**입니다.
+
+> 💡 **급하지 않으면 나중에 해도 됩니다.** 코드 작성 · `flutter analyze` · `flutter test`는
+> 툴체인 없이 전부 되고, 실제 Android/iOS 빌드는 [CI가 대신 검증](../.github/workflows/ci.yml)합니다.
+> 화면은 위의 [Chrome 미리보기](#android-sdk가-없어도-화면-보기-chrome)로 볼 수 있습니다.
+> **실기기·에뮬레이터로 최종 확인이 필요해지는 시점**에 아래를 설치하세요.
 
 ### Android (Windows/macOS 공통)
 
@@ -115,6 +120,24 @@ flutter pub get          # 패키지 설치
 flutter devices          # 연결된 기기 확인
 flutter run              # 실행
 ```
+
+### Android SDK가 없어도 화면 보기 (Chrome)
+
+Android Studio(10GB+)를 아직 안 깔았거나 Mac이 없어도, **브라우저로 레이아웃을 확인**할 수 있습니다.
+
+```bash
+flutter run -d chrome
+```
+
+**태블릿 우선 프로젝트라 이 방법이 반응형 작업에 특히 편합니다.** 브라우저 창을 좌우로 늘렸다 줄이면
+`compact`(<600) → `medium`(600~839) → `expanded`(≥840, 2단 레이아웃) 전환이 즉시 보입니다.
+
+> ⚠️ **web은 배포 대상이 아니라 미리보기 수단입니다.** 최종 확인은 반드시 태블릿 실기기나
+> 에뮬레이터에서 하세요. 폰트 렌더링·터치 타겟 크기·SafeArea가 실제 기기와 다릅니다.
+>
+> ⚠️ **`dart:io`를 import하면 web 빌드가 깨집니다.** 플랫폼 분기가 필요하면
+> `dart:io`의 `Platform` 대신 `package:flutter/foundation.dart`의 `defaultTargetPlatform`을 쓰세요.
+> 예시는 `lib/core/config/app_config.dart` 참고.
 
 ### 코드 생성 (json_serializable)
 
@@ -179,9 +202,10 @@ Settings → Tools → Actions on Save → **Format code** / **Optimize imports*
 
 ---
 
-## 6. 커밋 전 체크
+## 6. push 전 체크 (필수)
 
-PR을 올리기 전에 로컬에서 먼저 돌려보세요. CI가 똑같은 걸 검사합니다.
+`main`에 직접 push할 수 있는 만큼, **로컬 검증은 각자 책임입니다.**
+아래를 통과시키지 않고 push하면 다음 사람이 깨진 `main`을 받습니다.
 
 ```bash
 dart format --set-exit-if-changed .   # 포맷
@@ -195,6 +219,11 @@ flutter test                           # 테스트
 dart format --set-exit-if-changed . && flutter analyze && flutter test
 ```
 
+### push 후에도 확인
+
+push하면 CI가 자동으로 돕니다. **Actions 탭에서 초록불을 확인하세요.**
+브랜치 보호가 없어서 빨간 X여도 아무도 막아주지 않습니다. → [CONVENTIONS.md](CONVENTIONS.md#3-main에-올리기)
+
 ---
 
 ## 트러블슈팅
@@ -207,6 +236,8 @@ dart format --set-exit-if-changed . && flutter analyze && flutter test
 | Gradle이 JDK를 못 찾음 | `JAVA_HOME` 경로가 **실제로 존재하는지** 확인 |
 | `*.g.dart` 파일이 없다고 에러 | `dart run build_runner build` |
 | 에뮬레이터에서 서버 연결 안 됨 | Android 에뮬레이터의 호스트 PC는 `localhost`가 아니라 `10.0.2.2` |
+| web에서 `dart:io` 관련 빌드 에러 | web에는 `dart:io`가 없습니다. `defaultTargetPlatform`으로 대체 |
+| `flutter run -d chrome`에 기기가 안 보임 | Chrome이 설치돼 있는지 확인. `flutter devices`로 목록 확인 |
 | build_runner 결과가 이상함 | `dart run build_runner clean` 후 다시 build |
 | pub get 후에도 패키지 못 찾음 | `flutter clean && flutter pub get` |
 | iOS 빌드 시 Pod 에러 | `cd ios && pod install --repo-update` |

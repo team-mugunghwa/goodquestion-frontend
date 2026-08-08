@@ -67,6 +67,7 @@ presentation ──▶ domain ◀── data
 ```bash
 flutter pub get                                        # 패키지 설치
 flutter run                                            # 실행
+flutter run -d chrome                                  # Android SDK 없이 화면만 보기
 flutter run --dart-define=API_BASE_URL=<주소>          # 다른 서버 보기
 
 dart run build_runner build                            # DTO 코드 생성
@@ -76,7 +77,7 @@ flutter analyze                                        # 정적 분석
 flutter test                                           # 테스트
 ```
 
-**PR 올리기 전에** 아래를 통과시키세요. CI가 같은 걸 검사합니다.
+**push 전에** 아래를 통과시키세요. CI가 같은 걸 검사합니다.
 
 ```bash
 dart format --set-exit-if-changed . && flutter analyze && flutter test
@@ -86,12 +87,19 @@ dart format --set-exit-if-changed . && flutter analyze && flutter test
 
 ## 작업 흐름
 
-1. 이슈 생성 → 담당자 지정
-2. `feat/#12-question-list` 형태로 브랜치 생성
-3. 작업 → 커밋 (`feat(question): 질문 목록 화면 추가`)
-4. PR 생성 → **태블릿 스크린샷 첨부** → 리뷰 1명 승인 → Squash merge
+`main`에 **직접 push할 수 있습니다.** 브랜치 보호를 걸지 않았으니 CI는 각자 지킵니다.
 
+1. 이슈 생성 → 담당자 지정
+2. `feat/#12-question-list` 형태로 브랜치 생성 (작은 변경은 생략 가능)
+3. 작업 → 커밋 (`feat(question): 질문 목록 화면 추가`)
+4. **로컬 검증 통과** 후 push
+5. **Actions 탭에서 초록불 확인.** 빨간 X면 그 자리에서 고치기
+
+`lib/core/`·`pubspec.yaml` 같은 공용 파일이나 구조 변경은 PR로 올려 리뷰받기를 권합니다.
 자세한 규칙은 [CONVENTIONS.md](docs/CONVENTIONS.md).
+
+> iOS 빌드 CI는 macOS 러너가 무료 분량을 10배로 쓰기 때문에 **평소에는 돌지 않습니다.**
+> Actions 탭 → CI → **Run workflow**로 수동 실행하거나, 매주 일요일 자동 검증됩니다.
 
 ---
 
