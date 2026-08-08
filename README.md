@@ -45,12 +45,17 @@ Flutter 설치부터 필요하면 → **[docs/SETUP.md](docs/SETUP.md)**
 
 ```
 lib/
-├── app.dart              # MaterialApp
+├── app.dart              # MaterialApp.router
 ├── main.dart             # 진입점 (DI 초기화)
-├── core/                 # 공통 — network, error, theme, di, widgets
-└── features/
-    └── question/         # 기능 단위. 그 안에서 data / domain / presentation
+├── core/                 # 공통 — router, network, error, theme, di, widgets
+└── features/             # 기능 단위. 그 안에서 data / domain / presentation
+    ├── home/  story/  play/  planet/  word/  mypage/  auth/
+    └── question/
 ```
+
+화면 전환은 **go_router**가 맡습니다. 경로 12개와 담당 View는
+[ARCHITECTURE.md](docs/ARCHITECTURE.md#화면-라우트) 표에 있습니다. 경로 문자열은
+`lib/core/router/app_routes.dart`에만 두세요.
 
 의존성 방향은 **한쪽으로만** 흐릅니다.
 
@@ -68,6 +73,8 @@ presentation ──▶ domain ◀── data
 flutter pub get                                        # 패키지 설치
 flutter run                                            # 실행
 flutter run -d chrome                                  # Android SDK 없이 화면만 보기
+                                                       #  주소창에 경로를 직접 넣어 확인:
+                                                       #  http://localhost:PORT/#/stories/12
 flutter run --dart-define=API_BASE_URL=<주소>          # 다른 서버 보기
 
 dart run build_runner build                            # DTO 코드 생성

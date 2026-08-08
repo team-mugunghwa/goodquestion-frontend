@@ -148,3 +148,15 @@
   1. **iOS 아이콘은 투명도를 허용하지 않음.** `remove_alpha_ios: true` + 흰 배경으로 채움. 안 하면 App Store 업로드가 거부됨.
   2. **Android 어댑티브 아이콘은 런처가 모양(원/사각/스퀘어클)을 정하므로 가장자리가 잘림.** 그래서 전경용으로 여백을 더 준 별도 파일(`assets/icons/app_icon_foreground.png`, 마크 높이 290/512)을 씀. `logo_mark.png`(높이 400/512)를 그대로 쓰면 원형 런처에서 Q의 위아래가 잘림.
 - **결과**: `android/app/src/main/res/`와 `ios/Runner/Assets.xcassets/`의 아이콘 파일은 **생성물이므로 직접 수정하지 말 것.** 원본 이미지를 고치고 재생성해야 함.
+
+---
+
+## 013. 라우팅은 go_router, 라우트는 `lib/core/router/`에 모음
+
+- **2026-08-09 / 승인됨**
+- **맥락**: 화면이 12개로 정해졌고 `/stories/:storyId`, `/play/:sessionId/recap`처럼 **경로 파라미터와 중첩 경로**가 있음. 보호자 리포트는 나중에 **알림 딥링크**로 바로 진입해야 함. 기존에는 `MaterialApp(home:)` 하나에 `Navigator.push`뿐이라 경로라는 개념 자체가 없었음.
+- **결정**: `go_router`를 넣고 `MaterialApp.router`로 바꿈. 라우트 표는 `lib/core/router/app_router.dart`, 경로 문자열은 `app_routes.dart` 상수로만 둔다. **화면 코드에 경로 문자열을 직접 쓰지 않는다.**
+- **이유**: 딥링크와 경로 파라미터를 직접 파싱하지 않아도 됨. 나중에 붙일 **게이트(보호자 확인·아이 프로필 미등록 시 이야기 진입 차단)** 를 `redirect` 한 곳에서 처리할 수 있음 — 화면마다 흩뿌리면 빠뜨린 곳이 반드시 생김.
+- **대안**: `onGenerateRoute`(패키지 추가 없음)를 고려했으나, 경로 파라미터를 손으로 파싱해야 하고 게이트 리다이렉트를 결국 직접 만들게 됨.
+- **주의**: **web은 기본 해시 URL 전략을 그대로 씁니다.** 미리보기 주소는 `http://localhost:PORT/#/stories/12` 형태입니다. 해시를 떼려면(`/stories/12`) 정적 서버에 index.html 폴백 설정이 필요한데, web은 배포 대상이 아니라 그 비용을 지지 않았습니다. → 011
+- **결과**: `lib/core/router/`는 여러 명이 동시에 건드리는 파일이 됨. 라우트 추가 시 팀 채널에 알릴 것. → [CONVENTIONS.md](CONVENTIONS.md) 6장

@@ -43,7 +43,7 @@ presentation ──▶ domain ◀── data
 ```
 lib/
 ├── main.dart
-├── app.dart                         # MaterialApp, 전역 Provider 등록
+├── app.dart                         # MaterialApp.router, 전역 Provider 등록
 │
 ├── core/                            # 기능에 종속되지 않는 공통 코드
 │   ├── config/
@@ -60,14 +60,19 @@ lib/
 │   │   └── dio_client.dart          # Dio 인스턴스 + 인터셉터
 │   ├── presentation/
 │   │   └── base_view_model.dart     # 모든 ViewModel의 부모
+│   ├── router/                      # ⚠ 여러 명이 동시에 건드림
+│   │   ├── app_router.dart          # go_router 라우트 표
+│   │   └── app_routes.dart          # 경로 문자열은 여기에만
 │   ├── state/
 │   │   └── view_state.dart          # idle / loading / success / error
 │   ├── theme/                       # 색·간격 토큰
 │   └── widgets/                     # 여러 feature가 쓰는 공용 위젯
 │       ├── app_state_views.dart     # 로딩·에러·빈 화면
-│       └── responsive_layout.dart
+│       ├── responsive_layout.dart
+│       └── route_placeholder_view.dart  # 아직 안 만든 화면의 자리 표시자
 │
-└── features/
+└── features/                        # auth · home · mypage · planet ·
+    │                                # play · story · word · question
     └── question/
         ├── data/
         │   ├── datasources/
@@ -93,6 +98,31 @@ lib/
             └── widgets/
                 └── question_card.dart
 ```
+
+### 화면 라우트
+
+화면 전환은 go_router가 담당합니다. **경로는 아래가 전부입니다.** 화면을 추가하려면
+먼저 여기에 한 줄을 늘리고 `core/router/`에 등록하세요. → [DECISIONS.md](DECISIONS.md) 013
+
+| 경로 | 화면 | View |
+|---|---|---|
+| `/` | 홈 | `features/home/.../home_view.dart` |
+| `/stories` | 이야기 목록 | `features/story/.../story_list_view.dart` |
+| `/stories/:storyId` | 이야기 상세 | `features/story/.../story_detail_view.dart` |
+| `/play/:sessionId` | 장면 진행 | `features/play/.../play_view.dart` |
+| `/play/:sessionId/recap` | 말하기 후 활동 | `features/play/.../play_recap_view.dart` |
+| `/planet` | 내 행성 | `features/planet/.../planet_view.dart` |
+| `/words` | 단어장 | `features/word/.../word_list_view.dart` |
+| `/mypage` | 마이페이지 | `features/mypage/.../my_page_view.dart` |
+| `/mypage/report` | 보호자 리포트 목록 | `features/mypage/.../report_list_view.dart` |
+| `/mypage/report/:sessionId` | 보호자 리포트 상세 | `features/mypage/.../report_detail_view.dart` |
+| `/mypage/settings` | 설정 | `features/mypage/.../settings_view.dart` |
+| `/auth` | 보호자 인증 | `features/auth/.../auth_view.dart` |
+
+- **로그인·회원가입 화면을 따로 만들지 마세요.** `/auth` 하나가 로그인·약관 동의·최초 아이 프로필 등록을 다 맡습니다.
+- **장면 안의 단계**(내레이션 → 어려운 단어 → 미션 → 음성 대화 루프)는 라우트가 아니라 `/play/:sessionId` **화면 내부 상태**입니다.
+- 보호자 확인 게이트(`/mypage/report*`)와 아이 프로필 미등록 시 이야기 진입 차단은 **`app_router.dart`의 `redirect`에 한 번만** 붙입니다. 화면마다 검사하면 반드시 빠뜨립니다.
+- 현재 모든 View는 `RoutePlaceholderView`(경로와 화면명만 표시)로 비어 있습니다. 담당자가 각자 걷어내고 채웁니다.
 
 ---
 
