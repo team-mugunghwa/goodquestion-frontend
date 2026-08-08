@@ -1,0 +1,48 @@
+name: goodquestion
+description: "GoodQuestion — 좋은 질문을 나누는 앱. 태블릿/iPad 우선."
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  # 팀 전원이 같은 Flutter 3.44.9 (Dart 3.12.2) 를 씁니다. docs/SETUP.md 참고
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # 상태관리 — ViewModel(ChangeNotifier) 을 위젯 트리에 붙입니다
+  provider: ^6.1.2
+
+  # DI — Repository / UseCase / DataSource 등 위젯과 무관한 객체
+  get_it: ^8.0.3
+
+  # HTTP — 인터셉터로 토큰·에러·로깅을 한 곳에서 처리
+  dio: ^5.7.0
+
+  # DTO 의 fromJson 자동 생성용 애노테이션
+  # json_serializable 6.11+ 는 4.12.0 이상을 요구합니다
+  json_annotation: ^4.12.0
+
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # 코드 생성
+  build_runner: ^2.4.13
+  json_serializable: ^6.9.0
+
+  # 테스트용 mock (코드 생성 불필요)
+  mocktail: ^1.0.4
+
+  # 린트 규칙. analysis_options.yaml 에서 확장합니다
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icons/

@@ -1,0 +1,18 @@
+# 충돌이 잦거나 전체에 영향을 주는 경로만 지정합니다.
+# 모든 파일에 * 를 걸면 매 PR마다 전원에게 리뷰 요청이 가서 알림 피로가 생깁니다.
+#
+# 여기에 걸린 경로가 바뀌면 지정된 사람에게 자동으로 리뷰 요청이 갑니다.
+# 팀 구성이 바뀌면 이 파일도 갱신하세요.
+
+# 공통 인프라 — 한 명이 바꾸면 전원이 영향받는 곳
+/lib/core/               @0804sally @leeseowoo @frihett @hyunwoo1229
+
+# 빌드·CI·의존성
+/pubspec.yaml            @0804sally @leeseowoo @frihett @hyunwoo1229
+/.github/                @0804sally @leeseowoo @frihett @hyunwoo1229
+/analysis_options.yaml   @0804sally @leeseowoo @frihett @hyunwoo1229
+
+# 팀 규칙 문서 — 합의 없이 바뀌면 안 됨
+/docs/CONVENTIONS.md     @0804sally @leeseowoo @frihett @hyunwoo1229
+/docs/ARCHITECTURE.md    @0804sally @leeseowoo @frihett @hyunwoo1229
+/docs/API.md             @0804sally @leeseowoo @frihett @hyunwoo1229
