@@ -37,9 +37,33 @@ flutter downgrade 3.44.9
 
 1. https://docs.flutter.dev/get-started/install/windows 에서 **3.44.9 stable** zip 다운로드
 2. **`C:\dev\flutter`** 에 압축 해제
-   - ⚠️ **경로에 한글·공백이 들어가면 빌드가 깨집니다.** `C:\Users\홍길동\...` 아래에 두지 마세요.
 3. 환경변수 PATH에 `C:\dev\flutter\bin` 추가
 4. 새 터미널을 열고 `flutter --version` 확인
+
+> ## ⚠️ 경로에 한글이 있으면 안 됩니다 (실제로 겪은 문제)
+>
+> **Windows 계정명이 한글이면 SDK도 프로젝트도 `C:\Users\<한글이름>\` 아래에 두지 마세요.**
+> `C:\dev\` 같은 영문 경로를 쓰세요. 공백도 피하는 게 안전합니다.
+>
+> 흔히 "Gradle 빌드가 깨진다"고 알려져 있지만, **실제로는 그보다 훨씬 앞단에서 터집니다.**
+> `flutter pub get` 까지는 멀쩡히 성공해서 처음엔 문제없어 보이는 게 함정입니다.
+>
+> ```
+> $ flutter analyze
+> Unhandled exception:
+> FormatException: Unexpected end of input (at character 348)
+> ...C/goodquestion-frontend/"}],"capabilities":{"window":{"workDoneProgress":tr
+>                                                                               ^
+> ```
+>
+> **원인**: `flutter analyze` 는 Dart 분석 서버와 LSP(JSON-RPC)로 통신하는데,
+> 메시지 길이를 **바이트 수로 계산해 보내고 문자 수로 읽습니다.**
+> 한글 3글자는 UTF-8로 9바이트라 6바이트가 어긋나고, JSON이 중간에 잘려 파싱이 터집니다.
+> 위 로그에서 `C:/Users/최예슬/` 이 `...C/` 로 뭉개진 게 그 흔적입니다.
+>
+> **해결**: 프로젝트를 영문 경로로 옮기고 다시 클론하세요. 옮긴 뒤에는
+> `flutter analyze` 가 남긴 dart 프로세스가 옛 폴더를 잡고 있을 수 있으니,
+> 지워지지 않으면 작업 관리자에서 `dart.exe` 를 종료한 뒤 삭제하세요.
 
 ### macOS
 
@@ -113,6 +137,9 @@ sudo gem install cocoapods
 ## 4. 프로젝트 실행
 
 ```bash
+# ⚠️ 한글이 없는 경로에서 클론하세요 (Windows 계정명이 한글이면 필수)
+cd C:\dev
+
 git clone https://github.com/team-mugunghwa/goodquestion-frontend.git
 cd goodquestion-frontend
 
@@ -231,7 +258,9 @@ push하면 CI가 자동으로 돕니다. **Actions 탭에서 초록불을 확인
 | 증상 | 원인 / 해결 |
 |---|---|
 | `flutter` 명령을 찾을 수 없음 | PATH에 `flutter/bin` 추가 후 **터미널 새로 열기** |
+| `flutter analyze`가 `FormatException: Unexpected end of input`으로 죽음 | **경로에 한글이 있습니다.** 영문 경로로 옮기세요 → [위 경고](#️-경로에-한글이-있으면-안-됩니다-실제로-겪은-문제) |
 | Windows에서 빌드가 이상하게 실패 | Flutter SDK나 프로젝트 경로에 **한글/공백**이 있는지 확인 |
+| 프로젝트 폴더가 "사용 중"이라 안 지워짐 | `flutter analyze`가 남긴 `dart.exe` 프로세스. 작업 관리자에서 종료 후 삭제 |
 | `Android license status unknown` | `flutter doctor --android-licenses` 실행 후 전부 `y` |
 | Gradle이 JDK를 못 찾음 | `JAVA_HOME` 경로가 **실제로 존재하는지** 확인 |
 | `*.g.dart` 파일이 없다고 에러 | `dart run build_runner build` |
