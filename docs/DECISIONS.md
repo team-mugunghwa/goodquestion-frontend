@@ -135,3 +135,16 @@
 - **이유**: Android Studio + SDK는 10GB 이상이라 설치 부담이 큼. web은 수십 MB에 `flutter run -d chrome` 한 줄이면 되고, **브라우저 창 크기를 조절해 태블릿/폰 레이아웃을 즉시 비교**할 수 있어 반응형 작업에 오히려 편함.
 - **주의**: web에는 `dart:io`가 없다. 이 결정 때문에 `app_config.dart`의 `Platform.isAndroid`를 `defaultTargetPlatform`으로 교체했음. **앞으로도 `dart:io`를 쓰면 web 미리보기가 깨진다.**
 - **결과**: 최종 확인은 **반드시 실기기/에뮬레이터**에서. web에서 잘 보인다고 태블릿에서 같다는 보장은 없음(폰트·터치 타겟·SafeArea가 다름).
+
+---
+
+## 012. 앱 아이콘은 flutter_launcher_icons로 생성
+
+- **2026-08-09 / 승인됨**
+- **맥락**: Android/iOS 앱 아이콘은 해상도별로 수십 개 파일이 필요함. 손으로 만들면 로고가 바뀔 때마다 전부 다시 만들어야 함.
+- **결정**: `flutter_launcher_icons`(dev 의존성)로 로고 하나에서 전부 생성. 설정은 `pubspec.yaml`에.
+- **이유**: 로고 교체 시 `dart run flutter_launcher_icons` 한 줄이면 끝남. 생성된 아이콘은 커밋해서 클론 직후 바로 빌드되게 함.
+- **주의 2가지**:
+  1. **iOS 아이콘은 투명도를 허용하지 않음.** `remove_alpha_ios: true` + 흰 배경으로 채움. 안 하면 App Store 업로드가 거부됨.
+  2. **Android 어댑티브 아이콘은 런처가 모양(원/사각/스퀘어클)을 정하므로 가장자리가 잘림.** 그래서 전경용으로 여백을 더 준 별도 파일(`assets/icons/app_icon_foreground.png`, 마크 높이 290/512)을 씀. `logo_mark.png`(높이 400/512)를 그대로 쓰면 원형 런처에서 Q의 위아래가 잘림.
+- **결과**: `android/app/src/main/res/`와 `ios/Runner/Assets.xcassets/`의 아이콘 파일은 **생성물이므로 직접 수정하지 말 것.** 원본 이미지를 고치고 재생성해야 함.
