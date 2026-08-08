@@ -110,3 +110,13 @@ desktop.ini
 *~
 *.bak
 *.tmp
+
+# ── 실수 방지 ───────────────────────────────────────────────
+# 저장소 안에 같은 저장소를 또 클론하면 git이 submodule(gitlink)로
+# 커밋해버려서, 다른 팀원이 클론하면 빈 폴더만 받게 됩니다.
+# 실제로 한 번 발생해서 막아둡니다.
+/goodquestion-frontend/
+
+# 로컬 빌드 산출물 미리보기용 정적 서버 등
+/.playwright-mcp/
+*.screenshot.png
