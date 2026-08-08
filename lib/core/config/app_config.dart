@@ -1,5 +1,3 @@
-import 'dart:io' show Platform;
-
 import 'package:flutter/foundation.dart';
 
 /// 빌드 시점에 주입되는 설정값.
@@ -27,9 +25,14 @@ abstract final class AppConfig {
   /// Android 에뮬레이터에서 `localhost` 는 **에뮬레이터 자신**을 가리킵니다.
   /// 호스트 PC 는 `10.0.2.2` 입니다. 이걸 몰라서 "연결이 안 돼요" 로
   /// 반나절 쓰는 경우가 많아 기본값으로 처리해 둡니다.
+  ///
+  /// `dart:io` 의 `Platform` 대신 `defaultTargetPlatform` 을 쓰는 이유:
+  /// **web 에는 `dart:io` 가 아예 없어서** import 만 해도 빌드가 깨집니다.
+  /// `defaultTargetPlatform` 은 모든 플랫폼에서 동작합니다.
   static String get _defaultBaseUrl {
-    if (kIsWeb) return 'http://localhost:8080/api/v1';
-    if (Platform.isAndroid) return 'http://10.0.2.2:8080/api/v1';
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      return 'http://10.0.2.2:8080/api/v1';
+    }
     return 'http://localhost:8080/api/v1';
   }
 

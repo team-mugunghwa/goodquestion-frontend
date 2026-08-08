@@ -5,6 +5,11 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # iOS 빌드를 수동으로 돌리고 싶을 때 (Actions 탭 → Run workflow)
+  workflow_dispatch:
+  # 주 1회 iOS 빌드 검증 (월요일 오전 9시 KST = 일요일 00:00 UTC)
+  schedule:
+    - cron: "0 0 * * 0"
 
 # 같은 PR에 새 커밋이 올라오면 이전 실행을 취소해 러너 시간을 아낌
 concurrency:
@@ -71,13 +76,19 @@ jobs:
       - name: APK 빌드 (debug)
         run: flutter build apk --debug
 
-  # iOS 빌드는 macOS 러너를 쓰며 무료 사용량을 10배로 소모합니다.
-  # main 에 머지될 때만 돌려 사용량을 아낍니다.
+  # ⚠️ macOS 러너는 무료 사용량을 10배로 차감합니다.
+  # 실측: 2분 30초짜리 빌드가 30분으로 계산됨 (조직 무료 한도 월 2,000분)
+  #
+  # 그래서 평소에는 돌리지 않고, 아래 두 경우에만 실행합니다.
+  #   1. 수동 실행 (Actions 탭 → CI → Run workflow)
+  #   2. 매주 일요일 자동 검증
+  #
+  # 평상시 iOS 검증은 Mac 쓰는 팀원의 로컬 빌드에 의존합니다.
   build-ios:
     name: iOS 빌드
     runs-on: macos-latest
     needs: analyze
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     steps:
       - uses: actions/checkout@v4
 
