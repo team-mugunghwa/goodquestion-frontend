@@ -257,3 +257,62 @@ abstract final class SettingsStrings {
   /// 목업의 문서 뷰. 실제 문서가 들어오면 이 자리를 채웁니다.
   static const String documentPlaceholder = '문서 내용은 준비 중입니다.';
 }
+
+/// 보호자 인증(`/auth`) 전용 문구.
+///
+/// 이 화면의 사용자는 **보호자**입니다. 서비스 본편(아이 대상)과 달리
+/// 그림·음성 우선 원칙이 적용되지 않고, 일반 성인용 인증 UX 톤을 씁니다.
+abstract final class AuthStrings {
+  // ── 스텝 1 로그인 ──
+  static const String tagline = '아이의 말하기가 자라나요';
+  static const String orDivider = '또는';
+  static const String email = '이메일';
+  static const String password = '비밀번호';
+  static const String signIn = '로그인';
+  static const String signUpWithEmail = '이메일로 가입하기';
+  static const String signUp = '가입하기';
+  static const String backToSignIn = '로그인으로 돌아가기';
+
+  /// 자격 불일치. 어느 쪽이 틀렸는지는 알려주지 않습니다(계정 존재 여부 노출 방지).
+  static const String signInFailed = '이메일 또는 비밀번호를 다시 확인해 주세요.';
+  static const String emailRequired = '이메일을 입력해 주세요.';
+  static const String passwordRequired = '비밀번호를 입력해 주세요.';
+
+  /// 소셜 로그인 실패 시뮬레이션.
+  static const String socialFailed = '로그인에 실패했어요. 잠시 후 다시 시도해 주세요.';
+
+  // ── 스텝 2 동의 ──
+  static const String consentTitle = '동의가 필요해요';
+  static const String consentAll = '전체 동의';
+  static const String consentRequired = '필수';
+  static const String consentOptional = '선택';
+  static const String consentView = '보기';
+  static const String consentContinue = '동의하고 계속하기';
+
+  /// 필수 항목을 안 채운 채 눌렀을 때.
+  static const String consentMissing = '필수 항목에 동의해야 계속할 수 있어요.';
+
+  // ── 스텝 3 아이 프로필 ──
+  static const String childTitle = '함께할 아이를 알려주세요';
+  static const String childName = '아이 이름';
+  static const String childNameHint = '예: 하늘이';
+  static const String childAge = '나이';
+  static String ageLabel(int age) => '$age세';
+  static const String start = '시작하기';
+
+  /// 완료 직후의 짧은 환영. 곧바로 홈으로 넘어갑니다.
+  static String welcome(String name) => '$name(이)와 시작해요!';
+
+  /// 프로필 없이 홈에 들어갈 수 없으므로, 여기서의 뒤로가기는 로그아웃입니다.
+  static const String signOutConfirm = '로그아웃할까요?\n아이 프로필을 만들어야 시작할 수 있어요.';
+  static const String signOutConfirmAction = '로그아웃';
+  static const String cancel = '취소';
+
+  static const String loadFailed = '화면을 불러오지 못했어요.';
+
+  /// 목업의 문서 뷰. 실제 약관이 들어오면 이 자리를 채웁니다.
+  static const String documentPlaceholder = '문서 내용은 준비 중입니다.';
+
+  /// "2/3" — 스텝 인디케이터의 스크린리더용 라벨.
+  static String stepOf(int current, int total) => '$total단계 중 $current단계';
+}

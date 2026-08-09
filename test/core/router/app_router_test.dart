@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:goodquestion/core/constants/app_strings.dart';
 import 'package:goodquestion/core/di/injector.dart';
@@ -16,14 +17,34 @@ void main() {
   setUpAll(configureDependencies);
   tearDownAll(getIt.reset);
 
+  // `rootBundle` 은 읽은 에셋의 **Future 를** 캐시합니다. 그 Future 는 만들어진
+  // 테스트의 async 존에 묶여 있어서, 다음 테스트에서 같은 에셋을 읽으면
+  // 영원히 안 끝납니다(화면이 로딩 스피너에서 멈춤). 테스트마다 비웁니다.
+  setUp(rootBundle.clear);
+
   /// 주소를 직접 입력해 들어온 상황을 흉내 냅니다.
+  ///
+  /// `pumpAndSettle` 을 쓰지 않습니다 — 로딩 스피너·스켈레톤이 프레임을 계속
+  /// 요청해서 영원히 안 멎습니다.
+  ///
+  /// 대신 [WidgetTester.runAsync] 로 **진짜 시간을 흘려보냅니다.** 화면들이
+  /// 더미 JSON 을 `rootBundle` 에서 읽는데, 이건 실제 파일 I/O 라서 가짜
+  /// 시계를 아무리 돌려도 안 끝납니다. `pump(Duration)` 만 반복하면 데이터가
+  /// 도착하기 전에 단언이 실행돼 통과했다 말았다 합니다.
   Future<void> pumpAt(WidgetTester tester, String location) async {
     await tester.pumpWidget(
       MaterialApp.router(
         routerConfig: createAppRouter(initialLocation: location),
       ),
     );
-    await tester.pumpAndSettle();
+    // 목업 Repository 는 "가짜 지연(타이머) → 에셋 읽기(진짜 I/O)" 순서로
+    // 움직입니다. 둘 중 하나만 돌리면 안 끝나므로 번갈아 흘려보냅니다.
+    for (int i = 0; i < 6; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 30)),
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+    }
   }
 
   // 하단 내비를 가진 탭 루트 화면들. 자리 표시자가 아니라 실제 화면인지
@@ -63,6 +84,19 @@ void main() {
     });
   });
 
+  testWidgets('/auth 로 들어가면 로그인 스텝이 뜬다', (WidgetTester tester) async {
+    await pumpAt(tester, AppRoutes.auth);
+    // 소셜 버튼이 이 스텝의 주인공입니다. (이메일 로그인은 접히는 곳 아래)
+    expect(find.text(AuthStrings.tagline), findsOneWidget);
+    expect(find.textContaining('카카오'), findsOneWidget);
+  });
+
+  testWidgets('/auth?step=child 는 프로필 등록으로 바로 간다', (WidgetTester tester) async {
+    await pumpAt(tester, AppRoutes.authChildStep);
+    // 로그인은 됐는데 프로필이 없는 계정이 오는 자리입니다.
+    expect(find.text(AuthStrings.childTitle), findsOneWidget);
+  });
+
   testWidgets('/stories/:storyId 로 들어가면 상세 화면이 뜬다', (
     WidgetTester tester,
   ) async {
@@ -77,7 +111,6 @@ void main() {
     AppRoutes.playOf('abc'): '/play/abc - 장면 진행',
     AppRoutes.playRecapOf('abc'): '/play/abc/recap - 말하기 후 활동',
     AppRoutes.planet: '/planet - 내 행성',
-    AppRoutes.auth: '/auth - 보호자 인증',
   };
 
   expectedText.forEach((String location, String text) {

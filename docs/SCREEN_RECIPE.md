@@ -97,6 +97,11 @@ test/features/<feature>/...                      # 아래 4장
   나간 뒤에 `setState` 가 불리고, 위젯 테스트는 "A Timer is still pending" 으로 죽습니다
 - **목록 → 상세는 `context.go` 가 아니라 `context.push`.** `go` 는 스택을 갈아엎어서
   돌아왔을 때 필터·스크롤이 초기화되고, 상세의 뒤로가기가 갈 곳을 잃습니다
+- **`ListTile` 계열을 `AppCanvas` 안에서 쓰지 마세요.** 캔버스가 배경을 칠하고
+  있어서 "잉크 효과가 가려진다"는 프레임워크 단언이 뜹니다. `Row + Checkbox` 로 짜세요
+- 라우터 테스트처럼 **여러 테스트가 같은 더미를 읽으면** `setUp(rootBundle.clear)`
+  를 넣으세요. `rootBundle` 은 Future 를 캐시하는데 그게 앞 테스트의 async 존에
+  묶여 있어서, 다음 테스트의 화면이 로딩 스피너에서 안 빠져나옵니다
 
 ---
 
