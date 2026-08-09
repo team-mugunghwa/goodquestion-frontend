@@ -18,4 +18,17 @@ abstract final class AppAssets {
 
   /// 홈 화면 더미. 서버 `GET /home` 응답의 `data` 와 1:1 입니다.
   static const String homeDummy = '$_dummy/home.json';
+
+  /// 이야기 목록 더미. 주제 필터 목록도 여기 함께 들어 있습니다.
+  static const String storiesListDummy = '$_dummy/stories_list.json';
+
+  /// 이야기 상세 더미. **storyId 를 키로 하는 맵**입니다.
+  ///
+  /// 화면마다 파일 하나가 원칙이지만, 상세는 이야기 수만큼 파일이 늘어나고
+  /// 목록의 카드를 눌렀을 때 절반이 "찾을 수 없어요"로 빠지면 시연이 안 됩니다.
+  /// 서버에서는 `GET /stories/{id}` 하나로 바뀝니다.
+  static const String storyDetailsDummy = '$_dummy/story_details.json';
+
+  /// 단어장 더미. 이야기별 그룹 + 단어 목록.
+  static const String wordsDummy = '$_dummy/words_screen.json';
 }

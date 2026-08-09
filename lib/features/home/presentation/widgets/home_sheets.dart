@@ -6,8 +6,8 @@ import '../../../../core/constants/app_strings.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/kid_button.dart';
+import '../../../../core/widgets/screen_metrics.dart';
 import '../../domain/entities/child_profile.dart';
-import 'home_metrics.dart';
 
 /// 아이 프로필 전환 모달(모달 6)을 여는 자리.
 ///
@@ -19,7 +19,7 @@ import 'home_metrics.dart';
 /// 불러옵니다.
 Future<bool> showChildSwitchSheet(
   BuildContext context, {
-  required HomeMetrics metrics,
+  required ScreenMetrics metrics,
   ChildProfile? current,
 }) async {
   final bool? switched = await showModalBottomSheet<bool>(
@@ -51,7 +51,7 @@ Future<bool> showChildSwitchSheet(
 /// 이 앱이 뭔지도 모른 채 로그인 화면만 봅니다.
 Future<void> showProfileNeededSheet(
   BuildContext context, {
-  required HomeMetrics metrics,
+  required ScreenMetrics metrics,
   required VoidCallback onCreate,
 }) {
   return showModalBottomSheet<void>(
@@ -84,7 +84,7 @@ class _KidSheet extends StatelessWidget {
   });
 
   final String title;
-  final HomeMetrics metrics;
+  final ScreenMetrics metrics;
   final List<Widget> children;
 
   @override

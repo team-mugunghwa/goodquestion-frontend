@@ -1,0 +1,68 @@
+{
+  "child": {
+    "name": "하늘이",
+    "avatar": null
+  },
+  "totalCount": 5,
+  "groups": [
+    {
+      "storyId": 11,
+      "storyTitle": "방귀 뀌는 며느리",
+      "storyImage": null,
+      "words": [
+        {
+          "wordId": 101,
+          "word": "며느리",
+          "meaning": "아들과 결혼한 사람이에요.",
+          "sentence": "옛날에 방귀를 참는 며느리가 살았어요.",
+          "audio": "assets/sounds/word_101.mp3",
+          "liked": true,
+          "savedAt": "2026-08-08T11:20:00Z"
+        },
+        {
+          "wordId": 102,
+          "word": "사랑방",
+          "meaning": "손님을 맞이하는 방이에요.",
+          "sentence": "아버지는 사랑방에서 손님을 만났어요.",
+          "audio": "assets/sounds/word_102.mp3",
+          "liked": false,
+          "savedAt": "2026-08-08T11:24:00Z"
+        },
+        {
+          "wordId": 103,
+          "word": "참다",
+          "meaning": "하고 싶은 걸 꾹 누르는 거예요.",
+          "sentence": "며느리는 방귀를 오래 참았어요.",
+          "audio": "assets/sounds/word_103.mp3",
+          "liked": false,
+          "savedAt": "2026-08-08T11:31:00Z"
+        }
+      ]
+    },
+    {
+      "storyId": 21,
+      "storyTitle": "해와 달이 된 오누이",
+      "storyImage": null,
+      "words": [
+        {
+          "wordId": 201,
+          "word": "오누이",
+          "meaning": "오빠와 여동생을 함께 부르는 말이에요.",
+          "sentence": "산속에 오누이 둘만 남았어요.",
+          "audio": "assets/sounds/word_201.mp3",
+          "liked": true,
+          "savedAt": "2026-08-07T09:05:00Z"
+        },
+        {
+          "wordId": 202,
+          "word": "동아줄",
+          "meaning": "아주 굵고 튼튼한 줄이에요.",
+          "sentence": "하늘에서 동아줄이 내려왔어요.",
+          "audio": "assets/sounds/word_202.mp3",
+          "liked": false,
+          "savedAt": "2026-08-07T09:12:00Z"
+        }
+      ]
+    }
+  ]
+}

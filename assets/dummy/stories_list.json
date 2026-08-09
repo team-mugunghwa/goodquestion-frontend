@@ -1,0 +1,60 @@
+{
+  "topics": [
+    { "id": "all", "label": "전체", "icon": "all" },
+    { "id": "folk", "label": "옛이야기", "icon": "folk" },
+    { "id": "animal", "label": "동물", "icon": "animal" },
+    { "id": "adventure", "label": "모험", "icon": "adventure" },
+    { "id": "daily", "label": "일상", "icon": "daily" }
+  ],
+  "stories": [
+    {
+      "storyId": 11,
+      "title": "방귀 뀌는 며느리",
+      "image": null,
+      "estimatedMinutes": 20,
+      "topicIds": ["folk"]
+    },
+    {
+      "storyId": 21,
+      "title": "해와 달이 된 오누이",
+      "image": null,
+      "estimatedMinutes": 15,
+      "topicIds": ["folk"]
+    },
+    {
+      "storyId": 22,
+      "title": "의좋은 형제",
+      "image": null,
+      "estimatedMinutes": 20,
+      "topicIds": ["folk"]
+    },
+    {
+      "storyId": 23,
+      "title": "흥부와 놀부",
+      "image": null,
+      "estimatedMinutes": 15,
+      "topicIds": ["folk"]
+    },
+    {
+      "storyId": 31,
+      "title": "토끼와 거북이",
+      "image": null,
+      "estimatedMinutes": 15,
+      "topicIds": ["animal"]
+    },
+    {
+      "storyId": 32,
+      "title": "호랑이와 곶감",
+      "image": null,
+      "estimatedMinutes": 20,
+      "topicIds": ["animal", "folk"]
+    },
+    {
+      "storyId": 41,
+      "title": "학교 가는 길",
+      "image": null,
+      "estimatedMinutes": 15,
+      "topicIds": ["daily"]
+    }
+  ]
+}

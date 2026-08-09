@@ -50,15 +50,21 @@ test/features/<feature>/...                      # 아래 4장
 | 필요한 것 | 쓰세요 |
 |---|---|
 | 화면 바탕 | `AppCanvas.day / .night / .guardian` |
+| 폭에 따른 여백·글자 | `ScreenMetrics.of(constraints.maxWidth)` |
 | 누르는 카드·타일 | `PressScale` (포커스 링·시맨틱스 포함) |
 | 아이 화면 주 버튼 | `KidPrimaryButton` (88 · pill · 아이콘+한 단어) |
+| 아이 화면 뒤로가기 | `KidBackButton` |
+| 이야기 카드 | `StoryCard` (홈 추천 · 목록 그리드 공용) |
+| 정보 칩 (시간·주제·난이도) | `KidInfoChip` |
+| 필터 칩 바 (단일 선택) | `KidFilterChips` + `KidFilterChipData` |
+| 소리 듣기 | `SpeakerButton` (지금은 재생 상태만 시뮬레이션) |
 | 별가루 잔액 | `StardustChip.day / .night` |
 | 하단 내비 | `AppBottomNav(current: AppNavTab.xxx)` |
 | 아이 화면 에러 | `AppKidErrorView` |
+| 아이 화면 빈 상태 | `AppKidEmptyView` (**나가는 문을 반드시 함께**) |
 | 보호자 화면 로딩·에러·빈 상태 | `AppLoadingView` / `AppErrorView` / `AppEmptyView` |
-| 로딩 스켈레톤 블록 | `SkeletonBox` (home/widgets) |
+| 로딩 스켈레톤 | `SkeletonBox` · `SkeletonCardList` |
 | 이미지 자리 | `StoryThumbnail` (이미지 없으면 그라디언트) |
-| 폭에 따른 여백·글자 | `HomeMetrics.of(constraints.maxWidth)` 패턴 복사 |
 
 없는 게 필요하면 **화면 안에 숨기지 말고** `core/widgets/` 로 빼고
 [DESIGN_SYSTEM.md 10장](DESIGN_SYSTEM.md#10-컴포넌트-규칙) 표에 한 줄 추가하세요.
@@ -83,6 +89,10 @@ test/features/<feature>/...                      # 아래 4장
   `ConstrainedBox(minHeight:)` 로 늘어날 수 있게 두세요
 - 무한 반복 애니메이션(스켈레톤)이 화면에 남아 있으면 `pumpAndSettle` 이 타임아웃됩니다.
   에러·성공 상태에서는 스켈레톤을 반드시 걷어내세요
+- **`Future.delayed` 대신 `Timer` 를 쓰고 `dispose` 에서 끄세요.** 안 그러면 화면을
+  나간 뒤에 `setState` 가 불리고, 위젯 테스트는 "A Timer is still pending" 으로 죽습니다
+- **목록 → 상세는 `context.go` 가 아니라 `context.push`.** `go` 는 스택을 갈아엎어서
+  돌아왔을 때 필터·스크롤이 초기화되고, 상세의 뒤로가기가 갈 곳을 잃습니다
 
 ---
 

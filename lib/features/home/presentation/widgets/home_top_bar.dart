@@ -6,10 +6,10 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/press_scale.dart';
+import '../../../../core/widgets/screen_metrics.dart';
+import '../../../../core/widgets/skeleton_box.dart';
 import '../../../../core/widgets/stardust_chip.dart';
 import '../../domain/entities/child_profile.dart';
-import 'home_metrics.dart';
-import 'home_skeleton.dart';
 
 /// 섹션1 — 상단 바. 왼쪽에 지금 이야기하는 아이, 오른쪽에 별가루 잔액.
 ///
@@ -25,7 +25,7 @@ class HomeTopBar extends StatelessWidget {
     this.isLoading = false,
   });
 
-  final HomeMetrics metrics;
+  final ScreenMetrics metrics;
 
   /// 아이 프로필 전환 모달(모달 6)을 엽니다.
   final VoidCallback onProfileTap;
@@ -85,7 +85,7 @@ class _ProfileArea extends StatelessWidget {
     required this.onTap,
   });
 
-  final HomeMetrics metrics;
+  final ScreenMetrics metrics;
   final ChildProfile? child;
   final bool isLoading;
   final VoidCallback onTap;
