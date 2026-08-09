@@ -44,4 +44,7 @@ abstract final class AppAssets {
 
   /// 설정 더미.
   static const String settingsDummy = '$_dummy/settings.json';
+
+  /// 보호자 인증 더미. 로그인 수단 · 동의 항목 · 나이 선택지 · 목업 계정.
+  static const String authDummy = '$_dummy/auth_screen.json';
 }

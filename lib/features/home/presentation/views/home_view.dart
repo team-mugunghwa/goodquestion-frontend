@@ -222,7 +222,7 @@ class _HomeContent extends StatelessWidget {
     showProfileNeededSheet(
       context,
       metrics: metrics,
-      onCreate: () => context.go(AppRoutes.auth),
+      onCreate: () => context.go(AppRoutes.authChildStep),
     );
   }
 }

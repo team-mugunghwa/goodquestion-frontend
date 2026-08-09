@@ -123,7 +123,7 @@ class MyPageView extends StatelessWidget {
       summary: summary,
       onSwitch: () => _openChildSwitch(context),
       onEdit: () => _openChildForm(context),
-      onCreate: () => context.go(AppRoutes.auth),
+      onCreate: () => context.go(AppRoutes.authChildStep),
     );
   }
 
@@ -144,7 +144,8 @@ class MyPageView extends StatelessWidget {
   ///
   /// 모달 내부 폼은 별도 설계 범위라, 여기서는 호출 지점만 만들어 둡니다.
   /// 지금은 최초 등록 화면(`/auth`)이 같은 일을 하므로 그리로 보냅니다.
-  void _openChildForm(BuildContext context) => context.go(AppRoutes.auth);
+  void _openChildForm(BuildContext context) =>
+      context.go(AppRoutes.authChildStep);
 
   /// 아이 프로필 전환 모달(모달 6)의 자리. 홈의 호출 지점과 같은 모달입니다.
   Future<void> _openChildSwitch(BuildContext context) {

@@ -1,0 +1,31 @@
+{
+  "providers": [
+    { "provider": "kakao", "label": "카카오로 시작하기" },
+    { "provider": "google", "label": "구글로 시작하기" }
+  ],
+  "consents": [
+    {
+      "id": "terms",
+      "title": "서비스 이용약관",
+      "required": true,
+      "docUrl": "https://example.com/terms"
+    },
+    {
+      "id": "child_privacy",
+      "title": "아동 개인정보 수집·이용",
+      "required": true,
+      "docUrl": "https://example.com/child-privacy"
+    },
+    {
+      "id": "marketing",
+      "title": "마케팅 수신",
+      "required": false,
+      "docUrl": "https://example.com/marketing"
+    }
+  ],
+  "ages": [7, 8, 9, 10],
+  "demoAccounts": [
+    { "email": "parent@test.com", "password": "1234", "hasChild": false },
+    { "email": "parent2@test.com", "password": "1234", "hasChild": true }
+  ]
+}

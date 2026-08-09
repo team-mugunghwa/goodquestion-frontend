@@ -1,5 +1,9 @@
 import 'package:get_it/get_it.dart';
 
+import '../../features/auth/data/datasources/auth_local_data_source.dart';
+import '../../features/auth/data/repositories/auth_repository_mock.dart';
+import '../../features/auth/domain/repositories/auth_repository.dart';
+import '../../features/auth/domain/usecases/auth_use_cases.dart';
 import '../../features/home/data/datasources/home_local_data_source.dart';
 import '../../features/home/data/repositories/home_repository_mock.dart';
 import '../../features/home/domain/repositories/home_repository.dart';
@@ -59,6 +63,33 @@ Future<void> configureDependencies() async {
     )
     ..registerLazySingleton<GetQuestionsUseCase>(
       () => GetQuestionsUseCase(getIt<QuestionRepository>()),
+    );
+
+  // ---- auth ----
+  // 동의 기록과 "프로필 있음" 상태를 메모리에 들고 있어서 싱글턴이어야
+  // 합니다. 화면을 나갔다 오면 방금 한 동의가 사라지면 안 됩니다.
+  getIt
+    ..registerLazySingleton<AuthLocalDataSource>(AuthLocalDataSource.new)
+    ..registerLazySingleton<AuthRepository>(
+      () => AuthRepositoryMock(getIt<AuthLocalDataSource>()),
+    )
+    ..registerLazySingleton<GetAuthOptionsUseCase>(
+      () => GetAuthOptionsUseCase(getIt<AuthRepository>()),
+    )
+    ..registerLazySingleton<SignInWithSocialUseCase>(
+      () => SignInWithSocialUseCase(getIt<AuthRepository>()),
+    )
+    ..registerLazySingleton<SignInWithEmailUseCase>(
+      () => SignInWithEmailUseCase(getIt<AuthRepository>()),
+    )
+    ..registerLazySingleton<SaveConsentsUseCase>(
+      () => SaveConsentsUseCase(getIt<AuthRepository>()),
+    )
+    ..registerLazySingleton<CreateChildUseCase>(
+      () => CreateChildUseCase(getIt<AuthRepository>()),
+    )
+    ..registerLazySingleton<SignOutUseCase>(
+      () => SignOutUseCase(getIt<AuthRepository>()),
     );
 
   // ---- home ----

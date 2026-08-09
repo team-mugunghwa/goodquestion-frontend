@@ -47,6 +47,16 @@ abstract final class AppRoutes {
   /// 보호자 인증 — 로그인·회원가입·약관 동의를 한 화면에서 처리합니다.
   static const String auth = '/auth';
 
+  /// 로그인은 됐는데 아이 프로필이 없는 계정이 갈 곳.
+  ///
+  /// 스텝을 별도 라우트로 쪼개지 않으려고 쿼리 파라미터로 둡니다.
+  /// (`/auth/child` 같은 주소가 생기면 로그인 안 된 채로 북마크됩니다)
+  static const String authChildStep = '/auth?$stepParam=$childStepValue';
+
+  /// `/auth` 의 진입 스텝을 지정하는 쿼리 파라미터.
+  static const String stepParam = 'step';
+  static const String childStepValue = 'child';
+
   /// 경로 파라미터 이름. `state.pathParameters[AppRoutes.storyIdParam]`
   static const String storyIdParam = 'storyId';
   static const String sessionIdParam = 'sessionId';

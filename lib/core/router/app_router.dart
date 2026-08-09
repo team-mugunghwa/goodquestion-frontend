@@ -103,7 +103,12 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.home}) => GoRouter(
     ),
     GoRoute(
       path: AppRoutes.auth,
-      builder: (BuildContext context, GoRouterState state) => const AuthPage(),
+      builder: (BuildContext context, GoRouterState state) => AuthPage(
+        // 프로필 없는 기존 계정은 로그인 스텝을 건너뜁니다.
+        startAtChildProfile:
+            state.uri.queryParameters[AppRoutes.stepParam] ==
+            AppRoutes.childStepValue,
+      ),
     ),
   ],
   // 없는 경로로 들어왔을 때 빨간 에러 화면 대신 무엇이 틀렸는지 보여 줍니다.
