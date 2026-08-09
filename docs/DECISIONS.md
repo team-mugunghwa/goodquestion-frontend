@@ -185,3 +185,19 @@
   - `lib/core/theme/` 가 충돌 잦은 파일 목록에 하나 더 늘어남 → 수정 전 팀 채널 공지. ([CONVENTIONS.md](CONVENTIONS.md#6-충돌이-자주-나는-파일))
   - **폰트 파일을 아직 커밋하지 않았음.** 없어도 앱은 시스템 글꼴로 그냥 도는데, 그래서 "시안이랑 다른데?" 의 원인이 되기 쉬움. 설치 절차는 [`assets/fonts/README.md`](../assets/fonts/README.md).
   - 나중에 다크 모드가 필요해지면 `AppColors` 를 `ThemeExtension` 으로 바꾸는 작업이 한 번 필요함. 지금은 그 비용을 미룸.
+
+---
+
+## 015. 화면별 더미 JSON을 에셋으로 두고, Mock Repository가 읽음
+
+- **2026-08-09 / 승인됨**
+- **맥락**: 백엔드가 아직 없는데 화면 12개를 각자 만들어야 함. 홈만 해도 아이 프로필·진행 중 세션·추천 이야기·별가루 잔액 네 덩어리가 필요하고, **"진행 중 세션 없음", "아이 프로필 없음" 같은 분기를 눈으로 확인**해야 함.
+- **결정**: 화면 하나당 더미 파일 하나를 `assets/dummy/<화면>.json`에 두고, `LocalDataSource`가 `rootBundle`로 읽어 DTO → Entity로 올린다. 파일 모양은 서버 응답 `data`와 **1:1**로 맞춘다. (첫 사례: `assets/dummy/home.json` ↔ `GET /home`)
+- **이유**:
+  - 더미를 Dart `Map` 리터럴로 코드에 박으면 기획이 문구·개수를 바꿀 때마다 코드를 고쳐야 함. **파일이면 코드를 안 건드림.**
+  - 파일 모양이 그대로 **백엔드와의 계약 초안**이 됨. `docs/API.md`에 붙일 표를 따로 만들 필요가 없음.
+  - DTO를 실제로 통과시키므로 서버가 붙는 날 `LocalDataSource` → `RemoteDataSource` 교체만 하면 됨. 화면·ViewModel 코드는 안 바뀜.
+  - 분기 확인은 파일을 잠깐 고쳐서 함 (`"inProgressSession": null`).
+- **대안**: `QuestionRepositoryMock`처럼 코드 안에 시드 데이터를 두는 방식. 목록형 화면(항목 12개 생성)에는 그게 낫고, 그 코드는 그대로 둔다. **모양이 복잡하고 분기가 있는 화면**만 파일로 간다.
+- **주의**: 더미는 컴파일러가 검사하지 않는다. 필드 이름을 하나 잘못 쓰면 앱을 켜야 안다. 그래서 **더미가 Entity로 파싱되는지 확인하는 테스트를 함께 둔다** (`test/features/home/data/home_dummy_test.dart`).
+- **결과**: 서버가 붙으면 `assets/dummy/`와 `*LocalDataSource`는 통째로 지운다. 화면 코드에 흔적이 남지 않는 게 이 구조의 목적이다.

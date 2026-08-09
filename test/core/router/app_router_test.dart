@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:goodquestion/core/di/injector.dart';
 import 'package:goodquestion/core/router/app_router.dart';
 import 'package:goodquestion/core/router/app_routes.dart';
+import 'package:goodquestion/core/widgets/app_bottom_nav.dart';
 
 /// 라우터 골격이 살아 있는지 확인합니다.
 ///
 /// 화면 내용이 아니라 **경로 → 화면 연결**만 검사합니다. 각 화면에 실제 UI 가
 /// 들어오면 그때 화면별 테스트를 따로 만드세요.
+/// (홈은 `test/features/home/` 에 따로 있습니다)
 void main() {
+  // 홈이 실제 화면이 되면서 UseCase 를 DI 에서 꺼내 씁니다.
+  setUpAll(configureDependencies);
+  tearDownAll(getIt.reset);
+
   /// 주소를 직접 입력해 들어온 상황을 흉내 냅니다.
   Future<void> pumpAt(WidgetTester tester, String location) async {
     await tester.pumpWidget(
@@ -18,9 +25,14 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  // 경로 → 화면에 보여야 하는 문구.
+  testWidgets('/ 로 들어가면 홈 화면이 뜬다', (WidgetTester tester) async {
+    await pumpAt(tester, AppRoutes.home);
+    // 자리 표시자가 아니라 실제 화면인지 — 하단 내비가 근거입니다.
+    expect(find.byType(AppBottomNav), findsOneWidget);
+  });
+
+  // 경로 → 아직 자리 표시자인 화면에 보여야 하는 문구.
   final Map<String, String> expectedText = <String, String>{
-    AppRoutes.home: '/ - 홈',
     AppRoutes.stories: '/stories - 이야기 목록',
     AppRoutes.storyDetailOf('12'): '/stories/12 - 이야기 상세',
     AppRoutes.playOf('abc'): '/play/abc - 장면 진행',

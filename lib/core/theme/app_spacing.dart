@@ -63,6 +63,16 @@ abstract final class AppSizes {
   /// 하단 내비게이션 높이. (홈·이야기·단어장·마이페이지)
   static const double bottomNav = 80;
 
+  /// 칩·버튼 라벨 옆에 붙는 인라인 글리프. (별가루 개수 앞의 ✦, "더 보기 ›")
+  ///
+  /// 아이 화면이라고 이걸 [iconChild] 로 키우지 마세요. 18sp 라벨 옆에 40 짜리
+  /// 아이콘이 붙으면 글자가 아이콘의 부속처럼 보입니다.
+  /// **아이가 누르는 버튼의 아이콘**은 [iconChild] 가 맞습니다.
+  static const double iconInline = iconGuardian;
+
+  /// 빈 화면·에러 화면의 캐릭터 일러스트 지름.
+  static const double illustration = 160;
+
   /// 말풍선 최대 폭. 이보다 넓으면 한 줄이 길어져 아이가 눈으로 놓칩니다.
   static const double bubbleMaxWidth = 560;
 

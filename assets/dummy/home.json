@@ -1,0 +1,40 @@
+{
+  "child": {
+    "name": "하늘이",
+    "avatar": null
+  },
+  "inProgressSession": {
+    "sessionId": 2481,
+    "storyTitle": "방귀 뀌는 며느리",
+    "storyImage": null,
+    "lastCompletedScene": 3,
+    "totalScenes": 5
+  },
+  "recommendedStories": [
+    {
+      "storyId": 21,
+      "title": "해와 달이 된 오누이",
+      "image": null,
+      "estimatedMinutes": 15,
+      "topicTag": "용기"
+    },
+    {
+      "storyId": 22,
+      "title": "의좋은 형제",
+      "image": null,
+      "estimatedMinutes": 20,
+      "topicTag": "우정"
+    },
+    {
+      "storyId": 23,
+      "title": "흥부와 놀부",
+      "image": null,
+      "estimatedMinutes": 15,
+      "topicTag": "가족"
+    }
+  ],
+  "planet": {
+    "stardustBalance": 7,
+    "thumbnailImage": null
+  }
+}

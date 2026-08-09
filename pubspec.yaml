@@ -70,3 +70,7 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+
+    # 화면별 더미 JSON. 서버가 나오면 화면 코드가 아니라 이 폴더가 사라집니다.
+    # → docs/DECISIONS.md 015
+    - assets/dummy/

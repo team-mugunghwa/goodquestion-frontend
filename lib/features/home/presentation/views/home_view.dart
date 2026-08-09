@@ -1,14 +1,225 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
+import '../../../../core/di/injector.dart';
 import '../../../../core/router/app_routes.dart';
-import '../../../../core/widgets/route_placeholder_view.dart';
+import '../../../../core/state/view_state.dart';
+import '../../../../core/theme/app_motion.dart';
+import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/theme/app_typography.dart';
+import '../../../../core/widgets/app_bottom_nav.dart';
+import '../../../../core/widgets/app_canvas.dart';
+import '../../../../core/widgets/app_state_views.dart';
+import '../../domain/entities/home_summary.dart';
+import '../../domain/entities/recommended_story.dart';
+import '../../domain/usecases/get_home_summary_use_case.dart';
+import '../viewmodels/home_view_model.dart';
+import '../widgets/continue_card.dart';
+import '../widgets/home_metrics.dart';
+import '../widgets/home_sheets.dart';
+import '../widgets/home_skeleton.dart';
+import '../widgets/home_top_bar.dart';
+import '../widgets/planet_widget.dart';
+import '../widgets/recommended_stories_section.dart';
+import '../widgets/start_story_card.dart';
 
 /// 홈 — 이어하기 · 추천 이야기 · 행성 위젯 · 하단 내비 허브.
+///
+/// ## 이 화면이 하는 한 가지 일
+///
+/// **아이의 다음 행동을 3초 안에 결정하게 만드는 것.** 진행 중 세션이 있으면
+/// 이어하기를 화면에서 가장 크게 밀어 완주율(검증 지표 60%)을 지킵니다.
+///
+/// | 섹션 | 내용 |
+/// |---|---|
+/// | 1 | 상단 바 — 아이 프로필 · 별가루 잔액 |
+/// | 2 | 이어하기 카드 (없으면 "새 이야기 시작" 카드) |
+/// | 3 | 추천 이야기 2~3개 (고정 큐레이션) |
+/// | 4 | 내 행성 위젯 — 이어하기·추천보다 **작게** |
+/// | 5 | 하단 내비 (고정) |
+///
+/// 바탕은 `AppCanvas.day`. 이 앱은 낮(홈·이야기)에서 시작해 밤(완료·행성)에서
+/// 끝납니다. → `docs/DESIGN_SYSTEM.md`
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const RoutePlaceholderView(path: AppRoutes.home, title: '홈');
+    return ChangeNotifierProvider<HomeViewModel>(
+      create: (_) => HomeViewModel(getIt<GetHomeSummaryUseCase>())..load(),
+      child: const HomeView(),
+    );
+  }
+}
+
+/// ViewModel 이 이미 위에 있다고 가정하는 본체. (테스트에서 직접 씁니다)
+class HomeView extends StatelessWidget {
+  const HomeView({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final HomeViewModel vm = context.watch<HomeViewModel>();
+    final HomeSummary? summary = vm.summary;
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: AppCanvas.day(
+        child: SafeArea(
+          bottom: false,
+          child: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              final HomeMetrics metrics = HomeMetrics.of(constraints.maxWidth);
+              return Column(
+                children: <Widget>[
+                  HomeTopBar(
+                    metrics: metrics,
+                    child: summary?.child,
+                    stardustBalance: summary?.planet.stardustBalance,
+                    isLoading: summary == null && !vm.state.isError,
+                    onProfileTap: () => _openChildSwitch(context, metrics),
+                  ),
+                  Expanded(
+                    child: AnimatedSwitcher(
+                      duration: respect(context, AppDurations.normal),
+                      switchInCurve: AppCurves.standard,
+                      switchOutCurve: AppCurves.exit,
+                      // 기본 layoutBuilder 는 자식을 Stack 가운데에 느슨하게
+                      // 놓습니다. 그러면 본문이 세로로 붕 떠서, 상단 바와
+                      // 이어하기 카드 사이가 화면마다 다르게 벌어집니다.
+                      layoutBuilder: (Widget? current, List<Widget> previous) =>
+                          Stack(
+                            fit: StackFit.expand,
+                            alignment: Alignment.topCenter,
+                            children: <Widget>[
+                              ...previous,
+                              if (current != null) current,
+                            ],
+                          ),
+                      child: _buildBody(context, vm, metrics),
+                    ),
+                  ),
+                  // 로딩·에러 중에도 하단 내비는 즉시 보입니다. 아이가
+                  // 갇힌 느낌을 받으면 안 됩니다.
+                  const AppBottomNav(current: AppNavTab.home),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody(
+    BuildContext context,
+    HomeViewModel vm,
+    HomeMetrics metrics,
+  ) {
+    final HomeSummary? summary = vm.summary;
+    return switch (vm.state) {
+      ViewState.error => AppKidErrorView(
+        key: const ValueKey<String>('home-error'),
+        messageStyle: metrics.text(AppTypography.kidBody),
+        onRetry: vm.load,
+      ),
+      ViewState.success when summary != null => _HomeContent(
+        key: const ValueKey<String>('home-content'),
+        summary: summary,
+        metrics: metrics,
+      ),
+      _ => HomeSkeleton(
+        key: const ValueKey<String>('home-skeleton'),
+        metrics: metrics,
+      ),
+    };
+  }
+
+  Future<void> _openChildSwitch(
+    BuildContext context,
+    HomeMetrics metrics,
+  ) async {
+    final HomeViewModel vm = context.read<HomeViewModel>();
+    final bool switched = await showChildSwitchSheet(
+      context,
+      metrics: metrics,
+      current: vm.summary?.child,
+    );
+    // 아이가 바뀌었으면 홈 데이터를 그 아이 기준으로 다시 받습니다.
+    if (switched) await vm.load();
+  }
+}
+
+/// 섹션2~4. 스크롤되는 본문입니다.
+class _HomeContent extends StatelessWidget {
+  const _HomeContent({super.key, required this.summary, required this.metrics});
+
+  final HomeSummary summary;
+  final HomeMetrics metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    final session = summary.inProgressSession;
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(
+        metrics.screenPadding,
+        AppSpacing.lg,
+        metrics.screenPadding,
+        metrics.screenPadding,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          if (session == null)
+            StartStoryCard(
+              metrics: metrics,
+              onStart: () =>
+                  _guarded(context, () => context.go(AppRoutes.stories)),
+            )
+          else
+            ContinueCard(
+              session: session,
+              metrics: metrics,
+              onResume: () => _guarded(
+                context,
+                () => context.go(AppRoutes.playOf('${session.sessionId}')),
+              ),
+            ),
+          SizedBox(height: metrics.sectionGap),
+          RecommendedStoriesSection(
+            stories: summary.recommendedStories,
+            metrics: metrics,
+            onStoryTap: (RecommendedStory story) => _guarded(
+              context,
+              () => context.go(AppRoutes.storyDetailOf('${story.storyId}')),
+            ),
+            onMoreTap: () => context.go(AppRoutes.stories),
+          ),
+          SizedBox(height: metrics.sectionGap),
+          PlanetWidget(
+            planet: summary.planet,
+            metrics: metrics,
+            onTap: () => context.go(AppRoutes.planet),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 아이 프로필이 없으면 이야기로 못 들어갑니다. (PRD F-01)
+  ///
+  /// 라우터 `redirect` 로도 막을 예정이지만, 홈에서는 **막힌 이유를 아이 말로**
+  /// 알려 주는 편이 낫습니다. 리다이렉트만 걸면 눌렀는데 아무 일도 안 일어난
+  /// 것처럼 보입니다.
+  void _guarded(BuildContext context, VoidCallback proceed) {
+    if (summary.hasChild) {
+      proceed();
+      return;
+    }
+    showProfileNeededSheet(
+      context,
+      metrics: metrics,
+      onCreate: () => context.go(AppRoutes.auth),
+    );
   }
 }

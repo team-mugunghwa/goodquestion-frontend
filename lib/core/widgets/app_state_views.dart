@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../constants/app_assets.dart';
+import '../constants/app_icons.dart';
+import '../constants/app_strings.dart';
+import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+import '../theme/app_typography.dart';
+import 'kid_button.dart';
 
 /// 로딩 화면. 전 화면 공통.
 class AppLoadingView extends StatelessWidget {
@@ -45,6 +51,69 @@ class AppErrorView extends StatelessWidget {
                 label: const Text('다시 시도'),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 아이 화면의 에러. [AppErrorView] 와 **다르게 생겨야 합니다.**
+///
+/// 보호자 화면의 에러는 빨간 아이콘 + "문제가 발생했습니다"면 됩니다.
+/// 아이에게는 그게 "네가 뭔가 잘못했다"로 읽힙니다. 그래서
+/// **캐릭터가 말을 거는 형태 + 큰 버튼 하나**로 바꿉니다.
+/// 빨강([AppColors.danger])을 쓰지 않습니다. (PRD §6, `docs/DESIGN_SYSTEM.md` 2장)
+///
+/// 선택지는 하나뿐입니다 — 다시 해 보기. 아이에게 "취소"는 막다른 길입니다.
+class AppKidErrorView extends StatelessWidget {
+  const AppKidErrorView({
+    super.key,
+    required this.onRetry,
+    this.message = AppStrings.loadFailedKid,
+    this.retryLabel = AppStrings.retryKid,
+    this.messageStyle,
+  });
+
+  final VoidCallback onRetry;
+  final String message;
+  final String retryLabel;
+  final TextStyle? messageStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            // 캐릭터 에셋이 나오기 전까지는 로고의 말풍선 Q 가 대신 말합니다.
+            // 캐릭터가 준비되면 이 한 줄만 바꾸면 됩니다.
+            Image.asset(
+              AppAssets.logoMark,
+              width: AppSizes.illustration,
+              height: AppSizes.illustration,
+              fit: BoxFit.contain,
+              excludeFromSemantics: true,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: AppSizes.bubbleMaxWidth,
+              ),
+              child: Text(
+                message,
+                textAlign: TextAlign.center,
+                style: messageStyle ?? AppTypography.kidBody,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            KidPrimaryButton(
+              icon: AppIcons.retry,
+              label: retryLabel,
+              onPressed: onRetry,
+            ),
           ],
         ),
       ),
