@@ -8,9 +8,9 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/kid_button.dart';
 import '../../../../core/widgets/press_scale.dart';
+import '../../../../core/widgets/screen_metrics.dart';
+import '../../../../core/widgets/story_thumbnail.dart';
 import '../../domain/entities/in_progress_session.dart';
-import 'home_metrics.dart';
-import 'story_thumbnail.dart';
 
 /// 섹션2 — 이어하기 카드. **화면에서 가장 큰 면적**을 차지합니다.
 ///
@@ -29,7 +29,7 @@ class ContinueCard extends StatelessWidget {
   });
 
   final InProgressSession session;
-  final HomeMetrics metrics;
+  final ScreenMetrics metrics;
   final VoidCallback onResume;
 
   @override
@@ -102,7 +102,7 @@ class _Body extends StatelessWidget {
   });
 
   final InProgressSession session;
-  final HomeMetrics metrics;
+  final ScreenMetrics metrics;
   final VoidCallback onResume;
 
   @override
@@ -142,7 +142,7 @@ class _Progress extends StatelessWidget {
   static const int _maxDots = 10;
 
   final InProgressSession session;
-  final HomeMetrics metrics;
+  final ScreenMetrics metrics;
 
   @override
   Widget build(BuildContext context) {

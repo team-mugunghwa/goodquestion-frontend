@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:goodquestion/core/constants/app_strings.dart';
 import 'package:goodquestion/core/di/injector.dart';
 import 'package:goodquestion/core/router/app_router.dart';
 import 'package:goodquestion/core/router/app_routes.dart';
@@ -25,20 +26,33 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('/ 로 들어가면 홈 화면이 뜬다', (WidgetTester tester) async {
-    await pumpAt(tester, AppRoutes.home);
-    // 자리 표시자가 아니라 실제 화면인지 — 하단 내비가 근거입니다.
-    expect(find.byType(AppBottomNav), findsOneWidget);
+  // 하단 내비를 가진 탭 루트 화면들. 자리 표시자가 아니라 실제 화면인지
+  // 확인합니다.
+  for (final String location in <String>[
+    AppRoutes.home,
+    AppRoutes.stories,
+    AppRoutes.words,
+  ]) {
+    testWidgets('$location 로 들어가면 실제 화면이 뜬다', (WidgetTester tester) async {
+      await pumpAt(tester, location);
+      expect(find.byType(AppBottomNav), findsOneWidget);
+    });
+  }
+
+  testWidgets('/stories/:storyId 로 들어가면 상세 화면이 뜬다', (
+    WidgetTester tester,
+  ) async {
+    await pumpAt(tester, AppRoutes.storyDetailOf('11'));
+    // 탭 루트가 아니라 하단 내비가 없습니다. 대신 시작하기가 있어야 합니다.
+    expect(find.text(StoryDetailStrings.start), findsOneWidget);
+    expect(find.byType(AppBottomNav), findsNothing);
   });
 
   // 경로 → 아직 자리 표시자인 화면에 보여야 하는 문구.
   final Map<String, String> expectedText = <String, String>{
-    AppRoutes.stories: '/stories - 이야기 목록',
-    AppRoutes.storyDetailOf('12'): '/stories/12 - 이야기 상세',
     AppRoutes.playOf('abc'): '/play/abc - 장면 진행',
     AppRoutes.playRecapOf('abc'): '/play/abc/recap - 말하기 후 활동',
     AppRoutes.planet: '/planet - 내 행성',
-    AppRoutes.words: '/words - 단어장',
     AppRoutes.myPage: '/mypage - 마이페이지',
     AppRoutes.report: '/mypage/report - 보호자 리포트 목록',
     AppRoutes.reportDetailOf('abc'): '/mypage/report/abc - 보호자 리포트 상세',

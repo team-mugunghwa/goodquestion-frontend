@@ -7,10 +7,10 @@ import '../../../../core/theme/app_shadows.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/press_scale.dart';
+import '../../../../core/widgets/screen_metrics.dart';
 import '../../../../core/widgets/stardust_chip.dart';
+import '../../../../core/widgets/story_thumbnail.dart';
 import '../../domain/entities/planet_summary.dart';
-import 'home_metrics.dart';
-import 'story_thumbnail.dart';
 
 /// 섹션4 — 내 행성 미니 뷰.
 ///
@@ -28,7 +28,7 @@ class PlanetWidget extends StatelessWidget {
   });
 
   final PlanetSummary planet;
-  final HomeMetrics metrics;
+  final ScreenMetrics metrics;
   final VoidCallback onTap;
 
   @override

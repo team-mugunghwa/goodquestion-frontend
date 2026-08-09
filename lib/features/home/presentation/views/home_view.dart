@@ -11,12 +11,12 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/app_canvas.dart';
 import '../../../../core/widgets/app_state_views.dart';
+import '../../../../core/widgets/screen_metrics.dart';
 import '../../domain/entities/home_summary.dart';
 import '../../domain/entities/recommended_story.dart';
 import '../../domain/usecases/get_home_summary_use_case.dart';
 import '../viewmodels/home_view_model.dart';
 import '../widgets/continue_card.dart';
-import '../widgets/home_metrics.dart';
 import '../widgets/home_sheets.dart';
 import '../widgets/home_skeleton.dart';
 import '../widgets/home_top_bar.dart';
@@ -69,7 +69,9 @@ class HomeView extends StatelessWidget {
           bottom: false,
           child: LayoutBuilder(
             builder: (BuildContext context, BoxConstraints constraints) {
-              final HomeMetrics metrics = HomeMetrics.of(constraints.maxWidth);
+              final ScreenMetrics metrics = ScreenMetrics.of(
+                constraints.maxWidth,
+              );
               return Column(
                 children: <Widget>[
                   HomeTopBar(
@@ -114,7 +116,7 @@ class HomeView extends StatelessWidget {
   Widget _buildBody(
     BuildContext context,
     HomeViewModel vm,
-    HomeMetrics metrics,
+    ScreenMetrics metrics,
   ) {
     final HomeSummary? summary = vm.summary;
     return switch (vm.state) {
@@ -137,7 +139,7 @@ class HomeView extends StatelessWidget {
 
   Future<void> _openChildSwitch(
     BuildContext context,
-    HomeMetrics metrics,
+    ScreenMetrics metrics,
   ) async {
     final HomeViewModel vm = context.read<HomeViewModel>();
     final bool switched = await showChildSwitchSheet(
@@ -155,7 +157,7 @@ class _HomeContent extends StatelessWidget {
   const _HomeContent({super.key, required this.summary, required this.metrics});
 
   final HomeSummary summary;
-  final HomeMetrics metrics;
+  final ScreenMetrics metrics;
 
   @override
   Widget build(BuildContext context) {
@@ -189,9 +191,10 @@ class _HomeContent extends StatelessWidget {
           RecommendedStoriesSection(
             stories: summary.recommendedStories,
             metrics: metrics,
+            // push 입니다 — 상세의 뒤로가기가 홈으로 돌아와야 합니다.
             onStoryTap: (RecommendedStory story) => _guarded(
               context,
-              () => context.go(AppRoutes.storyDetailOf('${story.storyId}')),
+              () => context.push(AppRoutes.storyDetailOf('${story.storyId}')),
             ),
             onMoreTap: () => context.go(AppRoutes.stories),
           ),

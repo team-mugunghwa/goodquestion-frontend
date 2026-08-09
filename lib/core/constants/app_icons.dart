@@ -64,6 +64,17 @@ abstract final class AppIcons {
   static const IconData duration = Icons.schedule_rounded;
   static const IconData difficulty = Icons.bar_chart_rounded;
 
+  /// 주제 태그.
+  static const IconData topic = Icons.sell_rounded;
+
+  /// 주제 필터 칩. 아이가 **그림으로** 주제를 구분하는 자리라서, 뜻이 바로
+  /// 보이는 아이콘을 골랐습니다. 새 주제가 생기면 여기에 한 줄 추가하세요.
+  static const IconData topicAll = Icons.grid_view_rounded;
+  static const IconData topicFolk = Icons.cottage_rounded;
+  static const IconData topicAnimal = Icons.pets_rounded;
+  static const IconData topicAdventure = Icons.explore_rounded;
+  static const IconData topicDaily = Icons.wb_sunny_rounded;
+
   /// 미션. 장면의 목표 발화 조건을 아이에게 보여줄 때.
   static const IconData mission = Icons.flag_rounded;
 

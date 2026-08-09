@@ -9,7 +9,7 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/kid_button.dart';
 import '../../../../core/widgets/press_scale.dart';
-import 'home_metrics.dart';
+import '../../../../core/widgets/screen_metrics.dart';
 
 /// 진행 중인 세션이 없을 때 섹션2 자리에 들어가는 카드.
 ///
@@ -26,7 +26,7 @@ class StartStoryCard extends StatelessWidget {
     required this.onStart,
   });
 
-  final HomeMetrics metrics;
+  final ScreenMetrics metrics;
   final VoidCallback onStart;
 
   @override

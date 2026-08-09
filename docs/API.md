@@ -138,6 +138,11 @@ _(도메인별 코드는 기능 추가 시 여기에 계속 채웁니다)_
 | Method | Path | 설명 | 상태 |
 |---|---|---|---|
 | `GET` | `/home` | 홈 화면 데이터 한 묶음 | 🚧 협의 중 |
+| `GET` | `/stories` | 이야기 목록 + 주제 필터 | 🚧 협의 중 |
+| `GET` | `/stories/{id}` | 이야기 상세 (요약·역할·도입 음성) | 🚧 협의 중 |
+| `POST` | `/sessions` | 이야기 시작 → 세션 생성 | 🚧 협의 중 |
+| `GET` | `/words` | 담은 단어 (이야기별 그룹) | 🚧 협의 중 |
+| `PATCH` | `/words/{id}/like` | 단어 좋아요 토글 | 🚧 협의 중 |
 | `GET` | `/questions` | 질문 목록 (페이지네이션) | 🚧 협의 중 |
 | `GET` | `/questions/{id}` | 질문 상세 | 🚧 협의 중 |
 | `POST` | `/questions` | 질문 생성 | 🚧 협의 중 |
@@ -180,6 +185,84 @@ _(도메인별 코드는 기능 추가 시 여기에 계속 채웁니다)_
 
 이 모양의 더미가 `assets/dummy/home.json` 에 **1:1** 로 있습니다. 스키마를 바꾸면
 더미와 이 표를 같이 고치세요. → [DECISIONS.md](DECISIONS.md) 015
+
+### `GET /stories`
+
+목록과 **주제 필터를 함께** 내려줍니다. 주제는 콘텐츠와 함께 늘어나므로 앱에
+하드코딩하지 않습니다. MVP 콘텐츠 수가 적어서 필터링은 앱에서 하고, 서버에는
+주제별 재조회를 요청하지 않습니다.
+
+| 필드 | 타입 | null 가능 | 설명 |
+|---|---|---|---|
+| `topics[]` | array | ❌ | 필터 칩. **첫 항목은 항상 `id: "all"`** |
+| `topics[].id` | string | ❌ | `all` · `folk` · `animal` · `adventure` · `daily` |
+| `topics[].label` | string | ❌ | 칩에 보이는 한글 |
+| `topics[].icon` | string | ✅ | 아이콘 키. 앱이 Material 아이콘으로 번역 |
+| `stories[]` | array | ❌ | **서버 순서 그대로** 그립니다 (정렬·개인화 없음) |
+| `stories[].storyId` | int | ❌ | 이야기 ID |
+| `stories[].title` | string | ❌ | 제목 |
+| `stories[].image` | string | ✅ | 대표 이미지 |
+| `stories[].estimatedMinutes` | int | ❌ | 예상 소요 시간(분) |
+| `stories[].topicIds` | array | ❌ | 이 이야기의 주제들 |
+
+> ⚠️ **`topicIds` 에 `topics` 에 없는 id 를 넣지 마세요.** 그 이야기는 어떤 필터로도
+> 안 보입니다. 더미에는 이걸 검사하는 테스트가 걸려 있습니다.
+>
+> 목록에는 난이도·요약을 내려주지 않습니다. 카드에 정보가 늘면 아이가 그림이
+> 아니라 글로 고르게 됩니다. (PRD F-03)
+
+### `GET /stories/{id}`
+
+| 필드 | 타입 | null 가능 | 설명 |
+|---|---|---|---|
+| `storyId` | int | ❌ | 이야기 ID |
+| `title` | string | ❌ | 제목 |
+| `coverImage` | string | ✅ | 대표 이미지 |
+| `estimatedMinutes` | int | ❌ | 예상 소요 시간(분) |
+| `difficulty` | string | ❌ | "쉬움" · "보통" — 숫자가 아니라 말 |
+| `topics[]` | array | ❌ | 주제 태그 |
+| `introText` | string | ❌ | 도입문. **글자는 보조**, 음성이 본체 |
+| `situationText` | string | ❌ | 지금 어떤 상황인지 |
+| `introAudio` | string | ✅ | 도입문 + 역할 설명 음성 |
+| `role.name` | string | ❌ | 아이가 맡을 역할 이름 |
+| `role.description` | string | ❌ | 무엇을 하게 되는지 1~2문장 |
+| `role.characterImage` | string | ✅ | 역할 캐릭터 일러스트 |
+
+> **없는 이야기는 404 + `NOT_FOUND`** 로 주세요. 앱은 이걸 "찾을 수 없어" 화면으로
+> 그리고, 로드 실패(재시도 버튼)와 구분합니다.
+
+### `POST /sessions`
+
+이야기를 시작합니다. **서비스 전체에서 세션이 생성되는 유일한 지점**입니다.
+(이어하기는 기존 세션을 재개하므로 여기를 거치지 않습니다.)
+
+**Request** `{ "storyId": 11 }` · **Response `data`** `{ "sessionId": 9011 }`
+
+### `GET /words`
+
+| 필드 | 타입 | null 가능 | 설명 |
+|---|---|---|---|
+| `child.name` / `child.avatar` | string | ✅ | 헤더 표시용 |
+| `totalCount` | int | ❌ | 헤더 배지 숫자 |
+| `groups[]` | array | ❌ | **이야기별 그룹.** 최근 담은 이야기가 위 |
+| `groups[].storyId` | int | ❌ | 이야기 ID |
+| `groups[].storyTitle` | string | ❌ | 이야기 제목 |
+| `groups[].storyImage` | string | ✅ | 필터 칩·그룹 헤더 이미지 |
+| `groups[].words[].wordId` | int | ❌ | 단어 ID |
+| `groups[].words[].word` | string | ❌ | 표제어 |
+| `groups[].words[].meaning` | string | ❌ | 쉬운 뜻 (모달 전용) |
+| `groups[].words[].sentence` | string | ❌ | 이야기 속 문장 (모달 전용) |
+| `groups[].words[].audio` | string | ✅ | 발음 음성 |
+| `groups[].words[].liked` | bool | ❌ | 좋아요 여부 |
+| `groups[].words[].savedAt` | string | ✅ | ISO 8601 |
+
+> **평면 리스트로 주지 마세요.** 아이의 기억 단서는 "언제 담았나"가 아니라
+> "어떤 이야기에서 만났나"입니다. 그룹핑을 앱에서 하면 순서 기준이 서버와
+> 어긋납니다. (PRD F-10)
+
+### `PATCH /words/{id}/like`
+
+좋아요 토글. **Response `data`** `{ "liked": true }`
 
 ### `GET /questions`
 
