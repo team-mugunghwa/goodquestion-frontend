@@ -202,6 +202,7 @@ PR을 쓸 때는 **Squash and merge**. main 히스토리가 PR 단위로 깔끔�
 
 | 바꾼 것 | 갱신할 문서 |
 |---|---|
+| 색·폰트·간격 등 디자인 토큰 추가/변경 | [`docs/DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) |
 | API 호출 추가/변경 | [`docs/API.md`](API.md) |
 | 폴더 구조·레이어 규칙 변경 | [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) |
 | 패키지 추가/제거, 기술 선택 | [`docs/DECISIONS.md`](DECISIONS.md) |

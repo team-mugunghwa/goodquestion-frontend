@@ -10,14 +10,62 @@ abstract final class AppSpacing {
   static const double xl = 32;
   static const double xxl = 48;
 
+  /// 아이 화면의 섹션 사이. 요소가 크니까 여백도 커야 덜 답답합니다.
+  static const double xxxl = 64;
+
   /// 화면 좌우 여백. 태블릿에서는 더 넓게 잡습니다.
   static const double screenPaddingCompact = md;
   static const double screenPaddingExpanded = xl;
 }
 
 /// 모서리 둥글기 토큰.
+///
+/// 로고의 Q가 부풀어 오른 3D 형태라서, 이 앱의 모서리는 전반적으로 큽니다.
+/// **아이 화면은 [lg] 이상, 보호자 화면은 [md]** 를 기본으로 쓰세요.
+/// 같은 화면에서 반경을 3종류 이상 섞지 마세요.
 abstract final class AppRadius {
-  static const double sm = 8;
-  static const double md = 12;
-  static const double lg = 20;
+  static const double xs = 8;
+  static const double sm = 12;
+  static const double md = 16;
+  static const double lg = 24;
+
+  /// 아이 화면의 큰 카드·이야기 썸네일·말풍선.
+  static const double xl = 32;
+
+  /// 완전히 둥근 모양. 마이크 버튼, 별가루 칩, 아바타.
+  static const double pill = 999;
+}
+
+/// 터치 타겟과 고정 크기.
+///
+/// 초1~3의 손가락은 어른보다 크게 흔들립니다. 아이가 누르는 것은
+/// **48dp 로 충분하지 않습니다.**
+abstract final class AppSizes {
+  /// 보호자·시스템 화면의 최소 터치 타겟. (Material 기준)
+  static const double tapGuardian = 48;
+
+  /// 아이 화면의 보조 버튼. 다시 듣기, 단어 담기, 뒤로.
+  static const double tapChildSecondary = 64;
+
+  /// 아이 화면의 주 버튼. 다음, 보내기, 이야기 시작하기.
+  static const double tapChildPrimary = 88;
+
+  /// 마이크 버튼. 화면에서 가장 큰 조작 요소이고, 늘 같은 자리에 있어야
+  /// 아이가 눈으로 찾지 않고 손이 먼저 갑니다.
+  static const double mic = 120;
+
+  /// 아이 화면 아이콘.
+  static const double iconChild = 40;
+
+  /// 보호자 화면 아이콘.
+  static const double iconGuardian = 24;
+
+  /// 하단 내비게이션 높이. (홈·이야기·단어장·마이페이지)
+  static const double bottomNav = 80;
+
+  /// 말풍선 최대 폭. 이보다 넓으면 한 줄이 길어져 아이가 눈으로 놓칩니다.
+  static const double bubbleMaxWidth = 560;
+
+  /// 행성 조작 버튼(회전·확대·되돌리기)의 지름.
+  static const double planetControl = 72;
 }
