@@ -201,20 +201,26 @@ class _Grid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
-      padding: EdgeInsets.fromLTRB(
-        metrics.screenPadding,
-        0,
-        metrics.screenPadding,
-        metrics.screenPadding,
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: metrics.screenPadding),
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) =>
+            _grid(context, constraints.maxWidth),
       ),
+    );
+  }
+
+  Widget _grid(BuildContext context, double width) {
+    return GridView.builder(
+      padding: EdgeInsets.only(bottom: metrics.screenPadding),
       itemCount: stories.length,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: metrics.gridColumns,
         crossAxisSpacing: AppSpacing.lg,
         mainAxisSpacing: AppSpacing.lg,
-        // 이미지(16:9)가 카드 면적을 지배하도록 잡은 비율입니다.
-        childAspectRatio: metrics.isWide ? 3 / 4 : 16 / 11,
+        // 비율을 눈대중으로 정하면 카드 아래에 흰 여백이 남습니다.
+        // 이미지(16:9) + 글자 블록을 실제로 더해서 높이를 잡습니다.
+        mainAxisExtent: _cellHeightOf(context, metrics, width),
       ),
       itemBuilder: (BuildContext context, int index) {
         final StorySummary story = stories[index];
@@ -257,11 +263,43 @@ class _Skeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       padding: EdgeInsets.symmetric(horizontal: metrics.screenPadding),
-      child: SkeletonCardList(
-        count: metrics.isWide ? 4 : 3,
-        columns: metrics.gridColumns,
-        aspectRatio: metrics.isWide ? 3 / 4 : 16 / 11,
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) =>
+            SkeletonCardList(
+              count: metrics.isWide ? 4 : 3,
+              columns: metrics.gridColumns,
+              // 실제 카드와 같은 높이여야 데이터가 올 때 안 덜컹입니다.
+              mainAxisExtent: _cellHeightOf(
+                context,
+                metrics,
+                constraints.maxWidth,
+              ),
+            ),
       ),
     );
   }
+}
+
+/// 그리드 셀 하나의 높이 = 16:9 이미지 + 글자 블록.
+///
+/// `childAspectRatio` 를 눈대중으로 정하면 카드 아래에 흰 여백이 남거나
+/// 글자가 잘립니다. 실제로 더해서 잡습니다. 기기의 글자 확대 설정까지
+/// 반영하므로 1.3배로 키워도 안 잘립니다.
+///
+/// 스켈레톤도 같은 값을 써야 데이터가 도착할 때 화면이 안 덜컹입니다.
+double _cellHeightOf(
+  BuildContext context,
+  ScreenMetrics metrics,
+  double width,
+) {
+  final int columns = metrics.gridColumns;
+  final double cellWidth = (width - AppSpacing.lg * (columns - 1)) / columns;
+  final double imageHeight = cellWidth * 9 / 16;
+  final double textHeight =
+      AppSpacing.md * 2 +
+      metrics.lineHeight(context, AppTypography.kidTitle) +
+      AppSpacing.sm +
+      metrics.lineHeight(context, AppTypography.kidLabel) +
+      AppSpacing.xs * 2;
+  return imageHeight + textHeight;
 }

@@ -196,11 +196,19 @@ class _Content extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           // 섹션2 — 그림이 먼저입니다. 아이는 글보다 분위기를 먼저 읽습니다.
+          //
+          // 다만 높이를 묶어 둡니다. 태블릿에서 16:9 를 전폭으로 깔면 커버
+          // 하나가 화면을 다 먹고, 정작 중요한 역할 카드가 접히는 곳 아래로
+          // 내려갑니다.
           ClipRRect(
             borderRadius: BorderRadius.circular(AppRadius.xl),
-            child: StoryThumbnail(
-              image: story.coverImage,
-              fallbackIcon: AppIcons.stories,
+            child: SizedBox(
+              height: metrics.isWide ? AppSizes.coverMaxHeight : null,
+              child: StoryThumbnail(
+                image: story.coverImage,
+                fallbackIcon: AppIcons.stories,
+                aspectRatio: metrics.isWide ? null : StoryThumbnail.wide,
+              ),
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
