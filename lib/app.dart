@@ -20,8 +20,9 @@ class GoodQuestionApp extends StatelessWidget {
       title: 'GoodQuestion',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.system,
+      // 다크 모드는 MVP 범위 밖입니다. 기기 설정이 다크여도 밝은 화면으로
+      // 고정합니다. → docs/DECISIONS.md 014
+      themeMode: ThemeMode.light,
       routerConfig: appRouter,
     );
   }
