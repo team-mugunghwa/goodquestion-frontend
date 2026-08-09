@@ -137,11 +137,49 @@ _(도메인별 코드는 기능 추가 시 여기에 계속 채웁니다)_
 
 | Method | Path | 설명 | 상태 |
 |---|---|---|---|
+| `GET` | `/home` | 홈 화면 데이터 한 묶음 | 🚧 협의 중 |
 | `GET` | `/questions` | 질문 목록 (페이지네이션) | 🚧 협의 중 |
 | `GET` | `/questions/{id}` | 질문 상세 | 🚧 협의 중 |
 | `POST` | `/questions` | 질문 생성 | 🚧 협의 중 |
 
 상태: 🚧 협의 중 · ⏳ 백엔드 구현 중 · ✅ 사용 가능
+
+### `GET /home`
+
+홈은 "이어하기 / 새 이야기 / 내 행성" 세 갈래의 출발점입니다. 섹션마다 따로
+호출하면 화면이 세 번 덜컹이므로 **한 번에 묶어서** 받습니다.
+현재 선택된 아이는 서버가 세션에서 판단합니다 (쿼리 파라미터 없음).
+
+**Response `data`**
+
+| 필드 | 타입 | null 가능 | 설명 |
+|---|---|---|---|
+| `child` | object | ✅ | 현재 아이. **아이 프로필 미등록이면 `null`** |
+| `child.name` | string | ❌ | 아이 이름 |
+| `child.avatar` | string | ✅ | 아바타 이미지 |
+| `inProgressSession` | object | ✅ | `status=in_progress` 최신 1건. 없으면 `null` |
+| `inProgressSession.sessionId` | int | ❌ | 재개할 세션 |
+| `inProgressSession.storyTitle` | string | ❌ | 이야기 제목 |
+| `inProgressSession.storyImage` | string | ✅ | 대표 이미지 |
+| `inProgressSession.lastCompletedScene` | int | ❌ | 마지막으로 **완료한** 장면 번호 |
+| `inProgressSession.totalScenes` | int | ❌ | 전체 장면 수 |
+| `recommendedStories[]` | array | ❌ | 고정 큐레이션 2~3개. 없으면 `[]` |
+| `recommendedStories[].storyId` | int | ❌ | 이야기 ID |
+| `recommendedStories[].title` | string | ❌ | 제목 |
+| `recommendedStories[].image` | string | ✅ | 대표 이미지 |
+| `recommendedStories[].estimatedMinutes` | int | ❌ | 예상 소요 시간(분) |
+| `recommendedStories[].topicTag` | string | ❌ | 주제 태그 한 단어 |
+| `planet.stardustBalance` | int | ❌ | 별가루 잔액 |
+| `planet.thumbnailImage` | string | ✅ | 내 행성 미니 썸네일 |
+
+> ⚠️ **`lastCompletedScene` 은 "완료한" 장면입니다.** "지금 볼 장면"으로 해석하면
+> 재개 위치가 한 칸 밀립니다. 여기서 어긋나면 아이가 같은 장면을 두 번 말합니다.
+>
+> **개인화 추천은 범위 밖입니다.** `recommendedStories` 는 서버가 고정으로 정한
+> 큐레이션이고, 순서도 서버 순서 그대로 씁니다.
+
+이 모양의 더미가 `assets/dummy/home.json` 에 **1:1** 로 있습니다. 스키마를 바꾸면
+더미와 이 표를 같이 고치세요. → [DECISIONS.md](DECISIONS.md) 015
 
 ### `GET /questions`
 

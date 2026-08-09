@@ -6,9 +6,16 @@
 abstract final class AppAssets {
   static const String _images = 'assets/images';
 
+  /// 화면별 더미 JSON. 서버가 준비되기 전까지 화면 하나당 파일 하나입니다.
+  /// → `docs/DECISIONS.md` 015
+  static const String _dummy = 'assets/dummy';
+
   /// 로고 전체 (Q마크 + 워드마크). 1024×366, 배경 투명.
   static const String logo = '$_images/logo.png';
 
   /// Q마크만. 512×512, 배경 투명. 앱 아이콘·스플래시·좁은 화면용.
   static const String logoMark = '$_images/logo_mark.png';
+
+  /// 홈 화면 더미. 서버 `GET /home` 응답의 `data` 와 1:1 입니다.
+  static const String homeDummy = '$_dummy/home.json';
 }

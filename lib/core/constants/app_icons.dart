@@ -105,6 +105,10 @@ abstract final class AppIcons {
   static const IconData guardianGate = Icons.shield_rounded;
 
   // 공통
+  /// "더 보기 ›", "가기 ›" 처럼 이동을 암시하는 꺾쇠.
+  /// **단독으로 쓰지 말고** 항상 라벨 옆에 붙입니다.
+  static const IconData chevronRight = Icons.chevron_right_rounded;
+
   static const IconData back = Icons.arrow_back_rounded;
   static const IconData close = Icons.close_rounded;
   static const IconData check = Icons.check_rounded;

@@ -1,5 +1,9 @@
 import 'package:get_it/get_it.dart';
 
+import '../../features/home/data/datasources/home_local_data_source.dart';
+import '../../features/home/data/repositories/home_repository_mock.dart';
+import '../../features/home/domain/repositories/home_repository.dart';
+import '../../features/home/domain/usecases/get_home_summary_use_case.dart';
 import '../../features/question/data/datasources/question_remote_data_source.dart';
 import '../../features/question/data/repositories/question_repository_impl.dart';
 import '../../features/question/data/repositories/question_repository_mock.dart';
@@ -39,5 +43,16 @@ Future<void> configureDependencies() async {
     )
     ..registerLazySingleton<GetQuestionsUseCase>(
       () => GetQuestionsUseCase(getIt<QuestionRepository>()),
+    );
+
+  // ---- home ----
+  // 서버가 나오면 HomeRepositoryImpl 로 바꾸면 됩니다. 화면은 그대로입니다.
+  getIt
+    ..registerLazySingleton<HomeLocalDataSource>(HomeLocalDataSource.new)
+    ..registerLazySingleton<HomeRepository>(
+      () => HomeRepositoryMock(getIt<HomeLocalDataSource>()),
+    )
+    ..registerLazySingleton<GetHomeSummaryUseCase>(
+      () => GetHomeSummaryUseCase(getIt<HomeRepository>()),
     );
 }

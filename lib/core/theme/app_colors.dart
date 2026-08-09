@@ -39,6 +39,13 @@ abstract final class AppColors {
   /// 초록의 글자용 버전. 흰 배경 대비 5.1:1.
   static const Color brandGreenDeep = Color(0xFF387C4C);
 
+  /// [brandBlue] 10% 면. 아이 발화 말풍선, 미션 배너, 칩, 선택된 탭처럼
+  /// **흰 카드 위에서 한 겹 구분**이 필요한 자리에 씁니다.
+  ///
+  /// 알파를 화면마다 손으로 정하면(8%·12%·15%…) 같은 뜻의 면이 화면마다
+  /// 다른 색이 됩니다. 이 값 하나만 쓰세요.
+  static const Color brandBlueSurface = Color(0x1A83B9DD);
+
   /// Material 3 팔레트 생성용 시드.
   ///
   /// 로고 색을 그대로 시드로 쓰면 채도가 너무 낮아 버튼·텍스트 대비가
