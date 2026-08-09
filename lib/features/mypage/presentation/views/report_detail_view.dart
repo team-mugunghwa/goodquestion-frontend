@@ -30,7 +30,7 @@ import '../widgets/skill_card.dart';
 /// |---|---|
 /// | 1 | 헤더 — 뒤로 · 제목 · 아이·이야기·일시 |
 /// | 2 | 세션 요약 밴드 — 썸네일 + 한 줄 총평 |
-/// | 3 | 역량 분석 — 어휘 · 표현 · 논리 (접힘) |
+/// | 3 | 역량 분석 — 어휘 · 표현 · 논리 (가로 탭) |
 /// | 4 | 대표 발화 + 선정 이유 |
 /// | 5 | 가정 연계 질문 (복사 가능) |
 /// | 6 | 하단 "목록으로" |
@@ -127,11 +127,8 @@ class _Content extends StatelessWidget {
         const SizedBox(height: AppSpacing.xl),
         Text(ReportDetailStrings.skills, style: text.titleLarge),
         const SizedBox(height: AppSpacing.md),
-        for (final SkillReport skill in report.skills) ...<Widget>[
-          SkillCard(skill: skill),
-          const SizedBox(height: AppSpacing.md),
-        ],
-        const SizedBox(height: AppSpacing.md),
+        SkillTabs(skills: report.skills),
+        const SizedBox(height: AppSpacing.xl),
         Text(ReportDetailStrings.highlight, style: text.titleLarge),
         const SizedBox(height: AppSpacing.md),
         _HighlightCard(highlight: report.highlight),
@@ -194,6 +191,9 @@ class _SummaryBand extends StatelessWidget {
   }
 }
 
+/// 대화(원문 발화)와 선정 이유를 한 카드로 묶습니다. 이번 세션에서 고른
+/// 단 하나의 발화라서, 다른 섹션보다 눈에 띄어야 합니다 — 그래서 흰
+/// 카드가 아니라 브랜드 톤 면 + 진한 테두리를 씁니다.
 class _HighlightCard extends StatelessWidget {
   const _HighlightCard({required this.highlight});
 
@@ -202,25 +202,31 @@ class _HighlightCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final TextTheme text = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: BoxDecoration(
-            color: AppColors.brandBlueSurface,
-            borderRadius: BorderRadius.circular(AppRadius.md),
-          ),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.brandBlueSurface,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.brandBlueDeep, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
           // 아이 말은 우리 문장과 글꼴로 구분합니다. (AppTypography.quote)
-          child: Text('"${highlight.utterance}"', style: AppTypography.quote),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Text(
-          '${ReportDetailStrings.highlightReason}: ${highlight.reason}',
-          style: text.bodySmall,
-        ),
-      ],
+          Text('"${highlight.utterance}"', style: AppTypography.quote),
+          const SizedBox(height: AppSpacing.sm),
+          Divider(
+            height: 1,
+            color: AppColors.brandBlueDeep.withValues(alpha: 0.2),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            '${ReportDetailStrings.highlightReason}: ${highlight.reason}',
+            style: text.bodySmall?.copyWith(color: AppColors.ink700),
+          ),
+        ],
+      ),
     );
   }
 }
