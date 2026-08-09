@@ -115,6 +115,20 @@ abstract final class AppIcons {
   /// 보호자 확인 게이트 — 아이가 혼자 리포트를 열지 못하게 하는 문.
   static const IconData guardianGate = Icons.shield_rounded;
 
+  // 설정·운영 (보호자 화면 전용)
+  static const IconData notice = Icons.campaign_rounded;
+  static const IconData guide = Icons.info_rounded;
+  static const IconData support = Icons.help_center_rounded;
+  static const IconData terms = Icons.description_rounded;
+  static const IconData privacy = Icons.privacy_tip_rounded;
+  static const IconData account = Icons.account_circle_rounded;
+
+  /// 추천 질문을 메신저로 옮겨 쓰라고 있는 버튼.
+  static const IconData copy = Icons.copy_rounded;
+
+  /// 아코디언 펼침. 접힌 상태에서 아래를, 펼친 상태에서 위를 가리킵니다.
+  static const IconData expand = Icons.expand_more_rounded;
+
   // 공통
   /// "더 보기 ›", "가기 ›" 처럼 이동을 암시하는 꺾쇠.
   /// **단독으로 쓰지 말고** 항상 라벨 옆에 붙입니다.

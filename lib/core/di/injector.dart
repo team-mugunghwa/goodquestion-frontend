@@ -4,6 +4,11 @@ import '../../features/home/data/datasources/home_local_data_source.dart';
 import '../../features/home/data/repositories/home_repository_mock.dart';
 import '../../features/home/domain/repositories/home_repository.dart';
 import '../../features/home/domain/usecases/get_home_summary_use_case.dart';
+import '../../features/mypage/data/datasources/my_page_local_data_source.dart';
+import '../../features/mypage/data/repositories/my_page_repository_mock.dart';
+import '../../features/mypage/domain/guardian_gate.dart';
+import '../../features/mypage/domain/repositories/my_page_repository.dart';
+import '../../features/mypage/domain/usecases/my_page_use_cases.dart';
 import '../../features/question/data/datasources/question_remote_data_source.dart';
 import '../../features/question/data/repositories/question_repository_impl.dart';
 import '../../features/question/data/repositories/question_repository_mock.dart';
@@ -96,5 +101,42 @@ Future<void> configureDependencies() async {
     )
     ..registerLazySingleton<ToggleWordLikeUseCase>(
       () => ToggleWordLikeUseCase(getIt<WordRepository>()),
+    );
+
+  // ---- mypage (마이페이지 · 리포트 · 설정) ----
+  //
+  // Mock 하나가 세 Repository 를 구현합니다. 열람 처리·토글 상태를 한 곳에서
+  // 들고 있어야 화면 간에 어긋나지 않기 때문입니다. 서버가 붙으면 셋으로
+  // 쪼개도 화면 코드는 그대로입니다.
+  // 세 인터페이스가 **같은 인스턴스**를 가리켜야 합니다. 각각 새로 만들면
+  // 리포트를 읽어도 마이페이지의 빨간 점이 안 사라집니다.
+  final MyPageRepositoryMock myPageMock = MyPageRepositoryMock(
+    const MyPageLocalDataSource(),
+  );
+  getIt
+    ..registerLazySingleton<GuardianGate>(GuardianGate.new)
+    ..registerSingleton<MyPageRepository>(myPageMock)
+    ..registerSingleton<ReportRepository>(myPageMock)
+    ..registerSingleton<SettingsRepository>(myPageMock)
+    ..registerLazySingleton<GetMyPageSummaryUseCase>(
+      () => GetMyPageSummaryUseCase(getIt<MyPageRepository>()),
+    )
+    ..registerLazySingleton<GetReportListUseCase>(
+      () => GetReportListUseCase(getIt<ReportRepository>()),
+    )
+    ..registerLazySingleton<GetReportDetailUseCase>(
+      () => GetReportDetailUseCase(getIt<ReportRepository>()),
+    )
+    ..registerLazySingleton<MarkReportAsReadUseCase>(
+      () => MarkReportAsReadUseCase(getIt<ReportRepository>()),
+    )
+    ..registerLazySingleton<GetSettingsUseCase>(
+      () => GetSettingsUseCase(getIt<SettingsRepository>()),
+    )
+    ..registerLazySingleton<SetReportNotificationUseCase>(
+      () => SetReportNotificationUseCase(getIt<SettingsRepository>()),
+    )
+    ..registerLazySingleton<SetMarketingConsentUseCase>(
+      () => SetMarketingConsentUseCase(getIt<SettingsRepository>()),
     );
 }

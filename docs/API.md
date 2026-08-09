@@ -143,6 +143,12 @@ _(도메인별 코드는 기능 추가 시 여기에 계속 채웁니다)_
 | `POST` | `/sessions` | 이야기 시작 → 세션 생성 | 🚧 협의 중 |
 | `GET` | `/words` | 담은 단어 (이야기별 그룹) | 🚧 협의 중 |
 | `PATCH` | `/words/{id}/like` | 단어 좋아요 토글 | 🚧 협의 중 |
+| `GET` | `/mypage` | 마이페이지 요약 (아이·활동·리포트 배지) | 🚧 협의 중 |
+| `GET` | `/reports` | 보호자 리포트 목록 | 🚧 협의 중 |
+| `GET` | `/reports/{sessionId}` | 리포트 상세 | 🚧 협의 중 |
+| `POST` | `/reports/{sessionId}/read` | 리포트 열람 처리 | 🚧 협의 중 |
+| `GET` | `/settings` | 알림·계정 설정 | 🚧 협의 중 |
+| `PATCH` | `/settings` | 알림 토글 | 🚧 협의 중 |
 | `GET` | `/questions` | 질문 목록 (페이지네이션) | 🚧 협의 중 |
 | `GET` | `/questions/{id}` | 질문 상세 | 🚧 협의 중 |
 | `POST` | `/questions` | 질문 생성 | 🚧 협의 중 |
@@ -263,6 +269,38 @@ _(도메인별 코드는 기능 추가 시 여기에 계속 채웁니다)_
 ### `PATCH /words/{id}/like`
 
 좋아요 토글. **Response `data`** `{ "liked": true }`
+
+### 보호자 화면 (`/mypage` · `/reports` · `/settings`)
+
+이 묶음은 **보호자 전용**입니다. 아이 화면과 달리 텍스트 중심이고, 응답에
+분석 문장이 그대로 들어옵니다.
+
+**`GET /mypage`** — `child {childId, name, age, avatar}`(미등록 시 `null`) ·
+`childCount` · `activity {completedStories, stardust}` · `hasNewReport`
+
+**`GET /reports`** — `childName` · `totalCount` · `newCount` ·
+`reports[] {sessionId, storyTitle, storyImage, completedAt, isNew, playCount, highlightUtterance}`
+
+**`GET /reports/{sessionId}`** — 세션 메타 + `summary`(한 줄 총평) +
+`skills[]`(어휘·표현·논리) + `highlight {utterance, reason}` +
+`questionGroups[] {title, questions[]}`
+
+`skills[]` 각 항목: `name` · `feature` · `evidence[]` · `strength` ·
+`improvement` · `askedWords[]`(어휘 영역 전용)
+
+**`GET /settings`** · **`PATCH /settings`** — `reportNotification` ·
+`marketingConsent` · `consentAt` · `accountType` · `accountLabel`(마스킹) ·
+`hasNewNotice` · `appVersion`
+
+> ⚠️ **리포트 텍스트에 내부 태그(DECISION·REASON 등)를 넣지 마세요.** 그대로
+> 보호자에게 보입니다. `improvement` 는 **권유형 문장만** ("~해보면 좋아요") —
+> 단정적 부정 표현은 금지입니다. (PRD F-09)
+>
+> 리포트 응답에 **음성 파일 경로를 넣지 않습니다.** 음성 원본을 저장하지 않는
+> 게 정책이고, 경로가 오면 화면에 재생 버튼을 만들고 싶어집니다.
+>
+> 아직 분석이 안 끝난 세션은 **404** 로 주세요. 앱은 이걸 "만들고 있어요"로
+> 그리고, 로드 실패(재시도)와 구분합니다.
 
 ### `GET /questions`
 

@@ -31,4 +31,17 @@ abstract final class AppAssets {
 
   /// 단어장 더미. 이야기별 그룹 + 단어 목록.
   static const String wordsDummy = '$_dummy/words_screen.json';
+
+  /// 마이페이지 더미. 현재 아이 · 활동 요약 · 리포트 배지.
+  static const String myPageDummy = '$_dummy/mypage.json';
+
+  /// 보호자 리포트 목록 더미.
+  static const String reportListDummy = '$_dummy/report_list.json';
+
+  /// 보호자 리포트 상세 더미. **sessionId 를 키로 하는 맵**입니다.
+  /// (이유는 [storyDetailsDummy] 와 같습니다)
+  static const String reportDetailsDummy = '$_dummy/report_details.json';
+
+  /// 설정 더미.
+  static const String settingsDummy = '$_dummy/settings.json';
 }
