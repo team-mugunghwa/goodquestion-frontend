@@ -123,7 +123,7 @@ lib/
 - **장면 안의 단계**(내레이션 → 어려운 단어 → 미션 → 음성 대화 루프)는 라우트가 아니라 `/play/:sessionId` **화면 내부 상태**입니다.
 - 보호자 확인 게이트(`/mypage/report*`)와 아이 프로필 미등록 시 이야기 진입 차단은 **`app_router.dart`의 `redirect`에 한 번만** 붙입니다. 화면마다 검사하면 반드시 빠뜨립니다.
 - **홈(`/`)은 구현됐습니다.** 나머지 View는 아직 `RoutePlaceholderView`(경로와 화면명만 표시)로 비어 있고, 담당자가 각자 걷어내고 채웁니다.
-- 새 화면을 채울 때 `features/home/` 을 그대로 따라 하면 됩니다 — entity → repository(추상) → usecase → 더미 DataSource → Mock Repository → ViewModel → View 순서에 8장 레시피가 그대로 들어가 있습니다.
+- 화면을 채울 때는 [SCREEN_RECIPE.md](SCREEN_RECIPE.md)의 체크리스트를 그대로 따르세요. `features/home/`이 참조 구현입니다.
 
 ---
 
