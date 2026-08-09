@@ -1,0 +1,43 @@
+{
+  "childName": "하늘이",
+  "totalCount": 4,
+  "newCount": 1,
+  "reports": [
+    {
+      "sessionId": 104,
+      "storyTitle": "방귀 뀌는 며느리",
+      "storyImage": null,
+      "completedAt": "2026-08-08T19:20:00Z",
+      "isNew": true,
+      "playCount": 2,
+      "highlightUtterance": "며느리가 참으면 배가 아프니까 뀌는 게 맞아요"
+    },
+    {
+      "sessionId": 103,
+      "storyTitle": "해와 달이 된 오누이",
+      "storyImage": null,
+      "completedAt": "2026-08-07T10:05:00Z",
+      "isNew": false,
+      "playCount": 1,
+      "highlightUtterance": "문을 열기 전에 손을 보여 달라고 할 거예요"
+    },
+    {
+      "sessionId": 102,
+      "storyTitle": "방귀 뀌는 며느리",
+      "storyImage": null,
+      "completedAt": "2026-08-05T18:40:00Z",
+      "isNew": false,
+      "playCount": 1,
+      "highlightUtterance": "시아버지도 웃었을 것 같아요"
+    },
+    {
+      "sessionId": 101,
+      "storyTitle": "의좋은 형제",
+      "storyImage": null,
+      "completedAt": "2026-08-03T17:12:00Z",
+      "isNew": false,
+      "playCount": 1,
+      "highlightUtterance": "형이 몰래 가져다 놓은 거예요"
+    }
+  ]
+}

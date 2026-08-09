@@ -41,7 +41,7 @@ class AppErrorView extends StatelessWidget {
             Icon(Icons.error_outline, size: 40, color: theme.colorScheme.error),
             const SizedBox(height: AppSpacing.md),
             Text(
-              message ?? '문제가 발생했습니다.',
+              message ?? AppStrings.loadFailed,
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyLarge,
             ),
@@ -50,7 +50,7 @@ class AppErrorView extends StatelessWidget {
               OutlinedButton.icon(
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh),
-                label: const Text('다시 시도'),
+                label: const Text(AppStrings.retry),
               ),
             ],
           ],

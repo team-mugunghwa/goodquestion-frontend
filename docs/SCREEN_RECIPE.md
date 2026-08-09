@@ -12,6 +12,8 @@
 ## 0. 시작 전 30초
 
 1. 이 화면은 **아이 화면인가 보호자 화면인가.** 바탕이 `day` / `night` / `guardian` 중 무엇인가
+   - 아이 화면이면 `AppCanvas` + `ScreenMetrics` + `AppTypography.kid*`
+   - 보호자 화면이면 `GuardianScaffold` + `Theme.of(context).textTheme`. 훨씬 빨리 끝납니다
 2. 이 화면이 하는 **한 가지 일**은 무엇인가 (→ [DESIGN_SYSTEM.md 13장](DESIGN_SYSTEM.md#13-화면-12개-지도)의 표에 이미 적혀 있습니다)
 3. 서버 응답을 어떤 모양으로 받을 건가 (→ 1번에서 더미로 씁니다)
 
@@ -62,6 +64,8 @@ test/features/<feature>/...                      # 아래 4장
 | 하단 내비 | `AppBottomNav(current: AppNavTab.xxx)` |
 | 아이 화면 에러 | `AppKidErrorView` |
 | 아이 화면 빈 상태 | `AppKidEmptyView` (**나가는 문을 반드시 함께**) |
+| 보호자 화면 뼈대 | `GuardianScaffold` (헤더 + 720dp 본문 + 선택적 내비) |
+| 보호자 그룹 목록·행·토글 | `GuardianSection` / `GuardianTile` / `GuardianSwitchTile` |
 | 보호자 화면 로딩·에러·빈 상태 | `AppLoadingView` / `AppErrorView` / `AppEmptyView` |
 | 로딩 스켈레톤 | `SkeletonBox` · `SkeletonCardList` |
 | 이미지 자리 | `StoryThumbnail` (이미지 없으면 그라디언트) |

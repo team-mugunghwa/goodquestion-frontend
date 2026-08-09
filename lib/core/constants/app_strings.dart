@@ -24,6 +24,12 @@ abstract final class AppStrings {
 
   static const String back = '뒤로';
 
+  /// 보호자 화면의 재시도. 아이 화면은 [retryKid] 를 씁니다.
+  static const String retry = '다시 시도';
+
+  /// 보호자 화면의 일반 실패.
+  static const String loadFailed = '문제가 발생했습니다.';
+
   /// 필터의 "전체". 이야기 목록과 단어장이 같은 말을 씁니다.
   static const String filterAll = '전체';
 
@@ -125,4 +131,129 @@ abstract final class WordStrings {
   static const String exampleInStory = '이야기에서는 이렇게 나왔어';
   static const String like = '좋아요';
   static const String close = '닫기';
+}
+
+/// 마이페이지(`/mypage`) 전용 문구.
+///
+/// 여기부터는 **보호자 화면**입니다. 아이 화면과 톤이 다릅니다 —
+/// 캐릭터가 말하지 않고, 사실을 그대로 적습니다.
+abstract final class MyPageStrings {
+  static const String title = '마이페이지';
+
+  static String childAge(int age) => '$age살';
+
+  /// 활동 요약. 통계 화면이 아니므로 숫자는 둘까지만.
+  static String completedStories(int count) => '완주한 이야기 $count편';
+  static String stardust(int count) => '별가루 $count';
+
+  static const String switchChild = '프로필 전환';
+  static const String editChild = '프로필 수정';
+
+  static const String guardianMenu = '보호자 메뉴';
+  static const String report = '보호자 리포트';
+
+  static const String manageMenu = '관리';
+  static const String addChild = '아이 프로필 추가';
+  static const String settings = '설정';
+
+  /// 아이 프로필이 0명일 때.
+  static const String noChild = '아이 프로필을 만들어 주세요.';
+  static const String createChild = '아이 등록하기';
+
+  static const String loadFailed = '정보를 불러오지 못했어요.';
+
+  // ── 보호자 확인 게이트(모달 5) 호출 지점 ──
+  static const String gateTitle = '보호자 확인';
+  static const String gateBody = '리포트는 보호자만 볼 수 있어요.\n보호자가 맞다면 확인을 눌러 주세요.';
+  static const String gateConfirm = '확인';
+  static const String gateCancel = '취소';
+}
+
+/// 보호자 리포트 목록(`/mypage/report`) 전용 문구.
+abstract final class ReportListStrings {
+  static const String title = '보호자 리포트';
+
+  static String childLabel(String name) => '아이: $name';
+
+  /// "리포트 4개 · 새 리포트 1개"
+  static String summary(int total, int unread) =>
+      '리포트 $total개 · 새 리포트 $unread개';
+
+  /// 미열람 배지.
+  static const String badgeNew = 'NEW';
+
+  /// "2회차" — 같은 이야기를 여러 번 하면 카드가 쌓이므로 회차가 없으면
+  /// 보호자에게 중복으로 보입니다.
+  static String playCount(int count) => '$count회차';
+
+  static const String empty = '아직 도착한 리포트가 없어요.\n아이가 이야기를 완주하면 이곳에 도착해요.';
+  static const String goToHome = '이야기 보러 가기';
+
+  static const String loadFailed = '리포트를 불러오지 못했어요.';
+}
+
+/// 보호자 리포트 상세(`/mypage/report/:sessionId`) 전용 문구.
+abstract final class ReportDetailStrings {
+  static const String title = '말하기 리포트';
+
+  static const String skills = '역량 분석';
+  static const String askedWords = '질문한 어휘';
+  static const String evidence = '근거 발화';
+  static const String strength = '잘한 점';
+
+  /// 보완할 부분. **권유형으로만** 씁니다 — 단정적 부정 표현 금지. (PRD F-09)
+  static const String improvement = '이렇게 해보면 좋아요';
+
+  static const String highlight = '이번 세션의 대표 발화';
+  static const String highlightReason = '선정 이유';
+
+  static const String questions = '오늘 아이와 이런 대화를 해보세요';
+  static const String copy = '복사';
+  static const String copied = '복사했어요';
+
+  static const String goToList = '목록으로';
+
+  /// 완주 직후라 아직 분석이 안 끝난 경우. 빈 화면으로 방치하지 않습니다.
+  static const String pending = '리포트를 만들고 있어요.\n잠시 후 다시 확인해 주세요.';
+
+  static const String loadFailed = '리포트를 불러오지 못했어요.';
+}
+
+/// 설정(`/mypage/settings`) 전용 문구.
+abstract final class SettingsStrings {
+  static const String title = '설정';
+
+  static const String notificationGroup = '알림';
+  static const String reportNotification = '리포트 도착 알림';
+  static const String reportNotificationDesc = '아이가 이야기를 완주하면 알려드려요.';
+  static const String marketingConsent = '마케팅 수신 동의';
+  static const String marketingOn = '마케팅 수신에 동의했어요.';
+  static const String marketingOff = '마케팅 수신 동의를 철회했어요.';
+
+  static const String infoGroup = '안내';
+  static const String notice = '공지사항';
+  static const String guide = '이용 안내';
+  static const String support = '고객센터';
+
+  /// 목업에서는 외부 채널 연결 대신 알림만 띄웁니다.
+  static const String supportToast = '고객센터로 연결됩니다. (준비 중)';
+
+  static const String policyGroup = '약관·정책';
+  static const String terms = '서비스 이용약관';
+
+  /// 아동 개인정보 동의는 가입 시 **별도로** 받으므로 행도 별도입니다. (F-01)
+  static const String childPrivacy = '아동 개인정보 처리방침';
+  static const String privacy = '개인정보 처리방침';
+
+  static const String accountGroup = '계정';
+  static const String signOut = '로그아웃';
+  static const String signOutConfirm = '로그아웃할까요?';
+  static const String cancel = '취소';
+
+  static String appVersion(String version) => '앱 버전 $version';
+
+  static const String loadFailed = '설정을 불러오지 못했어요.';
+
+  /// 목업의 문서 뷰. 실제 문서가 들어오면 이 자리를 채웁니다.
+  static const String documentPlaceholder = '문서 내용은 준비 중입니다.';
 }

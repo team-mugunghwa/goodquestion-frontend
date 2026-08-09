@@ -39,6 +39,30 @@ void main() {
     });
   }
 
+  testWidgets('/mypage 로 들어가면 보호자 허브가 뜬다', (WidgetTester tester) async {
+    await pumpAt(tester, AppRoutes.myPage);
+    expect(find.text(MyPageStrings.title), findsOneWidget);
+    // 경계 화면이라 하단 내비를 가집니다.
+    expect(find.byType(AppBottomNav), findsOneWidget);
+  });
+
+  // 보호자 하위 화면들. 탭 루트가 아니라 하단 내비가 없습니다.
+  final Map<String, String> guardianTitles = <String, String>{
+    AppRoutes.report: ReportListStrings.title,
+    AppRoutes.reportDetailOf('104'): ReportDetailStrings.title,
+    AppRoutes.settings: SettingsStrings.title,
+  };
+
+  guardianTitles.forEach((String location, String title) {
+    testWidgets('$location 로 들어가면 "$title" 화면이 뜬다', (
+      WidgetTester tester,
+    ) async {
+      await pumpAt(tester, location);
+      expect(find.text(title), findsOneWidget);
+      expect(find.byType(AppBottomNav), findsNothing);
+    });
+  });
+
   testWidgets('/stories/:storyId 로 들어가면 상세 화면이 뜬다', (
     WidgetTester tester,
   ) async {
@@ -53,10 +77,6 @@ void main() {
     AppRoutes.playOf('abc'): '/play/abc - 장면 진행',
     AppRoutes.playRecapOf('abc'): '/play/abc/recap - 말하기 후 활동',
     AppRoutes.planet: '/planet - 내 행성',
-    AppRoutes.myPage: '/mypage - 마이페이지',
-    AppRoutes.report: '/mypage/report - 보호자 리포트 목록',
-    AppRoutes.reportDetailOf('abc'): '/mypage/report/abc - 보호자 리포트 상세',
-    AppRoutes.settings: '/mypage/settings - 설정',
     AppRoutes.auth: '/auth - 보호자 인증',
   };
 

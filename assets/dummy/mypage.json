@@ -1,0 +1,14 @@
+{
+  "child": {
+    "childId": 1,
+    "name": "하늘이",
+    "age": 8,
+    "avatar": null
+  },
+  "childCount": 2,
+  "activity": {
+    "completedStories": 3,
+    "stardust": 7
+  },
+  "hasNewReport": true
+}
