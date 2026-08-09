@@ -6,112 +6,156 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../domain/entities/report_detail.dart';
 
-/// 역량 카드 하나. 접으면 특징 + 잘한 점, 펼치면 근거 발화 + 보완할 부분.
+/// 어휘 · 표현 · 논리를 가로 탭으로 전환하는 역량 분석 묶음.
+///
+/// ## 왜 아코디언 대신 탭인가
+///
+/// 예전에는 세 카드를 세로로 쌓고 각각 접었다 펼 수 있었습니다. 탭으로
+/// 바꾼 이유는 같습니다 — **한 번에 하나의 역량만 보여서 정보 과밀을
+/// 막는 것.** 세 카드가 동시에 펼쳐지는 상태 자체가 없으므로, 첫 탭은
+/// 기본으로 열어 둡니다. 탭을 누르는 순간 이전 탭의 내용은 사라집니다.
 ///
 /// ## 5단 순서를 재배열하지 마세요
 ///
-/// 역량명 → 이번 활동의 특징 → 근거 발화 → **잘한 점** → 보완할 부분.
+/// 역량명(탭 라벨) → 이번 활동의 특징 → 근거 발화 → **잘한 점** → 보완할 부분.
 /// 잘한 점이 보완보다 먼저 오는 건 PRD F-09 의 규칙입니다. 순서를 바꾸면
 /// 같은 내용이 "지적"으로 읽힙니다.
-///
-/// 기본을 접힌 상태로 두는 건 정보 과밀 방지입니다 — 세 카드가 전부 펼쳐져
-/// 있으면 보호자가 어디부터 읽을지 모릅니다.
-class SkillCard extends StatefulWidget {
-  const SkillCard({super.key, required this.skill});
+class SkillTabs extends StatefulWidget {
+  const SkillTabs({super.key, required this.skills});
 
-  final SkillReport skill;
+  final List<SkillReport> skills;
 
   @override
-  State<SkillCard> createState() => _SkillCardState();
+  State<SkillTabs> createState() => _SkillTabsState();
 }
 
-class _SkillCardState extends State<SkillCard> {
-  bool _expanded = false;
+class _SkillTabsState extends State<SkillTabs> {
+  int _selected = 0;
 
   @override
   Widget build(BuildContext context) {
     final TextTheme text = Theme.of(context).textTheme;
-    final SkillReport skill = widget.skill;
+    final List<SkillReport> skills = widget.skills;
+    if (skills.isEmpty) return const SizedBox.shrink();
+    final SkillReport skill = skills[_selected];
 
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.ink100),
-      ),
-      child: ExpansionTile(
-        // ExpansionTile 의 기본 화살표·패딩을 쓰되, 테두리는 지웁니다 —
-        // 카드가 이미 테두리를 갖고 있어 두 겹이 됩니다.
-        shape: const Border(),
-        collapsedShape: const Border(),
-        tilePadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-        childrenPadding: const EdgeInsets.fromLTRB(
-          AppSpacing.md,
-          0,
-          AppSpacing.md,
-          AppSpacing.md,
-        ),
-        onExpansionChanged: (bool value) => setState(() => _expanded = value),
-        title: Text(skill.name, style: text.titleLarge),
-        subtitle: _expanded
-            ? null
-            : Padding(
-                padding: const EdgeInsets.only(top: AppSpacing.xs),
-                child: Text(
-                  skill.strength,
-                  style: text.bodyMedium,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            for (int i = 0; i < skills.length; i++) ...<Widget>[
+              if (i > 0) const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: _SkillTabButton(
+                  label: skills[i].name,
+                  selected: i == _selected,
+                  onTap: () => setState(() => _selected = i),
                 ),
               ),
-        children: <Widget>[
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(skill.feature, style: text.bodyMedium),
-          ),
-          if (skill.askedWords.isNotEmpty) ...<Widget>[
-            const SizedBox(height: AppSpacing.md),
-            _Block(
-              title: ReportDetailStrings.askedWords,
-              child: Wrap(
-                spacing: AppSpacing.sm,
-                runSpacing: AppSpacing.sm,
-                children: <Widget>[
-                  for (final String word in skill.askedWords)
-                    Chip(label: Text(word)),
-                ],
-              ),
-            ),
+            ],
           ],
-          if (skill.evidence.isNotEmpty) ...<Widget>[
-            const SizedBox(height: AppSpacing.md),
-            _Block(
-              title: ReportDetailStrings.evidence,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  for (final String line in skill.evidence)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-                      // 아이 말은 우리 문장과 글꼴로 구분합니다.
-                      child: Text('"$line"', style: AppTypography.quote),
-                    ),
-                ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: AppColors.ink100),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(skill.feature, style: text.bodyMedium),
+              if (skill.askedWords.isNotEmpty) ...<Widget>[
+                const SizedBox(height: AppSpacing.md),
+                _Block(
+                  title: ReportDetailStrings.askedWords,
+                  child: Wrap(
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.sm,
+                    children: <Widget>[
+                      for (final String word in skill.askedWords)
+                        Chip(label: Text(word)),
+                    ],
+                  ),
+                ),
+              ],
+              if (skill.evidence.isNotEmpty) ...<Widget>[
+                const SizedBox(height: AppSpacing.md),
+                _Block(
+                  title: ReportDetailStrings.evidence,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      for (final String line in skill.evidence)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                          // 아이 말은 우리 문장과 글꼴로 구분합니다.
+                          child: Text('"$line"', style: AppTypography.quote),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: AppSpacing.md),
+              _Block(
+                title: ReportDetailStrings.strength,
+                child: Text(skill.strength, style: text.bodyMedium),
               ),
+              const SizedBox(height: AppSpacing.md),
+              _Block(
+                title: ReportDetailStrings.improvement,
+                child: Text(skill.improvement, style: text.bodyMedium),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SkillTabButton extends StatelessWidget {
+  const _SkillTabButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme text = Theme.of(context).textTheme;
+    return Material(
+      color: selected ? AppColors.brandBlueSurface : AppColors.surface,
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: AppSizes.tapGuardian),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            border: Border.all(
+              color: selected ? AppColors.brandBlueDeep : AppColors.ink100,
+              width: selected ? 1.5 : 1,
             ),
-          ],
-          const SizedBox(height: AppSpacing.md),
-          _Block(
-            title: ReportDetailStrings.strength,
-            child: Text(skill.strength, style: text.bodyMedium),
           ),
-          const SizedBox(height: AppSpacing.md),
-          _Block(
-            title: ReportDetailStrings.improvement,
-            child: Text(skill.improvement, style: text.bodyMedium),
+          child: Text(
+            label,
+            style: text.titleMedium?.copyWith(
+              color: selected ? AppColors.brandBlueDeep : AppColors.ink500,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+            ),
           ),
-        ],
+        ),
       ),
     );
   }
