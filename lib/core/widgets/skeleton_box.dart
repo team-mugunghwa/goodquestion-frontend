@@ -75,13 +75,23 @@ class SkeletonCardList extends StatelessWidget {
   const SkeletonCardList({
     super.key,
     required this.count,
-    required this.aspectRatio,
+    this.aspectRatio,
+    this.mainAxisExtent,
     this.columns = 1,
     this.gap = AppSpacing.lg,
-  });
+  }) : assert(
+         aspectRatio != null || mainAxisExtent != null,
+         '비율이나 높이 중 하나는 줘야 합니다',
+       );
 
   final int count;
-  final double aspectRatio;
+
+  /// 셀의 가로세로 비. [mainAxisExtent] 를 주면 무시됩니다.
+  final double? aspectRatio;
+
+  /// 셀 높이를 직접 지정. 실제 카드 높이를 계산해서 쓰는 화면용입니다.
+  final double? mainAxisExtent;
+
   final int columns;
   final double gap;
 
@@ -96,7 +106,8 @@ class SkeletonCardList extends StatelessWidget {
         crossAxisCount: columns,
         crossAxisSpacing: gap,
         mainAxisSpacing: gap,
-        childAspectRatio: aspectRatio,
+        childAspectRatio: aspectRatio ?? 1,
+        mainAxisExtent: mainAxisExtent,
       ),
       itemBuilder: (BuildContext context, int index) =>
           const SkeletonBox(borderRadius: AppRadius.xl),

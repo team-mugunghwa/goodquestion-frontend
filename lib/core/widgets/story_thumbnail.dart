@@ -30,7 +30,11 @@ class StoryThumbnail extends StatelessWidget {
   /// 이미지가 없을 때 대신 보여 줄 아이콘. `AppIcons` 에서 가져오세요.
   final IconData fallbackIcon;
 
-  final double aspectRatio;
+  /// `null` 이면 비율을 강제하지 않고 **부모가 준 크기를 채웁니다.**
+  ///
+  /// 이야기 상세의 대표 이미지처럼 높이를 직접 정해야 할 때 쓰세요 —
+  /// 태블릿에서 16:9 를 전폭으로 깔면 이미지 하나가 화면을 다 먹습니다.
+  final double? aspectRatio;
 
   /// 칩처럼 작은 자리에서는 [AppSizes.iconInline] 로 줄이세요.
   final double iconSize;
@@ -38,23 +42,21 @@ class StoryThumbnail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final String? path = image;
-    return AspectRatio(
-      aspectRatio: aspectRatio,
-      child: path == null
-          ? _ThumbnailFallback(icon: fallbackIcon, iconSize: iconSize)
-          : Image.asset(
-              path,
-              fit: BoxFit.cover,
-              excludeFromSemantics: true,
-              // 파일이 빠졌을 때 빨간 에러 상자 대신 그라디언트가 뜹니다.
-              errorBuilder:
-                  (BuildContext context, Object error, StackTrace? stack) =>
-                      _ThumbnailFallback(
-                        icon: fallbackIcon,
-                        iconSize: iconSize,
-                      ),
-            ),
-    );
+    final Widget content = path == null
+        ? _ThumbnailFallback(icon: fallbackIcon, iconSize: iconSize)
+        : Image.asset(
+            path,
+            fit: BoxFit.cover,
+            excludeFromSemantics: true,
+            // 파일이 빠졌을 때 빨간 에러 상자 대신 그라디언트가 뜹니다.
+            errorBuilder:
+                (BuildContext context, Object error, StackTrace? stack) =>
+                    _ThumbnailFallback(icon: fallbackIcon, iconSize: iconSize),
+          );
+
+    final double? ratio = aspectRatio;
+    if (ratio == null) return SizedBox.expand(child: content);
+    return AspectRatio(aspectRatio: ratio, child: content);
   }
 }
 

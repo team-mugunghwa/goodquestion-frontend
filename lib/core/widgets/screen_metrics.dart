@@ -72,4 +72,16 @@ class ScreenMetrics {
 
   /// 토큰 글자 크기를 현재 폭에 맞춰 줄입니다. (expanded 100% 기준)
   TextStyle text(TextStyle base) => AppTypography.scaled(base, windowSize);
+
+  /// 글자 한 줄이 실제로 차지하는 높이. 기기의 글자 확대 설정까지 반영합니다.
+  ///
+  /// 그리드 셀 높이를 계산할 때 씁니다 — `childAspectRatio` 를 눈대중으로
+  /// 정하면 카드 아래에 흰 여백이 남거나 글자가 잘립니다.
+  double lineHeight(BuildContext context, TextStyle base) {
+    final TextStyle style = text(base);
+    final double size = MediaQuery.textScalerOf(
+      context,
+    ).scale(style.fontSize ?? 16);
+    return size * (style.height ?? 1.2);
+  }
 }
