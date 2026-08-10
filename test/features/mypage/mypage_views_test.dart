@@ -116,6 +116,14 @@ const ReportDetail _detail = ReportDetail(
       improvement: '다음 문장에서 한 번 더 써 보면 좋아요.',
       askedWords: <String>['며느리', '사랑방'],
     ),
+    SkillReport(
+      name: '표현',
+      feature: '느낀 점을 자기 말로 풀어냈어요.',
+      evidence: <String>['너무 놀랐을 것 같아요'],
+      strength: '감정을 담아 말했어요.',
+      improvement: '다른 인물의 마음도 말해 보면 좋아요.',
+      askedWords: <String>[],
+    ),
   ],
   highlight: ReportHighlight(
     utterance: '며느리가 부끄러웠을 것 같아요.',
@@ -271,19 +279,27 @@ void main() {
       expect(summaryY, lessThan(skillsY));
     });
 
-    testWidgets('역량 카드는 접힌 채로 시작한다', (WidgetTester tester) async {
+    testWidgets('역량 탭은 첫 항목이 기본으로 열려 있다', (WidgetTester tester) async {
       await pump(tester, under(_Stub(detail: _detail)));
 
-      // 접힘 상태에서는 잘한 점만 보이고 근거 발화·보완은 숨어 있습니다.
-      expect(find.text('며느리가 뭐예요?'), findsNothing);
-      expect(find.text(ReportDetailStrings.improvement), findsNothing);
-
-      await tester.tap(find.text('어휘'));
-      await tester.pumpAndSettle();
-
+      // 탭 전환 없이도 첫 역량(어휘)의 근거 발화·보완이 바로 보입니다.
       expect(find.text('"며느리가 뭐예요?"'), findsOneWidget);
       expect(find.text(ReportDetailStrings.improvement), findsOneWidget);
       expect(find.text('며느리'), findsOneWidget, reason: '질문한 어휘 칩');
+      // 다른 탭(표현)의 내용은 아직 보이지 않습니다.
+      expect(find.text('너무 놀랐을 것 같아요'), findsNothing);
+    });
+
+    testWidgets('역량 탭을 누르면 그 역량만 보인다', (WidgetTester tester) async {
+      await pump(tester, under(_Stub(detail: _detail)));
+
+      await tester.tap(find.text('표현'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('"너무 놀랐을 것 같아요"'), findsOneWidget);
+      // 이전에 보이던 어휘 탭의 내용은 사라집니다 — 한 번에 하나만.
+      expect(find.text('"며느리가 뭐예요?"'), findsNothing);
+      expect(find.text('며느리'), findsNothing, reason: '어휘 탭 전용 칩');
     });
 
     testWidgets('대표 발화에 음성 재생 버튼을 두지 않는다', (WidgetTester tester) async {
