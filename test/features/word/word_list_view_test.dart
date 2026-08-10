@@ -136,7 +136,7 @@ void main() {
     await tester.tap(find.text('며느리').last);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text(WordStrings.like));
+    await tester.tap(find.bySemanticsLabel(WordStrings.like));
     await tester.pumpAndSettle();
     await tester.tap(find.text(WordStrings.close));
     await tester.pumpAndSettle();

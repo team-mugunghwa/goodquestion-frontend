@@ -83,7 +83,7 @@ class _WordDetailSheetState extends State<_WordDetailSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              // 표제어 + 소리. 아이가 여기서 하는 첫 행동은 "듣기"입니다.
+              // 표제어 + 좋아요 + 소리. 아이가 여기서 하는 첫 행동은 "듣기"입니다.
               Row(
                 children: <Widget>[
                   Expanded(
@@ -92,6 +92,12 @@ class _WordDetailSheetState extends State<_WordDetailSheet> {
                       style: metrics.text(AppTypography.kidHero),
                     ),
                   ),
+                  _LikeButton(
+                    liked: _word.liked,
+                    size: AppSizes.tapChildPrimary,
+                    onPressed: _toggle,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
                   SpeakerButton(
                     audio: _word.audio,
                     semanticLabel: WordStrings.listenTo(_word.word),
@@ -113,24 +119,12 @@ class _WordDetailSheetState extends State<_WordDetailSheet> {
                 metrics: metrics,
               ),
               const SizedBox(height: AppSpacing.xl),
-              Row(
-                children: <Widget>[
-                  _LikeButton(
-                    liked: _word.liked,
-                    metrics: metrics,
-                    onPressed: _toggle,
-                  ),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: KidPrimaryButton(
-                      icon: AppIcons.close,
-                      label: WordStrings.close,
-                      labelStyle: metrics.text(AppTypography.kidButton),
-                      expand: true,
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ),
-                ],
+              KidPrimaryButton(
+                icon: AppIcons.close,
+                label: WordStrings.close,
+                labelStyle: metrics.text(AppTypography.kidButton),
+                expand: true,
+                onPressed: () => Navigator.of(context).pop(),
               ),
             ],
           ),
@@ -174,15 +168,18 @@ class _Block extends StatelessWidget {
 
 /// 좋아요 토글. 색만으로 구분하지 않습니다 — 아이콘의 **채움 여부**가
 /// 함께 바뀝니다.
+///
+/// 라벨 없이 하트 아이콘 하나만 둡니다 — 소리듣기 버튼과 나란히 놓인
+/// 아이콘 버튼 한 쌍으로 읽히도록, 크기([size])도 소리듣기와 맞춥니다.
 class _LikeButton extends StatelessWidget {
   const _LikeButton({
     required this.liked,
-    required this.metrics,
+    required this.size,
     required this.onPressed,
   });
 
   final bool liked;
-  final ScreenMetrics metrics;
+  final double size;
   final VoidCallback onPressed;
 
   @override
@@ -192,33 +189,19 @@ class _LikeButton extends StatelessWidget {
       borderRadius: AppRadius.pill,
       semanticLabel: WordStrings.like,
       child: Container(
-        height: AppSizes.tapChildPrimary,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        height: size,
+        width: size,
         decoration: BoxDecoration(
           color: liked ? AppColors.brandBlueSurface : AppColors.surface,
-          borderRadius: BorderRadius.circular(AppRadius.pill),
+          shape: BoxShape.circle,
           border: Border.all(
             color: liked ? AppColors.brandBlueDeep : AppColors.ink300,
           ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Icon(
-              liked ? AppIcons.like : AppIcons.likeOff,
-              size: AppSizes.iconChild,
-              color: liked ? AppColors.brandBlueDeep : AppColors.ink500,
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Text(
-              WordStrings.like,
-              style: metrics
-                  .text(AppTypography.kidButton)
-                  .copyWith(
-                    color: liked ? AppColors.brandBlueDeep : AppColors.ink500,
-                  ),
-            ),
-          ],
+        child: Icon(
+          liked ? AppIcons.like : AppIcons.likeOff,
+          size: AppSizes.iconChild,
+          color: liked ? AppColors.brandBlueDeep : AppColors.ink500,
         ),
       ),
     );
