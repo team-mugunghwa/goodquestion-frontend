@@ -31,14 +31,26 @@ Future<bool> showGuardianGateDialog(BuildContext context) async {
         AppSpacing.md,
         AppSpacing.md,
       ),
+      // 기본 actions(OverflowBar)는 취소를 왼쪽 끝에 헐겁게 띄우고 확인만
+      // 채워진 버튼으로 강조합니다 — 취소가 "잘못 놓인 것"처럼 보입니다.
+      // 두 버튼을 같은 너비로 한 줄에 묶어 대등한 선택지로 보이게 합니다.
       actions: <Widget>[
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text(MyPageStrings.gateCancel),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: const Text(MyPageStrings.gateConfirm),
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text(MyPageStrings.gateCancel),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text(MyPageStrings.gateConfirm),
+              ),
+            ),
+          ],
         ),
       ],
     ),
