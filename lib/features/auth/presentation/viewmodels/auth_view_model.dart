@@ -25,9 +25,11 @@ class AuthViewModel extends BaseViewModel {
     this._saveConsents,
     this._createChild,
     this._signOut, {
+    Future<String?> Function()? loadCurrentChildName,
     bool startAtChildProfile = false,
   }) : _step = startAtChildProfile ? AuthStep.childProfile : AuthStep.signIn,
-       _enteredAtChildProfile = startAtChildProfile;
+       _enteredAtChildProfile = startAtChildProfile,
+       _loadCurrentChildName = loadCurrentChildName;
 
   final GetAuthOptionsUseCase _getOptions;
   final SignInWithSocialUseCase _signInWithSocial;
@@ -35,6 +37,7 @@ class AuthViewModel extends BaseViewModel {
   final SaveConsentsUseCase _saveConsents;
   final CreateChildUseCase _createChild;
   final SignOutUseCase _signOut;
+  final Future<String?> Function()? _loadCurrentChildName;
 
   AuthOptions? _options;
   AuthStep _step;
@@ -277,7 +280,18 @@ class AuthViewModel extends BaseViewModel {
         AuthOutcome.needsChild => AuthStep.childProfile,
         AuthOutcome.ready => _step,
       };
-      if (outcome == AuthOutcome.ready) _completed = true;
+      if (outcome == AuthOutcome.ready) {
+        try {
+          final String? currentChildName = await _loadCurrentChildName?.call();
+          if (currentChildName != null && currentChildName.trim().isNotEmpty) {
+            _childName = currentChildName.trim();
+          }
+        } on Object {
+          // 로그인은 이미 완료되었습니다. 프로필 이름 조회 실패가
+          // 인증 성공 자체를 취소하지 않도록 기본 환영 문구로 진행합니다.
+        }
+        _completed = true;
+      }
     } catch (e) {
       // 로그인 실패는 화면을 통째로 에러로 바꾸지 않습니다.
       // 폼은 그대로 두고 인라인 메시지만 답니다 — 다시 입력할 자리가

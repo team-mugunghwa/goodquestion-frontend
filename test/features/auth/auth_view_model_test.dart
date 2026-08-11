@@ -125,6 +125,27 @@ void main() {
     expect(vm.completed, isTrue);
   });
 
+  test('로그인 완료 시 현재 아이 이름을 환영 문구에 사용한다', () async {
+    final _Stub stub = _Stub(outcome: AuthOutcome.ready);
+    final AuthViewModel vm = AuthViewModel(
+      GetAuthOptionsUseCase(stub),
+      SignInWithSocialUseCase(stub),
+      SignInWithEmailUseCase(stub),
+      SaveConsentsUseCase(stub),
+      CreateChildUseCase(stub),
+      SignOutUseCase(stub),
+      loadCurrentChildName: () async => '하늘이',
+    );
+    await vm.load();
+    vm.setEmail('parent3@test.com');
+    vm.setPassword('1234');
+
+    await vm.submitEmail();
+
+    expect(vm.childName, '하늘이');
+    expect(vm.completed, isTrue);
+  });
+
   test('빈 입력은 서버에 보내기 전에 잡는다', () async {
     final vm = _viewModelOf(_Stub());
     await vm.load();
