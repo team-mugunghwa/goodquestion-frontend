@@ -189,13 +189,33 @@ dart run build_runner watch
 **아무 설정 없이 그냥 실행됩니다.** 기본값이 로컬 백엔드(`localhost:8080`)를 가리키고,
 Android 에뮬레이터에서는 자동으로 `10.0.2.2`로 바뀝니다.
 
+정리하면 이렇습니다. **로컬 실행은 언제나 로컬 백엔드를 봅니다.** 배포된 Railway
+서버를 실수로 두드릴 일이 없습니다.
+
+| 실행 방법 | 바라보는 API |
+|---|---|
+| `flutter run` (iOS 시뮬레이터, 데스크톱) | `http://localhost:8080/api` |
+| `flutter run` (Android 에뮬레이터) | `http://10.0.2.2:8080/api` |
+| `flutter run -d chrome` | `http://127.0.0.1:8080/api` |
+| Vercel 배포 | Railway 백엔드 (`tool/vercel_build.sh`) |
+
+실제 휴대폰은 예외입니다. 기기에서 `localhost`는 기기 자신이라 PC의 LAN IP를
+직접 넘겨야 합니다. → [LOCAL_AUTH_TEST.md](LOCAL_AUTH_TEST.md)
+
 다른 서버를 보려면 실행할 때 넘기세요.
 
 ```bash
 flutter run --dart-define=API_BASE_URL=https://dev.example.com/api/v1
 ```
 
-값이 여러 개면 파일로 관리합니다. **`env.json`은 커밋하지 않습니다.**
+값이 여러 개면 파일로 관리합니다. `env/` 아래에 자주 쓰는 조합을 넣어 뒀습니다.
+
+```bash
+flutter run -d chrome --dart-define-from-file=env/local_web.json   # 로컬 백엔드 + 소셜 로그인 모의
+flutter run -d chrome --dart-define-from-file=env/prod.json        # 배포된 Railway 백엔드로 붙어 보기
+```
+
+개인 설정이 필요하면 루트에 `env.json`을 만드세요. **커밋하지 않습니다.**
 
 ```bash
 flutter run --dart-define-from-file=env.json
