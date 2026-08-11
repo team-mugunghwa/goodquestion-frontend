@@ -49,6 +49,8 @@ class AuthViewModel extends BaseViewModel {
   bool _isSignUpMode = false;
   String _email = '';
   String _password = '';
+  String _guardianName = '';
+  bool _rememberMe = true;
   String? _formError;
 
   // ── 스텝 2 ──
@@ -68,6 +70,7 @@ class AuthViewModel extends BaseViewModel {
   AuthStep get step => _step;
   bool get isSignUpMode => _isSignUpMode;
   String get email => _email;
+  bool get rememberMe => _rememberMe;
   String? get formError => _formError;
   Set<String> get agreed => Set<String>.unmodifiable(_agreed);
   String get childName => _childName;
@@ -130,6 +133,19 @@ class AuthViewModel extends BaseViewModel {
     }
   }
 
+  void setGuardianName(String value) {
+    _guardianName = value;
+    if (_formError != null) {
+      _formError = null;
+      safeNotify();
+    }
+  }
+
+  void setRememberMe(bool value) {
+    _rememberMe = value;
+    safeNotify();
+  }
+
   void toggleSignUpMode() {
     _isSignUpMode = !_isSignUpMode;
     _formError = null;
@@ -137,17 +153,22 @@ class AuthViewModel extends BaseViewModel {
   }
 
   Future<void> signInWithSocial(String provider) =>
-      _submit(() => _signInWithSocial(provider));
+      _submit(() => _signInWithSocial(provider, rememberMe: _rememberMe));
 
   Future<void> submitEmail() {
     // 서버에 보내기 전에 잡을 수 있는 건 여기서 잡습니다.
     if (_email.trim().isEmpty) return _fail(AuthStrings.emailRequired);
     if (_password.isEmpty) return _fail(AuthStrings.passwordRequired);
+    if (_isSignUpMode && _guardianName.trim().isEmpty) {
+      return _fail(AuthStrings.nameRequired);
+    }
     return _submit(
       () => _signInWithEmail(
         email: _email.trim(),
         password: _password,
         isSignUp: _isSignUpMode,
+        name: _guardianName.trim(),
+        rememberMe: _rememberMe,
       ),
     );
   }
@@ -238,6 +259,7 @@ class AuthViewModel extends BaseViewModel {
     _agreed.clear();
     _email = '';
     _password = '';
+    _guardianName = '';
     _childName = '';
     _childAge = null;
     safeNotify();

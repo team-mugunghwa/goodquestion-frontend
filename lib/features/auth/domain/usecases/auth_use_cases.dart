@@ -17,8 +17,8 @@ class SignInWithSocialUseCase {
 
   final AuthRepository _repository;
 
-  Future<AuthOutcome> call(String provider) =>
-      _repository.signInWithSocial(provider);
+  Future<AuthOutcome> call(String provider, {bool rememberMe = false}) =>
+      _repository.signInWithSocial(provider, rememberMe: rememberMe);
 }
 
 /// 이메일 로그인 / 가입. 둘의 분기만 다르고 나머지는 같습니다.
@@ -31,9 +31,20 @@ class SignInWithEmailUseCase {
     required String email,
     required String password,
     required bool isSignUp,
+    String name = '',
+    bool rememberMe = false,
   }) => isSignUp
-      ? _repository.signUpWithEmail(email: email, password: password)
-      : _repository.signInWithEmail(email: email, password: password);
+      ? _repository.signUpWithEmail(
+          name: name,
+          email: email,
+          password: password,
+          rememberMe: rememberMe,
+        )
+      : _repository.signInWithEmail(
+          email: email,
+          password: password,
+          rememberMe: rememberMe,
+        );
 }
 
 /// 동의 확정.

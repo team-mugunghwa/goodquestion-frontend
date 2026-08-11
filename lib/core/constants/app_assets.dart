@@ -16,6 +16,9 @@ abstract final class AppAssets {
   /// Q마크만. 512×512, 배경 투명. 앱 아이콘·스플래시·좁은 화면용.
   static const String logoMark = '$_images/logo_mark.png';
 
+  static const String googleLogo = 'assets/icons/google_g.svg';
+  static const String kakaoLogo = 'assets/icons/kakao_bubble.svg';
+
   /// 홈 화면 더미. 서버 `GET /home` 응답의 `data` 와 1:1 입니다.
   static const String homeDummy = '$_dummy/home.json';
 

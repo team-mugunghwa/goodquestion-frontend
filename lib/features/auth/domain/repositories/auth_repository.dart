@@ -7,18 +7,24 @@ abstract class AuthRepository {
   Future<AuthOptions> getOptions();
 
   /// 소셜 로그인. 실패하면 [Failure] 를 던집니다.
-  Future<AuthOutcome> signInWithSocial(String provider);
+  Future<AuthOutcome> signInWithSocial(
+    String provider, {
+    bool rememberMe = false,
+  });
 
   /// 이메일 로그인. 자격이 안 맞으면 [Failure] 를 던집니다.
   Future<AuthOutcome> signInWithEmail({
     required String email,
     required String password,
+    bool rememberMe = false,
   });
 
   /// 이메일 가입. 언제나 동의 스텝으로 이어집니다.
   Future<AuthOutcome> signUpWithEmail({
+    required String name,
     required String email,
     required String password,
+    bool rememberMe = false,
   });
 
   /// 동의 확정. **동의한 시각을 함께 남깁니다** — 법적으로 필요합니다.

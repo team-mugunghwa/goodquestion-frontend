@@ -93,8 +93,10 @@ class _AuthViewState extends State<AuthView> {
             child: ConstrainedBox(
               // 태블릿에서 폼을 화면 끝까지 늘리면 입력 필드가 우스꽝스럽게
               // 길어집니다. 인증 폼은 좁을수록 읽기 쉽습니다.
-              constraints: const BoxConstraints(
-                maxWidth: AppSizes.bubbleMaxWidth,
+              constraints: BoxConstraints(
+                maxWidth: vm.step == AuthStep.signIn
+                    ? 980
+                    : AppSizes.bubbleMaxWidth,
               ),
               child: _body(context, vm),
             ),
