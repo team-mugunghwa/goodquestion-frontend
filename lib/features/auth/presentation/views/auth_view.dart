@@ -11,6 +11,7 @@ import '../../../../core/widgets/app_canvas.dart';
 import '../../../../core/widgets/app_state_views.dart';
 import '../../domain/entities/auth_options.dart';
 import '../../domain/usecases/auth_use_cases.dart';
+import '../../../mypage/domain/usecases/my_page_use_cases.dart';
 import '../viewmodels/auth_view_model.dart';
 import '../widgets/auth_step_indicator.dart';
 import '../widgets/child_profile_step.dart';
@@ -48,6 +49,8 @@ class AuthPage extends StatelessWidget {
         getIt<SaveConsentsUseCase>(),
         getIt<CreateChildUseCase>(),
         getIt<SignOutUseCase>(),
+        loadCurrentChildName: () async =>
+            (await getIt<GetMyPageSummaryUseCase>()()).child?.name,
         startAtChildProfile: startAtChildProfile,
       )..load(),
       child: const AuthView(),
