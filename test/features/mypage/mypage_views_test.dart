@@ -22,14 +22,57 @@ import 'package:goodquestion/features/mypage/presentation/views/report_list_view
 import 'package:goodquestion/features/mypage/presentation/views/settings_view.dart';
 import 'package:provider/provider.dart';
 
-class _Stub implements MyPageRepository, ReportRepository, SettingsRepository {
-  _Stub({this.summary, this.list, this.detail, this.settings, this.error});
+class _Stub
+    implements
+        MyPageRepository,
+        ChildProfileRepository,
+        ReportRepository,
+        SettingsRepository {
+  _Stub({
+    this.summary,
+    this.childProfiles,
+    this.list,
+    this.detail,
+    this.settings,
+    this.error,
+  });
 
-  final MyPageSummary? summary;
+  MyPageSummary? summary;
+  final List<MyPageChild>? childProfiles;
   final ReportList? list;
   final ReportDetail? detail;
   AppSettings? settings;
   final Object? error;
+  @override
+  String? selectedChildId;
+
+  @override
+  Future<void> createChild({required String name, required int age}) async {
+    if (error != null) throw error!;
+  }
+
+  @override
+  Future<List<MyPageChild>> getChildren() async =>
+      childProfiles ??
+      (summary?.child == null
+          ? <MyPageChild>[]
+          : <MyPageChild>[summary!.child!]);
+
+  @override
+  Future<void> selectChild(String childId) async {
+    selectedChildId = childId;
+    final MyPageChild selected = (await getChildren()).firstWhere(
+      (MyPageChild child) => child.childId == childId,
+    );
+    final MyPageSummary current = summary!;
+    summary = MyPageSummary(
+      child: selected,
+      childCount: current.childCount,
+      completedStories: current.completedStories,
+      stardust: current.stardust,
+      hasNewReport: current.hasNewReport,
+    );
+  }
 
   @override
   Future<MyPageSummary> getSummary() async {
@@ -72,7 +115,7 @@ class _Stub implements MyPageRepository, ReportRepository, SettingsRepository {
 }
 
 const MyPageSummary _summary = MyPageSummary(
-  child: MyPageChild(childId: 1, name: '하늘이', age: 8),
+  child: MyPageChild(childId: 'child-1', name: '하늘이', age: 8),
   childCount: 2,
   completedStories: 3,
   stardust: 7,
@@ -85,6 +128,18 @@ const MyPageSummary _noChild = MyPageSummary(
   stardust: 0,
   hasNewReport: false,
 );
+
+const MyPageChild _skyChild = MyPageChild(
+  childId: 'child-1',
+  name: '하늘이',
+  age: 7,
+);
+const MyPageChild _seaChild = MyPageChild(
+  childId: 'child-2',
+  name: '바다',
+  age: 10,
+);
+const List<MyPageChild> _twoChildren = <MyPageChild>[_skyChild, _seaChild];
 
 const ReportList _list = ReportList(
   childName: '하늘이',
@@ -166,7 +221,12 @@ void main() {
 
   group('마이페이지', () {
     Widget under(_Stub stub) => ChangeNotifierProvider<MyPageViewModel>(
-      create: (_) => MyPageViewModel(GetMyPageSummaryUseCase(stub))..load(),
+      create: (_) => MyPageViewModel(
+        GetMyPageSummaryUseCase(stub),
+        CreateMyPageChildUseCase(stub),
+        GetMyPageChildrenUseCase(stub),
+        SelectMyPageChildUseCase(stub),
+      )..load(),
       child: const MyPageView(),
     );
 
@@ -198,6 +258,34 @@ void main() {
       await tester.tap(find.text(MyPageStrings.gateCancel));
       await tester.pumpAndSettle();
       expect(getIt<GuardianGate>().isPassed, isFalse);
+    });
+
+    testWidgets('프로필 전환에서 등록된 아이를 선택한다', (WidgetTester tester) async {
+      final _Stub stub = _Stub(
+        summary: const MyPageSummary(
+          child: _skyChild,
+          childCount: 2,
+          completedStories: 0,
+          stardust: 0,
+          hasNewReport: false,
+        ),
+        childProfiles: _twoChildren,
+      );
+      await pump(tester, under(stub));
+
+      await tester.tap(find.text(MyPageStrings.switchChild));
+      await tester.pumpAndSettle();
+
+      expect(find.text('하늘이'), findsOneWidget);
+      expect(find.text('바다'), findsOneWidget);
+      expect(find.text('7살'), findsWidgets);
+      expect(find.text('10살'), findsOneWidget);
+
+      await tester.tap(find.text('바다'));
+      await tester.pumpAndSettle();
+
+      expect(stub.selectedChildId, 'child-2');
+      expect(find.text('바다 · 10살'), findsOneWidget);
     });
 
     testWidgets('실패해도 메뉴는 남는다', (WidgetTester tester) async {

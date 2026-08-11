@@ -42,10 +42,13 @@ abstract final class AppRoutes {
   static const String reportDetailPath = '/mypage/report/:sessionId';
 
   /// 설정
-  static const String settings = '/mypage/settings';
+  static const String settings = '/settings';
 
   /// 보호자 인증 — 로그인·회원가입·약관 동의를 한 화면에서 처리합니다.
   static const String auth = '/auth';
+
+  /// 로그인 화면의 사용자 친화적 주소. 기존 `/auth`도 호환을 위해 유지합니다.
+  static const String login = '/login';
 
   /// 로그인은 됐는데 아이 프로필이 없는 계정이 갈 곳.
   ///

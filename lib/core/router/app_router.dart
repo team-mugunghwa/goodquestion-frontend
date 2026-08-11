@@ -96,10 +96,15 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.home}) => GoRouter(
         ),
         GoRoute(
           path: 'settings',
-          builder: (BuildContext context, GoRouterState state) =>
-              const SettingsPage(),
+          redirect: (BuildContext context, GoRouterState state) =>
+              AppRoutes.settings,
         ),
       ],
+    ),
+    GoRoute(
+      path: AppRoutes.settings,
+      builder: (BuildContext context, GoRouterState state) =>
+          const SettingsPage(),
     ),
     GoRoute(
       path: AppRoutes.auth,
@@ -109,6 +114,10 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.home}) => GoRouter(
             state.uri.queryParameters[AppRoutes.stepParam] ==
             AppRoutes.childStepValue,
       ),
+    ),
+    GoRoute(
+      path: AppRoutes.login,
+      builder: (BuildContext context, GoRouterState state) => const AuthPage(),
     ),
   ],
   // 없는 경로로 들어왔을 때 빨간 에러 화면 대신 무엇이 틀렸는지 보여 줍니다.

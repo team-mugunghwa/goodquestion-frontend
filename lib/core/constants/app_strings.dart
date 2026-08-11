@@ -219,9 +219,11 @@ abstract final class ReportDetailStrings {
   static const String loadFailed = '리포트를 불러오지 못했어요.';
 }
 
-/// 설정(`/mypage/settings`) 전용 문구.
+/// 설정(`/settings`) 전용 문구.
 abstract final class SettingsStrings {
   static const String title = '설정';
+  static const String consentComplete = '동의 완료';
+  static const String consentRequired = '동의 필요';
 
   static const String notificationGroup = '알림';
   static const String reportNotification = '리포트 도착 알림';
@@ -268,8 +270,20 @@ abstract final class AuthStrings {
   static const String orDivider = '또는';
   static const String email = '이메일';
   static const String password = '비밀번호';
+  static const String name = '보호자 이름';
   static const String signIn = '로그인';
-  static const String signUpWithEmail = '이메일로 가입하기';
+  static const String socialSignIn = '소셜 로그인';
+  static const String emailSignIn = '이메일 로그인';
+  static const String kakaoSignIn = '카카오로 계속하기';
+  static const String googleSignIn = '구글로 계속하기';
+  static const String keepSignedIn = '로그인 유지';
+  static const String signUpWithEmail = '회원가입';
+  static const String findId = 'ID 찾기';
+  static const String findPassword = 'PW 찾기';
+  static const String accountHelpTitle = '계정 찾기';
+  static const String accountHelpBody =
+      '현재는 고객센터를 통해 계정을 확인할 수 있습니다. 계정 찾기 API가 준비되면 이 메뉴에서 바로 지원할 예정입니다.';
+  static const String close = '확인';
   static const String signUp = '가입하기';
   static const String backToSignIn = '로그인으로 돌아가기';
 
@@ -277,6 +291,7 @@ abstract final class AuthStrings {
   static const String signInFailed = '이메일 또는 비밀번호를 다시 확인해 주세요.';
   static const String emailRequired = '이메일을 입력해 주세요.';
   static const String passwordRequired = '비밀번호를 입력해 주세요.';
+  static const String nameRequired = '보호자 이름을 입력해 주세요.';
 
   /// 소셜 로그인 실패 시뮬레이션.
   static const String socialFailed = '로그인에 실패했어요. 잠시 후 다시 시도해 주세요.';

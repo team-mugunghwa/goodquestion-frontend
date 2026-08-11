@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>로그인 완료</title>
+</head>
+<body>
+  <p>로그인이 완료되었습니다. 이 창은 자동으로 닫힙니다.</p>
+  <script>
+    const message = { 'flutter-web-auth-2': window.location.href };
+    if (window.opener) {
+      window.opener.postMessage(message, window.location.origin);
+      window.close();
+    } else if (window.parent && window.parent !== window) {
+      window.parent.postMessage(message, window.location.origin);
+    } else {
+      localStorage.setItem('flutter-web-auth-2', window.location.href);
+      window.close();
+    }
+  </script>
+</body>
+</html>

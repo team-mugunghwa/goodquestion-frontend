@@ -38,18 +38,24 @@ class _Stub implements AuthRepository {
   );
 
   @override
-  Future<AuthOutcome> signInWithSocial(String provider) async => outcome;
+  Future<AuthOutcome> signInWithSocial(
+    String provider, {
+    bool rememberMe = false,
+  }) async => outcome;
 
   @override
   Future<AuthOutcome> signInWithEmail({
     required String email,
     required String password,
+    bool rememberMe = false,
   }) async => outcome;
 
   @override
   Future<AuthOutcome> signUpWithEmail({
+    required String name,
     required String email,
     required String password,
+    bool rememberMe = false,
   }) async => AuthOutcome.needsConsent;
 
   @override
@@ -100,11 +106,11 @@ void main() {
   testWidgets('스텝1 은 소셜 버튼이 지배하고 인디케이터가 없다', (WidgetTester tester) async {
     await pump(tester, _Stub());
 
-    expect(find.text('카카오로 시작하기'), findsOneWidget);
-    expect(find.text('구글로 시작하기'), findsOneWidget);
+    expect(find.text(AuthStrings.kakaoSignIn), findsOneWidget);
+    expect(find.text(AuthStrings.googleSignIn), findsOneWidget);
     expect(find.text(AuthStrings.signIn), findsOneWidget);
     // 로그인만 하러 온 사람에게 "3단계 가입"으로 보이면 부담스럽습니다.
-    expect(find.byType(Checkbox), findsNothing);
+    expect(find.byType(Checkbox), findsOneWidget);
   });
 
   testWidgets('이메일 가입으로 전환된다', (WidgetTester tester) async {
@@ -120,7 +126,7 @@ void main() {
   testWidgets('소셜 로그인을 누르면 동의 스텝으로 간다', (WidgetTester tester) async {
     await pump(tester, _Stub());
 
-    await tester.tap(find.text('카카오로 시작하기'));
+    await tester.tap(find.text(AuthStrings.kakaoSignIn));
     await tester.pumpAndSettle();
 
     expect(find.text(AuthStrings.consentTitle), findsOneWidget);
@@ -131,7 +137,7 @@ void main() {
   testWidgets('필수를 안 채우면 동의 스텝에 머문다', (WidgetTester tester) async {
     final _Stub stub = _Stub();
     await pump(tester, stub);
-    await tester.tap(find.text('카카오로 시작하기'));
+    await tester.tap(find.text(AuthStrings.kakaoSignIn));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text(AuthStrings.consentContinue));
@@ -143,7 +149,7 @@ void main() {
 
   testWidgets('전체 동의 후 넘어가면 프로필 스텝이 뜬다', (WidgetTester tester) async {
     await pump(tester, _Stub());
-    await tester.tap(find.text('카카오로 시작하기'));
+    await tester.tap(find.text(AuthStrings.kakaoSignIn));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text(AuthStrings.consentAll));
@@ -184,7 +190,7 @@ void main() {
 
   testWidgets('약관 보기를 누르면 문서 시트가 열린다', (WidgetTester tester) async {
     await pump(tester, _Stub());
-    await tester.tap(find.text('카카오로 시작하기'));
+    await tester.tap(find.text(AuthStrings.kakaoSignIn));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text(AuthStrings.consentView).first);

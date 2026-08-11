@@ -20,6 +20,13 @@ import 'package:flutter/foundation.dart';
 abstract final class AppConfig {
   static const String _rawBaseUrl = String.fromEnvironment('API_BASE_URL');
 
+  /// OAuth 공급자 키 없이 로그인 화면의 이동 흐름만 확인하는 개발 옵션입니다.
+  /// 실제 인증이나 토큰 발급은 하지 않으므로 배포 빌드에서는 사용하면 안 됩니다.
+  static const bool mockSocialLogin = bool.fromEnvironment(
+    'MOCK_SOCIAL_LOGIN',
+    defaultValue: false,
+  );
+
   /// 로컬 백엔드(`localhost:8080`)를 가리키는 기본 주소.
   ///
   /// Android 에뮬레이터에서 `localhost` 는 **에뮬레이터 자신**을 가리킵니다.
@@ -30,10 +37,15 @@ abstract final class AppConfig {
   /// **web 에는 `dart:io` 가 아예 없어서** import 만 해도 빌드가 깨집니다.
   /// `defaultTargetPlatform` 은 모든 플랫폼에서 동작합니다.
   static String get _defaultBaseUrl {
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:8080/api/v1';
+    if (kIsWeb) {
+      final String host = Uri.base.host.isEmpty ? 'localhost' : Uri.base.host;
+      final String apiHost = host == 'localhost' ? '127.0.0.1' : host;
+      return 'http://$apiHost:8080/api';
     }
-    return 'http://localhost:8080/api/v1';
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      return 'http://10.0.2.2:8080/api';
+    }
+    return 'http://localhost:8080/api';
   }
 
   static String get apiBaseUrl =>
@@ -44,4 +56,20 @@ abstract final class AppConfig {
 
   /// 네트워크 로그를 콘솔에 찍을지. 릴리스 빌드에서는 자동으로 꺼집니다.
   static bool get enableNetworkLog => kDebugMode;
+
+  static const String kakaoClientId = String.fromEnvironment('KAKAO_CLIENT_ID');
+  static const String googleClientId = String.fromEnvironment(
+    'GOOGLE_CLIENT_ID',
+  );
+  static const String _rawOauthRedirectUri = String.fromEnvironment(
+    'OAUTH_REDIRECT_URI',
+  );
+
+  /// 웹은 팝업 결과를 부모 창으로 전달하는 정적 콜백 페이지를 사용합니다.
+  /// 네이티브 앱은 등록된 커스텀 scheme으로 돌아옵니다.
+  static String get oauthRedirectUri {
+    if (_rawOauthRedirectUri.isNotEmpty) return _rawOauthRedirectUri;
+    if (kIsWeb) return Uri.base.resolve('auth.html').toString();
+    return 'goodquestion://oauth';
+  }
 }
