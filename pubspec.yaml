@@ -10,6 +10,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
 
   # 상태관리 — ViewModel(ChangeNotifier) 을 위젯 트리에 붙입니다
   provider: ^6.1.2
@@ -22,6 +24,13 @@ dependencies:
 
   # HTTP — 인터셉터로 토큰·에러·로깅을 한 곳에서 처리
   dio: ^5.7.0
+
+  # 인증 토큰은 OS 보안 저장소에, OAuth 인가 코드는 시스템 브라우저로 처리
+  flutter_secure_storage: ^10.0.0
+  flutter_web_auth_2: ^4.1.0
+
+  # 구글·카카오 브랜드 로고 SVG
+  flutter_svg: ^2.2.0
 
   # DTO 의 fromJson 자동 생성용 애노테이션
   # json_serializable 6.11+ 는 4.12.0 이상을 요구합니다

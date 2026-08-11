@@ -13,16 +13,63 @@ import 'package:goodquestion/features/mypage/presentation/viewmodels/report_deta
 import 'package:goodquestion/features/mypage/presentation/viewmodels/report_list_view_model.dart';
 import 'package:goodquestion/features/mypage/presentation/viewmodels/settings_view_model.dart';
 
-class _Stub implements MyPageRepository, ReportRepository, SettingsRepository {
-  _Stub({this.summary, this.list, this.detail, this.settings, this.error});
+class _Stub
+    implements
+        MyPageRepository,
+        ChildProfileRepository,
+        ReportRepository,
+        SettingsRepository {
+  _Stub({
+    this.summary,
+    this.childProfiles,
+    this.list,
+    this.detail,
+    this.settings,
+    this.error,
+  });
 
-  final MyPageSummary? summary;
+  MyPageSummary? summary;
+  final List<MyPageChild>? childProfiles;
   ReportList? list;
   final ReportDetail? detail;
   AppSettings? settings;
   final Object? error;
 
   final List<int> markedAsRead = <int>[];
+  final List<String> createdChildNames = <String>[];
+  final List<int> createdChildAges = <int>[];
+  @override
+  String? selectedChildId;
+
+  @override
+  Future<void> createChild({required String name, required int age}) async {
+    if (error != null) throw error!;
+    createdChildNames.add(name);
+    createdChildAges.add(age);
+  }
+
+  @override
+  Future<List<MyPageChild>> getChildren() async =>
+      childProfiles ??
+      (summary?.child == null
+          ? <MyPageChild>[]
+          : <MyPageChild>[summary!.child!]);
+
+  @override
+  Future<void> selectChild(String childId) async {
+    selectedChildId = childId;
+    final MyPageChild selected = (await getChildren()).firstWhere(
+      (MyPageChild child) => child.childId == childId,
+    );
+    final MyPageSummary current = summary!;
+    summary = MyPageSummary(
+      child: selected,
+      childCount: current.childCount,
+      completedStories: current.completedStories,
+      stardust: current.stardust,
+      hasNewReport: current.hasNewReport,
+    );
+  }
 
   @override
   Future<MyPageSummary> getSummary() async {
@@ -65,7 +112,7 @@ class _Stub implements MyPageRepository, ReportRepository, SettingsRepository {
 }
 
 const MyPageSummary _summary = MyPageSummary(
-  child: MyPageChild(childId: 1, name: '하늘이', age: 8),
+  child: MyPageChild(childId: 'child-1', name: '하늘이', age: 8),
   childCount: 2,
   completedStories: 3,
   stardust: 7,
@@ -78,6 +125,18 @@ const MyPageSummary _noChild = MyPageSummary(
   stardust: 0,
   hasNewReport: false,
 );
+
+const MyPageChild _skyChild = MyPageChild(
+  childId: 'child-1',
+  name: '하늘이',
+  age: 7,
+);
+const MyPageChild _seaChild = MyPageChild(
+  childId: 'child-2',
+  name: '바다',
+  age: 10,
+);
+const List<MyPageChild> _twoChildren = <MyPageChild>[_skyChild, _seaChild];
 
 ReportList _list() => const ReportList(
   childName: '하늘이',
@@ -138,6 +197,9 @@ void main() {
     test('아이가 있으면 hasChild 가 true 다', () async {
       final vm = MyPageViewModel(
         GetMyPageSummaryUseCase(_Stub(summary: _summary)),
+        CreateMyPageChildUseCase(_Stub(summary: _summary)),
+        GetMyPageChildrenUseCase(_Stub(summary: _summary)),
+        SelectMyPageChildUseCase(_Stub(summary: _summary)),
       );
 
       await vm.load();
@@ -150,6 +212,9 @@ void main() {
     test('아이가 없으면 리포트 메뉴를 잠글 근거가 생긴다', () async {
       final vm = MyPageViewModel(
         GetMyPageSummaryUseCase(_Stub(summary: _noChild)),
+        CreateMyPageChildUseCase(_Stub(summary: _noChild)),
+        GetMyPageChildrenUseCase(_Stub(summary: _noChild)),
+        SelectMyPageChildUseCase(_Stub(summary: _noChild)),
       );
 
       await vm.load();
@@ -163,12 +228,59 @@ void main() {
         GetMyPageSummaryUseCase(
           _Stub(error: const NetworkFailure('연결이 끊겼습니다.')),
         ),
+        CreateMyPageChildUseCase(_Stub()),
+        GetMyPageChildrenUseCase(_Stub()),
+        SelectMyPageChildUseCase(_Stub()),
       );
 
       await vm.load();
 
       expect(vm.state, ViewState.error);
       expect(vm.errorMessage, '연결이 끊겼습니다.');
+    });
+
+    test('아이 프로필을 저장하고 목록을 다시 불러온다', () async {
+      final _Stub stub = _Stub(summary: _summary);
+      final MyPageViewModel vm = MyPageViewModel(
+        GetMyPageSummaryUseCase(stub),
+        CreateMyPageChildUseCase(stub),
+        GetMyPageChildrenUseCase(stub),
+        SelectMyPageChildUseCase(stub),
+      );
+
+      final bool saved = await vm.addChild(name: '새봄', age: 7);
+
+      expect(saved, isTrue);
+      expect(stub.createdChildNames, <String>['새봄']);
+      expect(stub.createdChildAges, <int>[7]);
+      expect(vm.summary, same(_summary));
+    });
+
+    test('등록된 아이 중 선택한 프로필로 전환한다', () async {
+      final _Stub stub = _Stub(
+        summary: const MyPageSummary(
+          child: _skyChild,
+          childCount: 2,
+          completedStories: 0,
+          stardust: 0,
+          hasNewReport: false,
+        ),
+        childProfiles: _twoChildren,
+      );
+      final MyPageViewModel vm = MyPageViewModel(
+        GetMyPageSummaryUseCase(stub),
+        CreateMyPageChildUseCase(stub),
+        GetMyPageChildrenUseCase(stub),
+        SelectMyPageChildUseCase(stub),
+      );
+      await vm.load();
+
+      final bool switched = await vm.switchChild('child-2');
+
+      expect(switched, isTrue);
+      expect(stub.selectedChildId, 'child-2');
+      expect(vm.summary?.child?.name, '바다');
+      expect(vm.children, hasLength(2));
     });
   });
 

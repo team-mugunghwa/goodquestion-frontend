@@ -12,6 +12,7 @@ import '../../../../core/widgets/app_state_views.dart';
 import '../../../../core/widgets/guardian_list.dart';
 import '../../../../core/widgets/guardian_scaffold.dart';
 import '../../../../core/widgets/skeleton_box.dart';
+import '../../../auth/domain/usecases/auth_use_cases.dart';
 import '../../domain/entities/app_settings.dart';
 import '../../domain/guardian_gate.dart';
 import '../../domain/usecases/my_page_use_cases.dart';
@@ -155,6 +156,9 @@ class SettingsView extends StatelessWidget {
             GuardianTile(
               icon: AppIcons.privacy,
               label: SettingsStrings.childPrivacy,
+              trailingText: settings.consentAt == null
+                  ? SettingsStrings.consentRequired
+                  : SettingsStrings.consentComplete,
               onTap: () => _openDocument(context, SettingsStrings.childPrivacy),
             ),
             GuardianTile(
@@ -248,6 +252,8 @@ class SettingsView extends StatelessWidget {
       ),
     );
     if (confirmed != true || !context.mounted) return;
+    await getIt<SignOutUseCase>()();
+    if (!context.mounted) return;
     // 보호자 세션이 끊기므로 리포트 게이트도 다시 잠급니다.
     getIt<GuardianGate>().reset();
     context.go(AppRoutes.auth);

@@ -8,6 +8,16 @@ abstract class MyPageRepository {
   Future<MyPageSummary> getSummary();
 }
 
+abstract class ChildProfileRepository {
+  String? get selectedChildId;
+
+  Future<void> createChild({required String name, required int age});
+
+  Future<List<MyPageChild>> getChildren();
+
+  Future<void> selectChild(String childId);
+}
+
 /// 보호자 리포트. 목록과 상세가 같은 출처를 씁니다.
 abstract class ReportRepository {
   Future<ReportList> getReportList();

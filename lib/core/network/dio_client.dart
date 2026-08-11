@@ -94,26 +94,31 @@ class DioClient {
       final body = response.data;
 
       if (status == 401) throw const UnauthorizedException();
-
-      if (body is! Map<String, dynamic>) {
-        throw const ParseException('응답 형식이 올바르지 않습니다.');
-      }
-
-      final success = body['success'] as bool? ?? false;
-      if (!success) {
-        final error = body['error'];
+      if (status < 200 || status >= 300) {
+        final map = body is Map<String, dynamic> ? body : null;
+        final error = map?['error'];
         throw ServerException(
           message: error is Map<String, dynamic>
               ? (error['message'] as String? ?? '요청을 처리하지 못했습니다.')
-              : '요청을 처리하지 못했습니다.',
+              : (map?['message'] as String? ?? '요청을 처리하지 못했습니다.'),
           code: error is Map<String, dynamic>
               ? (error['code'] as String? ?? 'UNKNOWN')
-              : 'UNKNOWN',
+              : (map?['code'] as String? ?? 'UNKNOWN'),
           statusCode: status,
         );
       }
 
-      return parse(body['data']);
+      // 일부 API는 {success,data}, 백엔드는 DTO/목록을 그대로 반환합니다.
+      if (body is Map<String, dynamic> && body.containsKey('success')) {
+        if (body['success'] != true) {
+          throw const ServerException(
+            message: '요청을 처리하지 못했습니다.',
+            code: 'UNKNOWN',
+          );
+        }
+        return parse(body['data']);
+      }
+      return parse(body);
     } on DioException catch (e) {
       throw _mapDioException(e);
     }
@@ -126,7 +131,11 @@ class DioClient {
       '서버 응답이 너무 느립니다. 잠시 후 다시 시도해 주세요.',
     ),
     DioExceptionType.connectionError ||
-    DioExceptionType.unknown => const NetworkException(),
+    DioExceptionType.unknown => NetworkException(
+      kDebugMode
+          ? '백엔드에 연결할 수 없습니다. (${AppConfig.apiBaseUrl})'
+          : '네트워크에 연결할 수 없습니다.',
+    ),
     DioExceptionType.badCertificate => const NetworkException(
       '보안 인증서에 문제가 있습니다.',
     ),

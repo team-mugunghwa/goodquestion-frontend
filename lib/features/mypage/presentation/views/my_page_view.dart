@@ -45,7 +45,12 @@ class MyPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<MyPageViewModel>(
-      create: (_) => MyPageViewModel(getIt<GetMyPageSummaryUseCase>())..load(),
+      create: (_) => MyPageViewModel(
+        getIt<GetMyPageSummaryUseCase>(),
+        getIt<CreateMyPageChildUseCase>(),
+        getIt<GetMyPageChildrenUseCase>(),
+        getIt<SelectMyPageChildUseCase>(),
+      )..load(),
       child: const MyPageView(),
     );
   }
@@ -99,7 +104,7 @@ class MyPageView extends StatelessWidget {
               GuardianTile(
                 icon: AppIcons.settings,
                 label: MyPageStrings.settings,
-                onTap: () => context.push(AppRoutes.settings),
+                onTap: () => context.go(AppRoutes.settings),
               ),
             ],
           ),
@@ -123,7 +128,7 @@ class MyPageView extends StatelessWidget {
       summary: summary,
       onSwitch: () => _openChildSwitch(context),
       onEdit: () => _openChildForm(context),
-      onCreate: () => context.go(AppRoutes.authChildStep),
+      onCreate: () => _openChildForm(context),
     );
   }
 
@@ -144,13 +149,31 @@ class MyPageView extends StatelessWidget {
   ///
   /// 모달 내부 폼은 별도 설계 범위라, 여기서는 호출 지점만 만들어 둡니다.
   /// 지금은 최초 등록 화면(`/auth`)이 같은 일을 하므로 그리로 보냅니다.
-  void _openChildForm(BuildContext context) =>
-      context.go(AppRoutes.authChildStep);
+  Future<void> _openChildForm(BuildContext context) async {
+    final _ChildFormValue? value = await showModalBottomSheet<_ChildFormValue>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (BuildContext sheetContext) => const _ChildProfileForm(),
+    );
+    if (value == null || !context.mounted) return;
+
+    final MyPageViewModel vm = context.read<MyPageViewModel>();
+    final bool saved = await vm.addChild(name: value.name, age: value.age);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          saved ? '아이 프로필이 저장되었습니다.' : vm.childSaveError ?? '저장하지 못했습니다.',
+        ),
+      ),
+    );
+  }
 
   /// 아이 프로필 전환 모달(모달 6)의 자리. 홈의 호출 지점과 같은 모달입니다.
-  Future<void> _openChildSwitch(BuildContext context) {
+  Future<void> _openChildSwitch(BuildContext context) async {
     final MyPageViewModel vm = context.read<MyPageViewModel>();
-    return showModalBottomSheet<void>(
+    final String? childId = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
       builder: (BuildContext sheetContext) => SafeArea(
@@ -166,18 +189,176 @@ class MyPageView extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                vm.summary?.child?.name ?? '',
+                '학습할 아이를 선택해 주세요.',
                 style: Theme.of(sheetContext).textTheme.bodyMedium,
               ),
-              const SizedBox(height: AppSpacing.lg),
-              FilledButton(
-                onPressed: () => Navigator.of(sheetContext).pop(),
-                child: const Text(HomeStrings.close),
+              const SizedBox(height: AppSpacing.md),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: vm.children.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (BuildContext context, int index) {
+                    final MyPageChild child = vm.children[index];
+                    final bool selected =
+                        child.childId == vm.summary?.child?.childId;
+                    return ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm,
+                        vertical: AppSpacing.xs,
+                      ),
+                      leading: CircleAvatar(
+                        child: Text(
+                          child.name.isEmpty ? '?' : child.name.substring(0, 1),
+                        ),
+                      ),
+                      title: Text(child.name),
+                      subtitle: Text('${child.age}살'),
+                      trailing: selected
+                          ? const Icon(Icons.check_circle_rounded)
+                          : const Icon(Icons.circle_outlined),
+                      selected: selected,
+                      onTap: () =>
+                          Navigator.of(sheetContext).pop(child.childId),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  _openChildForm(context);
+                },
+                icon: const Icon(AppIcons.add),
+                label: const Text('새 아이 프로필 추가'),
               ),
             ],
           ),
         ),
       ),
     );
+    if (childId == null || !context.mounted) return;
+    if (childId == vm.summary?.child?.childId) return;
+
+    final bool switched = await vm.switchChild(childId);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          switched
+              ? '${vm.summary?.child?.name ?? ''} 프로필로 전환했습니다.'
+              : vm.childSaveError ?? '프로필을 전환하지 못했습니다.',
+        ),
+      ),
+    );
+  }
+}
+
+class _ChildFormValue {
+  const _ChildFormValue(this.name, this.age);
+
+  final String name;
+  final int age;
+}
+
+class _ChildProfileForm extends StatefulWidget {
+  const _ChildProfileForm();
+
+  @override
+  State<_ChildProfileForm> createState() => _ChildProfileFormState();
+}
+
+class _ChildProfileFormState extends State<_ChildProfileForm> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final TextEditingController _nameController = TextEditingController();
+  int _age = 7;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          0,
+          AppSpacing.lg,
+          MediaQuery.viewInsetsOf(context).bottom + AppSpacing.lg,
+        ),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Text('아이 프로필 추가', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                '아이의 이름과 나이를 입력해 주세요.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              TextFormField(
+                controller: _nameController,
+                autofocus: true,
+                maxLength: 50,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(
+                  labelText: '아이 이름',
+                  hintText: '예: 하늘',
+                ),
+                validator: (String? value) =>
+                    value == null || value.trim().isEmpty
+                    ? '아이 이름을 입력해 주세요.'
+                    : null,
+                onFieldSubmitted: (_) => _submit(),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              DropdownButtonFormField<int>(
+                initialValue: _age,
+                decoration: const InputDecoration(labelText: '나이'),
+                items: <DropdownMenuItem<int>>[
+                  for (int age = 4; age <= 13; age++)
+                    DropdownMenuItem<int>(value: age, child: Text('$age세')),
+                ],
+                onChanged: (int? value) {
+                  if (value != null) _age = value;
+                },
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('취소'),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: _submit,
+                      child: const Text('저장'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _submit() {
+    if (_formKey.currentState?.validate() != true) return;
+    Navigator.of(
+      context,
+    ).pop(_ChildFormValue(_nameController.text.trim(), _age));
   }
 }

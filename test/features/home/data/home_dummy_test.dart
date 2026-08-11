@@ -2,6 +2,28 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:goodquestion/features/home/data/datasources/home_local_data_source.dart';
 import 'package:goodquestion/features/home/data/repositories/home_repository_mock.dart';
 import 'package:goodquestion/features/home/domain/entities/home_summary.dart';
+import 'package:goodquestion/features/mypage/domain/entities/my_page_summary.dart';
+import 'package:goodquestion/features/mypage/domain/repositories/my_page_repository.dart';
+
+class _ChildProfiles implements ChildProfileRepository {
+  _ChildProfiles(this.children, this.selectedChildId);
+
+  final List<MyPageChild> children;
+
+  @override
+  String? selectedChildId;
+
+  @override
+  Future<void> createChild({required String name, required int age}) async {}
+
+  @override
+  Future<List<MyPageChild>> getChildren() async => children;
+
+  @override
+  Future<void> selectChild(String childId) async {
+    selectedChildId = childId;
+  }
+}
 
 /// `assets/dummy/home.json` 이 화면이 기대하는 모양인지 검사합니다.
 ///
@@ -32,5 +54,21 @@ void main() {
 
     expect(session.progress, inInclusiveRange(0, 1));
     expect(session.lastCompletedScene, lessThanOrEqualTo(session.totalScenes));
+  });
+
+  test('마이페이지에서 선택한 아이가 홈 프로필에 반영된다', () async {
+    final _ChildProfiles profiles = _ChildProfiles(const <MyPageChild>[
+      MyPageChild(childId: 'child-1', name: '하늘이', age: 7),
+      MyPageChild(childId: 'child-2', name: '바다', age: 10),
+    ], 'child-2');
+    final HomeRepositoryMock linkedRepository = HomeRepositoryMock(
+      const HomeLocalDataSource(),
+      childProfileRepository: profiles,
+      latency: Duration.zero,
+    );
+
+    final HomeSummary summary = await linkedRepository.getHomeSummary();
+
+    expect(summary.child?.name, '바다');
   });
 }

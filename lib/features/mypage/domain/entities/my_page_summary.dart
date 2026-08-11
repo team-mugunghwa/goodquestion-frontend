@@ -39,7 +39,7 @@ class MyPageChild {
     this.avatar,
   });
 
-  final int childId;
+  final String childId;
   final String name;
   final int age;
   final String? avatar;

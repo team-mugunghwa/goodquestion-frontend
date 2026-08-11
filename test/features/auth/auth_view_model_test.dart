@@ -32,7 +32,10 @@ class _Stub implements AuthRepository {
   );
 
   @override
-  Future<AuthOutcome> signInWithSocial(String provider) async {
+  Future<AuthOutcome> signInWithSocial(
+    String provider, {
+    bool rememberMe = false,
+  }) async {
     if (signInError != null) throw signInError!;
     return outcome;
   }
@@ -41,6 +44,7 @@ class _Stub implements AuthRepository {
   Future<AuthOutcome> signInWithEmail({
     required String email,
     required String password,
+    bool rememberMe = false,
   }) async {
     if (signInError != null) throw signInError!;
     return outcome;
@@ -48,8 +52,10 @@ class _Stub implements AuthRepository {
 
   @override
   Future<AuthOutcome> signUpWithEmail({
+    required String name,
     required String email,
     required String password,
+    bool rememberMe = false,
   }) async => AuthOutcome.needsConsent;
 
   @override
