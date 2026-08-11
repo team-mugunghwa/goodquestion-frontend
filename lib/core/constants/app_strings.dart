@@ -316,7 +316,10 @@ abstract final class AuthStrings {
   static const String start = '시작하기';
 
   /// 완료 직후의 짧은 환영. 곧바로 홈으로 넘어갑니다.
-  static String welcome(String name) => '$name(이)와 시작해요!';
+  static String welcome(String name) {
+    final String childName = name.trim();
+    return childName.isEmpty ? '반가워요!' : '$childName, 환영해요!';
+  }
 
   /// 프로필 없이 홈에 들어갈 수 없으므로, 여기서의 뒤로가기는 로그아웃입니다.
   static const String signOutConfirm = '로그아웃할까요?\n아이 프로필을 만들어야 시작할 수 있어요.';
