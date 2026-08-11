@@ -68,6 +68,41 @@ void main() {
   });
 
   // 보호자 하위 화면들. 탭 루트가 아니라 하단 내비가 없습니다.
+  testWidgets('마이페이지의 설정을 누르면 /settings로 이동한다', (WidgetTester tester) async {
+    final router = createAppRouter(initialLocation: AppRoutes.myPage);
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    for (int i = 0; i < 6; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 30)),
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    final Finder settingsTile = find.ancestor(
+      of: find.text(MyPageStrings.settings),
+      matching: find.byType(InkWell),
+    );
+    await tester.ensureVisible(settingsTile);
+    await tester.pump();
+    tester.widget<InkWell>(settingsTile).onTap!();
+    for (int i = 0; i < 3; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 30)),
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    expect(router.routeInformationProvider.value.uri.path, AppRoutes.settings);
+    expect(find.text(SettingsStrings.title), findsOneWidget);
+  });
+
+  testWidgets('기존 /mypage/settings 주소는 /settings로 이동한다', (
+    WidgetTester tester,
+  ) async {
+    await pumpAt(tester, '/mypage/settings');
+    expect(find.text(SettingsStrings.title), findsOneWidget);
+  });
+
   final Map<String, String> guardianTitles = <String, String>{
     AppRoutes.report: ReportListStrings.title,
     AppRoutes.reportDetailOf('104'): ReportDetailStrings.title,
@@ -89,6 +124,12 @@ void main() {
     // 소셜 버튼이 이 스텝의 주인공입니다. (이메일 로그인은 접히는 곳 아래)
     expect(find.text(AuthStrings.tagline), findsOneWidget);
     expect(find.textContaining('카카오'), findsOneWidget);
+  });
+
+  testWidgets('/login 로 들어가면 로그인 스텝이 뜬다', (WidgetTester tester) async {
+    await pumpAt(tester, AppRoutes.login);
+    expect(find.text(AuthStrings.socialSignIn), findsOneWidget);
+    expect(find.text(AuthStrings.emailSignIn), findsOneWidget);
   });
 
   testWidgets('/auth?step=child 는 프로필 등록으로 바로 간다', (WidgetTester tester) async {
@@ -120,9 +161,8 @@ void main() {
     });
   });
 
-  testWidgets('설계에 없는 12개 외의 경로는 만들지 않는다', (WidgetTester tester) async {
-    // 로그인/회원가입은 /auth 하나로만 처리합니다.
-    for (final String location in <String>['/login', '/signup']) {
+  testWidgets('회원가입 전용 경로는 만들지 않는다', (WidgetTester tester) async {
+    for (final String location in <String>['/signup']) {
       await pumpAt(tester, location);
       expect(find.text('$location - 없는 경로'), findsOneWidget);
     }

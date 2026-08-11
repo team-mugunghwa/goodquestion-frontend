@@ -55,13 +55,13 @@ class MyPageChildDto {
   });
 
   factory MyPageChildDto.fromJson(Map<String, dynamic> json) => MyPageChildDto(
-    childId: json['childId'] as int? ?? 0,
+    childId: json['childId']?.toString() ?? '',
     name: json['name'] as String? ?? '',
     age: json['age'] as int? ?? 0,
     avatar: json['avatar'] as String?,
   );
 
-  final int childId;
+  final String childId;
   final String name;
   final int age;
   final String? avatar;

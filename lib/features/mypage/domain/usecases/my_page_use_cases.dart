@@ -13,6 +13,31 @@ class GetMyPageSummaryUseCase {
   Future<MyPageSummary> call() => _repository.getSummary();
 }
 
+class CreateMyPageChildUseCase {
+  const CreateMyPageChildUseCase(this._repository);
+
+  final ChildProfileRepository _repository;
+
+  Future<void> call({required String name, required int age}) =>
+      _repository.createChild(name: name, age: age);
+}
+
+class GetMyPageChildrenUseCase {
+  const GetMyPageChildrenUseCase(this._repository);
+
+  final ChildProfileRepository _repository;
+
+  Future<List<MyPageChild>> call() => _repository.getChildren();
+}
+
+class SelectMyPageChildUseCase {
+  const SelectMyPageChildUseCase(this._repository);
+
+  final ChildProfileRepository _repository;
+
+  Future<void> call(String childId) => _repository.selectChild(childId);
+}
+
 /// 리포트 목록.
 class GetReportListUseCase {
   const GetReportListUseCase(this._repository);

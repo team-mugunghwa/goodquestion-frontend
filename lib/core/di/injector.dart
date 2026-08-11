@@ -1,15 +1,22 @@
 import 'package:get_it/get_it.dart';
 
 import '../../features/auth/data/datasources/auth_local_data_source.dart';
-import '../../features/auth/data/repositories/auth_repository_mock.dart';
+import '../../features/auth/data/datasources/auth_remote_data_source.dart';
+import '../../features/auth/data/datasources/auth_token_store.dart';
+import '../../features/auth/data/datasources/oauth_code_provider.dart';
+import '../../features/auth/data/repositories/auth_repository_impl.dart';
 import '../../features/auth/domain/repositories/auth_repository.dart';
 import '../../features/auth/domain/usecases/auth_use_cases.dart';
 import '../../features/home/data/datasources/home_local_data_source.dart';
 import '../../features/home/data/repositories/home_repository_mock.dart';
 import '../../features/home/domain/repositories/home_repository.dart';
 import '../../features/home/domain/usecases/get_home_summary_use_case.dart';
+import '../../features/mypage/data/datasources/child_profile_remote_data_source.dart';
 import '../../features/mypage/data/datasources/my_page_local_data_source.dart';
+import '../../features/mypage/data/datasources/settings_remote_data_source.dart';
+import '../../features/mypage/data/repositories/my_page_repository_impl.dart';
 import '../../features/mypage/data/repositories/my_page_repository_mock.dart';
+import '../../features/mypage/data/repositories/settings_repository_impl.dart';
 import '../../features/mypage/domain/guardian_gate.dart';
 import '../../features/mypage/domain/repositories/my_page_repository.dart';
 import '../../features/mypage/domain/usecases/my_page_use_cases.dart';
@@ -49,7 +56,11 @@ const bool _useMockRepository = true;
 
 Future<void> configureDependencies() async {
   // ---- core ----
-  getIt.registerLazySingleton<DioClient>(DioClient.new);
+  getIt
+    ..registerLazySingleton<AuthTokenStore>(AuthTokenStore.new)
+    ..registerLazySingleton<DioClient>(
+      () => DioClient(tokenProvider: getIt<AuthTokenStore>().read),
+    );
 
   // ---- question ----
   getIt
@@ -70,8 +81,17 @@ Future<void> configureDependencies() async {
   // 합니다. 화면을 나갔다 오면 방금 한 동의가 사라지면 안 됩니다.
   getIt
     ..registerLazySingleton<AuthLocalDataSource>(AuthLocalDataSource.new)
+    ..registerLazySingleton<AuthRemoteDataSource>(
+      () => AuthRemoteDataSource(getIt<DioClient>()),
+    )
+    ..registerLazySingleton<OAuthCodeProvider>(OAuthCodeProvider.new)
     ..registerLazySingleton<AuthRepository>(
-      () => AuthRepositoryMock(getIt<AuthLocalDataSource>()),
+      () => AuthRepositoryImpl(
+        getIt<AuthLocalDataSource>(),
+        getIt<AuthRemoteDataSource>(),
+        getIt<AuthTokenStore>(),
+        getIt<OAuthCodeProvider>(),
+      ),
     )
     ..registerLazySingleton<GetAuthOptionsUseCase>(
       () => GetAuthOptionsUseCase(getIt<AuthRepository>()),
@@ -97,7 +117,10 @@ Future<void> configureDependencies() async {
   getIt
     ..registerLazySingleton<HomeLocalDataSource>(HomeLocalDataSource.new)
     ..registerLazySingleton<HomeRepository>(
-      () => HomeRepositoryMock(getIt<HomeLocalDataSource>()),
+      () => HomeRepositoryMock(
+        getIt<HomeLocalDataSource>(),
+        childProfileRepository: getIt<ChildProfileRepository>(),
+      ),
     )
     ..registerLazySingleton<GetHomeSummaryUseCase>(
       () => GetHomeSummaryUseCase(getIt<HomeRepository>()),
@@ -144,13 +167,38 @@ Future<void> configureDependencies() async {
   final MyPageRepositoryMock myPageMock = MyPageRepositoryMock(
     const MyPageLocalDataSource(),
   );
+  final ChildProfileRemoteDataSource childProfileRemote =
+      ChildProfileRemoteDataSource(getIt<DioClient>());
+  final MyPageRepositoryImpl myPageRepository = MyPageRepositoryImpl(
+    childProfileRemote,
+  );
+  final SettingsRemoteDataSource settingsRemote = SettingsRemoteDataSource(
+    getIt<DioClient>(),
+  );
+  final SettingsRepositoryImpl settingsRepository = SettingsRepositoryImpl(
+    const MyPageLocalDataSource(),
+    settingsRemote,
+    myPageRepository,
+  );
   getIt
     ..registerLazySingleton<GuardianGate>(GuardianGate.new)
-    ..registerSingleton<MyPageRepository>(myPageMock)
+    ..registerSingleton<ChildProfileRemoteDataSource>(childProfileRemote)
+    ..registerSingleton<MyPageRepository>(myPageRepository)
+    ..registerSingleton<ChildProfileRepository>(myPageRepository)
     ..registerSingleton<ReportRepository>(myPageMock)
-    ..registerSingleton<SettingsRepository>(myPageMock)
+    ..registerSingleton<SettingsRemoteDataSource>(settingsRemote)
+    ..registerSingleton<SettingsRepository>(settingsRepository)
     ..registerLazySingleton<GetMyPageSummaryUseCase>(
       () => GetMyPageSummaryUseCase(getIt<MyPageRepository>()),
+    )
+    ..registerLazySingleton<CreateMyPageChildUseCase>(
+      () => CreateMyPageChildUseCase(getIt<ChildProfileRepository>()),
+    )
+    ..registerLazySingleton<GetMyPageChildrenUseCase>(
+      () => GetMyPageChildrenUseCase(getIt<ChildProfileRepository>()),
+    )
+    ..registerLazySingleton<SelectMyPageChildUseCase>(
+      () => SelectMyPageChildUseCase(getIt<ChildProfileRepository>()),
     )
     ..registerLazySingleton<GetReportListUseCase>(
       () => GetReportListUseCase(getIt<ReportRepository>()),

@@ -50,7 +50,10 @@ class AuthRepositoryMock implements AuthRepository {
   }
 
   @override
-  Future<AuthOutcome> signInWithSocial(String provider) async {
+  Future<AuthOutcome> signInWithSocial(
+    String provider, {
+    bool rememberMe = false,
+  }) async {
     await Future<void>.delayed(latency);
     // 목업에서는 소셜을 언제나 신규 가입으로 봅니다 — 동의부터 프로필까지
     // 전체 흐름을 한 번에 시연할 수 있는 경로가 하나는 있어야 합니다.
@@ -62,6 +65,7 @@ class AuthRepositoryMock implements AuthRepository {
   Future<AuthOutcome> signInWithEmail({
     required String email,
     required String password,
+    bool rememberMe = false,
   }) async {
     await Future<void>.delayed(latency);
     final AuthOptionsDto dto = await _localDataSource.fetchOptions();
@@ -77,8 +81,10 @@ class AuthRepositoryMock implements AuthRepository {
 
   @override
   Future<AuthOutcome> signUpWithEmail({
+    required String name,
     required String email,
     required String password,
+    bool rememberMe = false,
   }) async {
     await Future<void>.delayed(latency);
     _hasChild = false;
