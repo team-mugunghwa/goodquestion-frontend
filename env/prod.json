@@ -1,0 +1,4 @@
+{
+  "API_BASE_URL": "https://goodquestion-backend-production.up.railway.app/api",
+  "MOCK_SOCIAL_LOGIN": false
+}
