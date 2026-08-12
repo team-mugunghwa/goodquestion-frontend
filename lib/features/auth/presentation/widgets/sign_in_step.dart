@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_strings.dart';
+import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/entities/auth_options.dart';
 import '../viewmodels/auth_view_model.dart';
@@ -273,33 +275,17 @@ class _EmailPanel extends StatelessWidget {
             ),
             const Text('·'),
             TextButton(
-              onPressed: () => _showAccountHelp(context),
+              onPressed: busy ? null : () => context.go(AppRoutes.findId),
               child: const Text(AuthStrings.findId),
             ),
             const Text('·'),
             TextButton(
-              onPressed: () => _showAccountHelp(context),
+              onPressed: busy ? null : () => context.go(AppRoutes.findPassword),
               child: const Text(AuthStrings.findPassword),
             ),
           ],
         ),
       ],
-    );
-  }
-
-  void _showAccountHelp(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        title: const Text(AuthStrings.accountHelpTitle),
-        content: const Text(AuthStrings.accountHelpBody),
-        actions: <Widget>[
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text(AuthStrings.close),
-          ),
-        ],
-      ),
     );
   }
 }
