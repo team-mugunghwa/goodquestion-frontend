@@ -23,7 +23,7 @@ class StoryRepositoryMock implements StoryRepository {
       _guard(() async => (await _localDataSource.fetchCatalog()).toEntity());
 
   @override
-  Future<StoryDetail?> getStoryDetail(int storyId) => _guard(() async {
+  Future<StoryDetail?> getStoryDetail(String storyId) => _guard(() async {
     final StoryDetailDto? dto = await _localDataSource.fetchStoryDetail(
       storyId,
     );
@@ -34,9 +34,9 @@ class StoryRepositoryMock implements StoryRepository {
   /// 돌려줍니다. 매번 다른 값을 주면 새로고침마다 세션이 늘어나 보여서,
   /// 재현 가능하게 고정했습니다. 서버가 붙으면 `POST /sessions` 응답으로 바뀝니다.
   @override
-  Future<int> startSession(int storyId) async {
+  Future<String> startSession(String storyId) async {
     await Future<void>.delayed(latency);
-    return 9000 + storyId;
+    return 'mock-session-$storyId';
   }
 
   Future<T> _guard<T>(Future<T> Function() action) async {

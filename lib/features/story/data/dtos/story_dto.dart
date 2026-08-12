@@ -83,8 +83,10 @@ class StorySummaryDto {
   final int estimatedMinutes;
   final List<String> topicIds;
 
+  /// 더미는 숫자 id 를 씁니다. 엔티티는 서버 UUID 에 맞춰 String 이라
+  /// 여기서만 변환합니다 — 더미 JSON 은 손대지 않습니다.
   StorySummary toEntity() => StorySummary(
-    storyId: storyId,
+    storyId: storyId.toString(),
     title: title,
     image: image,
     estimatedMinutes: estimatedMinutes,
@@ -134,8 +136,9 @@ class StoryDetailDto {
   final String? introAudio;
   final StoryRoleDto role;
 
+  /// [StorySummaryDto.toEntity] 와 같은 이유로 여기서만 String 변환합니다.
   StoryDetail toEntity() => StoryDetail(
-    storyId: storyId,
+    storyId: storyId.toString(),
     title: title,
     coverImage: coverImage,
     estimatedMinutes: estimatedMinutes,

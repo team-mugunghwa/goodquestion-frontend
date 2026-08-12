@@ -41,9 +41,27 @@ class ContinueCard extends StatelessWidget {
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          // 위는 순수 흰색, 아래로 갈수록 아주 옅은 브랜드 파랑 —
+          // 로고의 부풀어 오른 3D 말풍선처럼 카드에 미세한 입체감을 줍니다.
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: <Color>[
+              AppColors.surface,
+              Color.alphaBlend(AppColors.brandBlueSurface, AppColors.surface),
+            ],
+          ),
           borderRadius: BorderRadius.circular(AppRadius.xl),
-          boxShadow: AppShadows.lift,
+          boxShadow: <BoxShadow>[
+            // 브랜드 파랑을 넓게 깐 앰비언트. 기존 lift 그림자 위에 색을 더해
+            // 카드가 낮 배경에서 또렷하게 떠오른 온도감을 냅니다.
+            BoxShadow(
+              color: AppColors.brandBlue.withValues(alpha: 0.28),
+              blurRadius: 48,
+              offset: const Offset(0, 22),
+            ),
+            ...AppShadows.lift,
+          ],
         ),
         // 폭이 넓으면 카드를 늘리는 게 아니라 **가로로 눕힙니다.**
         // 태블릿에서 16:9 이미지를 전폭으로 깔면 이미지만으로 화면이 찹니다.
@@ -51,7 +69,10 @@ class ContinueCard extends StatelessWidget {
             ? Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: <Widget>[
-                  Expanded(flex: 5, child: _Thumbnail(session: session)),
+                  Expanded(
+                    flex: 5,
+                    child: _Thumbnail(session: session, metrics: metrics),
+                  ),
                   Expanded(
                     flex: 6,
                     child: Padding(
@@ -68,7 +89,7 @@ class ContinueCard extends StatelessWidget {
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  _Thumbnail(session: session),
+                  _Thumbnail(session: session, metrics: metrics),
                   Padding(
                     padding: const EdgeInsets.all(AppSpacing.lg),
                     child: _Body(
@@ -84,14 +105,74 @@ class ContinueCard extends StatelessWidget {
   }
 }
 
+/// 이어하기 카드의 대표 이미지 자리.
+///
+/// 표지는 주제별 코드 표지([StoryCover])가 [StoryThumbnail] 안에서 그려집니다.
+/// 여기서는 그 위에 **상태 뱃지**(레퍼런스의 "학습중" 자리)만 얹습니다.
+/// 진행 중 세션에는 주제 정보가 없어 브랜드 기본 표지로 뜹니다.
 class _Thumbnail extends StatelessWidget {
-  const _Thumbnail({required this.session});
+  const _Thumbnail({required this.session, required this.metrics});
 
   final InProgressSession session;
+  final ScreenMetrics metrics;
 
   @override
-  Widget build(BuildContext context) =>
-      StoryThumbnail(image: session.storyImage, fallbackIcon: AppIcons.stories);
+  Widget build(BuildContext context) {
+    return Stack(
+      children: <Widget>[
+        StoryThumbnail(
+          image: session.storyImage,
+          fallbackIcon: AppIcons.stories,
+          title: session.storyTitle,
+        ),
+        // 상태 뱃지 — 행동(버튼)이 아니라 표식이라 흰 알약에 브랜드 파랑으로.
+        Positioned(
+          top: AppSpacing.md,
+          left: AppSpacing.md,
+          child: _StatusBadge(metrics: metrics),
+        ),
+      ],
+    );
+  }
+}
+
+/// "이어보던 이야기" 상태 표식. 흰 알약 + 브랜드 파랑.
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.metrics});
+
+  final ScreenMetrics metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        boxShadow: AppShadows.soft,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          const Icon(
+            AppIcons.play,
+            size: AppSizes.iconInline,
+            color: AppColors.brandBlueDeep,
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Text(
+            HomeStrings.resumeBadge,
+            style: metrics
+                .text(AppTypography.kidLabel)
+                .copyWith(color: AppColors.brandBlueDeep),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _Body extends StatelessWidget {

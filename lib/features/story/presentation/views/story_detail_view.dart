@@ -45,8 +45,8 @@ import '../widgets/role_card.dart';
 class StoryDetailPage extends StatelessWidget {
   const StoryDetailPage({super.key, required this.storyId});
 
-  /// 경로 파라미터는 문자열이라 숫자가 아닐 수 있습니다.
-  /// `/stories/abc` 로 들어오면 0 이 되고, 화면은 "찾을 수 없어"로 갑니다.
+  /// 서버 storyId 는 UUID 라 그대로 String 으로 씁니다.
+  /// `/stories/abc` 처럼 없는 id 로 들어오면 화면은 "찾을 수 없어"로 갑니다.
   final String storyId;
 
   @override
@@ -55,7 +55,7 @@ class StoryDetailPage extends StatelessWidget {
       create: (_) => StoryDetailViewModel(
         getIt<GetStoryDetailUseCase>(),
         getIt<StartStorySessionUseCase>(),
-        storyId: int.tryParse(storyId) ?? 0,
+        storyId: storyId,
       )..load(),
       child: const StoryDetailView(),
     );
@@ -130,11 +130,11 @@ class StoryDetailView extends StatelessWidget {
   }
 
   Future<void> _start(BuildContext context, StoryDetailViewModel vm) async {
-    final int? sessionId = await vm.start();
+    final String? sessionId = await vm.start();
     if (sessionId == null || !context.mounted) return;
     // go 입니다 — 세션이 시작된 뒤 뒤로가기로 상세에 돌아오면
     // "시작하기"를 또 누를 수 있게 됩니다.
-    context.go(AppRoutes.playOf('$sessionId'));
+    context.go(AppRoutes.playOf(sessionId));
   }
 }
 
@@ -208,6 +208,7 @@ class _Content extends StatelessWidget {
                 image: story.coverImage,
                 fallbackIcon: AppIcons.stories,
                 aspectRatio: metrics.isWide ? null : StoryThumbnail.wide,
+                title: story.title,
               ),
             ),
           ),

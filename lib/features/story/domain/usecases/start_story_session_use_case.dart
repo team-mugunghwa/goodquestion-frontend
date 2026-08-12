@@ -10,5 +10,5 @@ class StartStorySessionUseCase {
 
   final StoryRepository _repository;
 
-  Future<int> call(int storyId) => _repository.startSession(storyId);
+  Future<String> call(String storyId) => _repository.startSession(storyId);
 }

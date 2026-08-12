@@ -81,8 +81,10 @@ class InProgressSessionDto {
   final int lastCompletedScene;
   final int totalScenes;
 
+  /// 더미는 여전히 숫자 id 를 씁니다. 엔티티는 서버 UUID 에 맞춰 String 이라
+  /// 여기서만 변환합니다 — 더미 JSON 은 손대지 않습니다.
   InProgressSession toEntity() => InProgressSession(
-    sessionId: sessionId,
+    sessionId: sessionId.toString(),
     storyTitle: storyTitle,
     storyImage: storyImage,
     lastCompletedScene: lastCompletedScene,
@@ -109,8 +111,9 @@ class RecommendedStoryDto {
   final int estimatedMinutes;
   final String topicTag;
 
+  /// [InProgressSessionDto.toEntity] 와 같은 이유로 여기서만 String 변환합니다.
   RecommendedStory toEntity() => RecommendedStory(
-    storyId: storyId,
+    storyId: storyId.toString(),
     title: title,
     image: image,
     estimatedMinutes: estimatedMinutes,

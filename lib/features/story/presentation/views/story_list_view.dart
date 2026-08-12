@@ -16,6 +16,7 @@ import '../../../../core/widgets/app_state_views.dart';
 import '../../../../core/widgets/screen_metrics.dart';
 import '../../../../core/widgets/skeleton_box.dart';
 import '../../../../core/widgets/story_card.dart';
+import '../../../../core/widgets/story_thumbnail.dart';
 import '../../domain/entities/story_summary.dart';
 import '../../domain/entities/story_topic.dart';
 import '../../domain/usecases/get_story_catalog_use_case.dart';
@@ -211,16 +212,17 @@ class _Grid extends StatelessWidget {
   }
 
   Widget _grid(BuildContext context, double width) {
+    final int columns = _columnsFor(width);
     return GridView.builder(
       padding: EdgeInsets.only(bottom: metrics.screenPadding),
       itemCount: stories.length,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: metrics.gridColumns,
+        crossAxisCount: columns,
         crossAxisSpacing: AppSpacing.lg,
         mainAxisSpacing: AppSpacing.lg,
         // 비율을 눈대중으로 정하면 카드 아래에 흰 여백이 남습니다.
-        // 이미지(16:9) + 글자 블록을 실제로 더해서 높이를 잡습니다.
-        mainAxisExtent: _cellHeightOf(context, metrics, width),
+        // 세로 표지(2:3) + 글자 블록을 실제로 더해서 높이를 잡습니다.
+        mainAxisExtent: _cellHeightOf(context, metrics, width, columns),
       ),
       itemBuilder: (BuildContext context, int index) {
         final StorySummary story = stories[index];
@@ -230,12 +232,13 @@ class _Grid extends StatelessWidget {
           estimatedMinutes: story.estimatedMinutes,
           topicLabel: _topicLabel(story),
           metrics: metrics,
+          // 목록은 그림책 세로 표지. 홈 카드(16:9)와 의도적으로 다릅니다.
+          coverAspectRatio: StoryThumbnail.portrait,
           // 목록 카드의 제목은 큰 글씨 한 줄. (PRD F-03)
           titleMaxLines: 1,
           // go 가 아니라 push — 목록을 스택에 남겨야 상세에서 돌아왔을 때
           // 고른 필터가 그대로입니다.
-          onTap: () =>
-              context.push(AppRoutes.storyDetailOf('${story.storyId}')),
+          onTap: () => context.push(AppRoutes.storyDetailOf(story.storyId)),
         );
       },
     );
@@ -264,23 +267,38 @@ class _Skeleton extends StatelessWidget {
     return SingleChildScrollView(
       padding: EdgeInsets.symmetric(horizontal: metrics.screenPadding),
       child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) =>
-            SkeletonCardList(
-              count: metrics.isWide ? 4 : 3,
-              columns: metrics.gridColumns,
-              // 실제 카드와 같은 높이여야 데이터가 올 때 안 덜컹입니다.
-              mainAxisExtent: _cellHeightOf(
-                context,
-                metrics,
-                constraints.maxWidth,
-              ),
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final int columns = _columnsFor(constraints.maxWidth);
+          return SkeletonCardList(
+            // 한 줄을 다 채워야 목록처럼 보입니다.
+            count: columns * 2,
+            columns: columns,
+            // 실제 카드와 같은 높이여야 데이터가 올 때 안 덜컹입니다.
+            mainAxisExtent: _cellHeightOf(
+              context,
+              metrics,
+              constraints.maxWidth,
+              columns,
             ),
+          );
+        },
       ),
     );
   }
 }
 
-/// 그리드 셀 하나의 높이 = 16:9 이미지 + 글자 블록.
+/// 세로 표지 목록의 열 수.
+///
+/// 그림책 표지는 세로(2:3)라 한 장이 좁습니다 — 태블릿 가로에서는 한 줄에
+/// 여러 장을 꽂아 책장처럼 보입니다. 폭에 목표 표지 폭(~200dp)을 나눠 열을
+/// 정하되, 폰(컴팩트)에서도 최소 2열이라 표지가 너무 커지지 않습니다.
+int _columnsFor(double width) {
+  const double targetCoverWidth = 200;
+  final int byWidth = (width / targetCoverWidth).floor();
+  return byWidth.clamp(2, 5);
+}
+
+/// 그리드 셀 하나의 높이 = 2:3 세로 표지 + 글자 블록.
 ///
 /// `childAspectRatio` 를 눈대중으로 정하면 카드 아래에 흰 여백이 남거나
 /// 글자가 잘립니다. 실제로 더해서 잡습니다. 기기의 글자 확대 설정까지
@@ -291,10 +309,11 @@ double _cellHeightOf(
   BuildContext context,
   ScreenMetrics metrics,
   double width,
+  int columns,
 ) {
-  final int columns = metrics.gridColumns;
   final double cellWidth = (width - AppSpacing.lg * (columns - 1)) / columns;
-  final double imageHeight = cellWidth * 9 / 16;
+  // 세로 표지(2:3): 너비의 1.5배가 표지 높이.
+  final double imageHeight = cellWidth * 3 / 2;
   final double textHeight =
       AppSpacing.md * 2 +
       metrics.lineHeight(context, AppTypography.kidTitle) +
