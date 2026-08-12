@@ -1,5 +1,6 @@
 import 'package:get_it/get_it.dart';
 
+import '../../features/auth/data/datasources/account_recovery_remote_data_source.dart';
 import '../../features/auth/data/datasources/auth_local_data_source.dart';
 import '../../features/auth/data/datasources/auth_remote_data_source.dart';
 import '../../features/auth/data/datasources/auth_token_store.dart';
@@ -80,6 +81,9 @@ Future<void> configureDependencies() async {
   // 동의 기록과 "프로필 있음" 상태를 메모리에 들고 있어서 싱글턴이어야
   // 합니다. 화면을 나갔다 오면 방금 한 동의가 사라지면 안 됩니다.
   getIt
+    ..registerLazySingleton<AccountRecoveryRemoteDataSource>(
+      () => AccountRecoveryRemoteDataSource(getIt<DioClient>()),
+    )
     ..registerLazySingleton<AuthLocalDataSource>(AuthLocalDataSource.new)
     ..registerLazySingleton<AuthRemoteDataSource>(
       () => AuthRemoteDataSource(getIt<DioClient>()),
@@ -120,6 +124,7 @@ Future<void> configureDependencies() async {
       () => HomeRepositoryMock(
         getIt<HomeLocalDataSource>(),
         childProfileRepository: getIt<ChildProfileRepository>(),
+        tokenProvider: getIt<AuthTokenStore>().read,
       ),
     )
     ..registerLazySingleton<GetHomeSummaryUseCase>(

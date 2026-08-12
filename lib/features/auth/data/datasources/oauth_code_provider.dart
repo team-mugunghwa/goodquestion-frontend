@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:math';
+
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 
 import '../../../../core/config/app_config.dart';
@@ -23,12 +26,14 @@ class OAuthCodeProvider {
     }
 
     final Uri redirect = Uri.parse(AppConfig.oauthRedirectUri);
+    final String state = _newState();
     final Uri authorizationUri = switch (provider) {
       'kakao' =>
         Uri.https('kauth.kakao.com', '/oauth/authorize', <String, String>{
           'response_type': 'code',
           'client_id': clientId,
           'redirect_uri': redirect.toString(),
+          'state': state,
         }),
       'google' =>
         Uri.https('accounts.google.com', '/o/oauth2/v2/auth', <String, String>{
@@ -37,6 +42,7 @@ class OAuthCodeProvider {
           'redirect_uri': redirect.toString(),
           'scope': 'openid email profile',
           'prompt': 'select_account',
+          'state': state,
         }),
       _ => throw const UnknownFailure('지원하지 않는 로그인 방식입니다.'),
     };
@@ -47,6 +53,17 @@ class OAuthCodeProvider {
         callbackUrlScheme: redirect.scheme,
       );
       final Uri result = Uri.parse(callback);
+      if (result.queryParameters['state'] != state) {
+        throw const UnknownFailure('로그인 요청을 확인하지 못했습니다. 다시 시도해 주세요.');
+      }
+      final String? providerError = result.queryParameters['error'];
+      if (providerError != null) {
+        throw UnknownFailure(
+          providerError == 'access_denied'
+              ? '소셜 로그인이 취소되었습니다.'
+              : '소셜 로그인을 완료하지 못했습니다. ($providerError)',
+        );
+      }
       final String? code = result.queryParameters['code'];
       if (code == null || code.isEmpty) {
         throw const UnknownFailure('로그인 인증 코드를 받지 못했습니다.');
@@ -57,5 +74,11 @@ class OAuthCodeProvider {
     } on Object {
       throw const UnknownFailure('소셜 로그인을 완료하지 못했습니다.');
     }
+  }
+
+  String _newState() {
+    final Random random = Random.secure();
+    final List<int> bytes = List<int>.generate(32, (_) => random.nextInt(256));
+    return base64UrlEncode(bytes).replaceAll('=', '');
   }
 }
