@@ -50,6 +50,15 @@ abstract final class AppRoutes {
   /// 로그인 화면의 사용자 친화적 주소. 기존 `/auth`도 호환을 위해 유지합니다.
   static const String login = '/login';
 
+  /// 보호자 가입 이메일 찾기.
+  static const String findId = '/auth/find-id';
+
+  /// 보호자 비밀번호 재설정.
+  static const String findPassword = '/auth/find-password';
+
+  /// 이메일 링크에서 새 비밀번호를 입력하는 화면.
+  static const String resetPassword = '/auth/reset-password';
+
   /// 로그인은 됐는데 아이 프로필이 없는 계정이 갈 곳.
   ///
   /// 스텝을 별도 라우트로 쪼개지 않으려고 쿼리 파라미터로 둡니다.

@@ -16,11 +16,13 @@ class HomeRepositoryMock implements HomeRepository {
   const HomeRepositoryMock(
     this._localDataSource, {
     this.childProfileRepository,
+    this.tokenProvider,
     this.latency = const Duration(milliseconds: 500),
   });
 
   final HomeLocalDataSource _localDataSource;
   final ChildProfileRepository? childProfileRepository;
+  final Future<String?> Function()? tokenProvider;
 
   /// 스켈레톤이 실제로 보이도록 일부러 지연을 줍니다.
   /// 지연이 없으면 로딩 상태를 아무도 확인하지 못한 채 머지됩니다.
@@ -35,13 +37,17 @@ class HomeRepositoryMock implements HomeRepository {
       final ChildProfileRepository? repository = childProfileRepository;
       if (repository == null) return summary;
 
+      // The home feed itself is available before sign-in. Child profiles are a
+      // protected resource, so do not make a request that is guaranteed to
+      // return 401 when the visitor has no access token yet.
+      final Future<String?> Function()? readToken = tokenProvider;
+      if (readToken != null && await readToken() == null) {
+        return _withoutChild(summary);
+      }
+
       final List<MyPageChild> children = await repository.getChildren();
       if (children.isEmpty) {
-        return HomeSummary(
-          recommendedStories: summary.recommendedStories,
-          planet: summary.planet,
-          inProgressSession: summary.inProgressSession,
-        );
+        return _withoutChild(summary);
       }
 
       final String? selectedId = repository.selectedChildId;
@@ -58,6 +64,12 @@ class HomeRepositoryMock implements HomeRepository {
         planet: summary.planet,
         inProgressSession: summary.inProgressSession,
       );
+    } on UnauthorizedFailure {
+      // A persisted token may have expired between app launches. Keep the
+      // public home usable and let the next protected action ask for sign-in.
+      final HomeSummary summary = (await _localDataSource.fetchHomeSummary())
+          .toEntity();
+      return _withoutChild(summary);
     } on AppException catch (e) {
       throw Failure.fromException(e);
     } on Object catch (e) {
@@ -65,4 +77,10 @@ class HomeRepositoryMock implements HomeRepository {
       throw Failure.fromException(ParseException('$e'));
     }
   }
+
+  HomeSummary _withoutChild(HomeSummary summary) => HomeSummary(
+    recommendedStories: summary.recommendedStories,
+    planet: summary.planet,
+    inProgressSession: summary.inProgressSession,
+  );
 }

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:goodquestion/core/error/failure.dart';
 import 'package:goodquestion/features/home/data/datasources/home_local_data_source.dart';
 import 'package:goodquestion/features/home/data/repositories/home_repository_mock.dart';
 import 'package:goodquestion/features/home/domain/entities/home_summary.dart';
@@ -23,6 +24,40 @@ class _ChildProfiles implements ChildProfileRepository {
   Future<void> selectChild(String childId) async {
     selectedChildId = childId;
   }
+}
+
+class _UnexpectedChildProfiles implements ChildProfileRepository {
+  @override
+  String? get selectedChildId => null;
+
+  @override
+  Future<void> createChild({required String name, required int age}) async =>
+      throw StateError('Child API must not be called without a token.');
+
+  @override
+  Future<List<MyPageChild>> getChildren() async =>
+      throw StateError('Child API must not be called without a token.');
+
+  @override
+  Future<void> selectChild(String childId) async =>
+      throw StateError('Child API must not be called without a token.');
+}
+
+class _UnauthorizedChildProfiles implements ChildProfileRepository {
+  @override
+  String? get selectedChildId => null;
+
+  @override
+  Future<void> createChild({required String name, required int age}) async =>
+      throw const UnauthorizedFailure();
+
+  @override
+  Future<List<MyPageChild>> getChildren() async =>
+      throw const UnauthorizedFailure();
+
+  @override
+  Future<void> selectChild(String childId) async =>
+      throw const UnauthorizedFailure();
 }
 
 /// `assets/dummy/home.json` 이 화면이 기대하는 모양인지 검사합니다.
@@ -70,5 +105,33 @@ void main() {
     final HomeSummary summary = await linkedRepository.getHomeSummary();
 
     expect(summary.child?.name, '바다');
+  });
+
+  test('로그인 토큰이 없으면 보호된 아이 API를 호출하지 않는다', () async {
+    final HomeRepositoryMock loggedOutRepository = HomeRepositoryMock(
+      const HomeLocalDataSource(),
+      childProfileRepository: _UnexpectedChildProfiles(),
+      tokenProvider: () async => null,
+      latency: Duration.zero,
+    );
+
+    final HomeSummary summary = await loggedOutRepository.getHomeSummary();
+
+    expect(summary.child, isNull);
+    expect(summary.recommendedStories, isNotEmpty);
+  });
+
+  test('저장된 토큰이 만료됐어도 홈 기본 콘텐츠를 표시한다', () async {
+    final HomeRepositoryMock expiredSessionRepository = HomeRepositoryMock(
+      const HomeLocalDataSource(),
+      childProfileRepository: _UnauthorizedChildProfiles(),
+      tokenProvider: () async => 'expired-token',
+      latency: Duration.zero,
+    );
+
+    final HomeSummary summary = await expiredSessionRepository.getHomeSummary();
+
+    expect(summary.child, isNull);
+    expect(summary.recommendedStories, isNotEmpty);
   });
 }
