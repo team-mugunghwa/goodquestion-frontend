@@ -13,7 +13,7 @@ class StoryDetail {
     this.introAudio,
   });
 
-  final int storyId;
+  final String storyId;
   final String title;
   final String? coverImage;
   final int estimatedMinutes;

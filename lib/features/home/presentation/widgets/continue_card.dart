@@ -123,6 +123,7 @@ class _Thumbnail extends StatelessWidget {
         StoryThumbnail(
           image: session.storyImage,
           fallbackIcon: AppIcons.stories,
+          title: session.storyTitle,
         ),
         // 상태 뱃지 — 행동(버튼)이 아니라 표식이라 흰 알약에 브랜드 파랑으로.
         Positioned(

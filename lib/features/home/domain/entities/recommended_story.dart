@@ -11,7 +11,7 @@ class RecommendedStory {
     this.image,
   });
 
-  final int storyId;
+  final String storyId;
   final String title;
 
   /// 대표 이미지. `null` 이면 화면이 브랜드 그라디언트로 대체합니다.

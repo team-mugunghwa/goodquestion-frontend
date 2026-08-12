@@ -192,7 +192,7 @@ class _HomeContent extends StatelessWidget {
               metrics: metrics,
               onResume: () => _guarded(
                 context,
-                () => context.go(AppRoutes.playOf('${session.sessionId}')),
+                () => context.go(AppRoutes.playOf(session.sessionId)),
               ),
             ),
           SizedBox(height: metrics.sectionGap),
@@ -202,7 +202,7 @@ class _HomeContent extends StatelessWidget {
             // push 입니다 — 상세의 뒤로가기가 홈으로 돌아와야 합니다.
             onStoryTap: (RecommendedStory story) => _guarded(
               context,
-              () => context.push(AppRoutes.storyDetailOf('${story.storyId}')),
+              () => context.push(AppRoutes.storyDetailOf(story.storyId)),
             ),
             onMoreTap: () => context.go(AppRoutes.stories),
           ),

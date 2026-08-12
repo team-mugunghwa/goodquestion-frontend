@@ -68,13 +68,13 @@ void main() {
 
   test('없는 이야기는 예외가 아니라 null 이다', () async {
     // 잘못된 주소와 로드 실패는 화면이 다르게 그려야 합니다.
-    expect(await repository.getStoryDetail(999999), isNull);
+    expect(await repository.getStoryDetail('999999'), isNull);
   });
 
   test('시작하기는 같은 이야기에 같은 sessionId 를 준다', () async {
     expect(
-      await repository.startSession(11),
-      await repository.startSession(11),
+      await repository.startSession('11'),
+      await repository.startSession('11'),
     );
   });
 }
