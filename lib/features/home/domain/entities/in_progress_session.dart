@@ -11,7 +11,7 @@ class InProgressSession {
     this.storyImage,
   });
 
-  final int sessionId;
+  final String sessionId;
   final String storyTitle;
 
   /// 이야기 대표 이미지. `null` 이면 화면이 브랜드 그라디언트로 대체합니다.

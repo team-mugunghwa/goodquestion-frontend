@@ -31,14 +31,14 @@ class _StubRepository implements HomeRepository {
 const HomeSummary _withSession = HomeSummary(
   child: ChildProfile(name: '하늘이'),
   inProgressSession: InProgressSession(
-    sessionId: 2481,
+    sessionId: '2481',
     storyTitle: '방귀 뀌는 며느리',
     lastCompletedScene: 3,
     totalScenes: 5,
   ),
   recommendedStories: <RecommendedStory>[
     RecommendedStory(
-      storyId: 21,
+      storyId: '21',
       title: '해와 달이 된 오누이',
       estimatedMinutes: 15,
       topicTag: '용기',
@@ -98,7 +98,11 @@ void main() {
     await pumpHome(tester, _StubRepository(summary: _withSession));
 
     expect(find.text('하늘이'), findsOneWidget);
-    expect(find.text(HomeStrings.recommendedTitle), findsOneWidget);
+    // 섹션 제목은 키워드만 색을 입히려고 RichText 로 그립니다.
+    expect(
+      find.text(HomeStrings.recommendedTitle, findRichText: true),
+      findsOneWidget,
+    );
     expect(find.text('해와 달이 된 오누이'), findsOneWidget);
     expect(find.text(HomeStrings.planetTitle), findsOneWidget);
     expect(find.byType(AppBottomNav), findsOneWidget);

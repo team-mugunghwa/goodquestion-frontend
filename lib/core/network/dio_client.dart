@@ -13,7 +13,11 @@ import '../error/exceptions.dart';
 class DioClient {
   /// [dio] 는 테스트에서 가짜 인스턴스를 주입하기 위한 것입니다.
   /// 실제 코드에서는 넘기지 마세요.
-  DioClient({Dio? dio, TokenProvider? tokenProvider})
+  ///
+  /// [onUnauthorized] 는 401 을 받았을 때 호출됩니다. **로그인 화면으로
+  /// 보내는 것은 이 클라이언트의 책임이 아닙니다** — 라우터를 몰라야 하는
+  /// 계층이라, 호출부(`injector.dart`)가 콜백으로 주입합니다.
+  DioClient({Dio? dio, TokenProvider? tokenProvider, this.onUnauthorized})
     : _dio = dio ?? Dio(),
       // 이름 있는 매개변수는 밑줄로 시작할 수 없어 초기화 형식 매개변수를 쓸 수 없습니다.
       // ignore: prefer_initializing_formals
@@ -44,6 +48,9 @@ class DioClient {
   final Dio _dio;
   final TokenProvider? _tokenProvider;
 
+  /// 401 을 받았을 때(로그인 요청 자체는 제외) 호출되는 훅.
+  final void Function()? onUnauthorized;
+
   Dio get raw => _dio;
 
   InterceptorsWrapper _authInterceptor() => InterceptorsWrapper(
@@ -65,6 +72,7 @@ class DioClient {
     Map<String, dynamic>? queryParameters,
     required T Function(Object? data) parse,
   }) => _request(
+    path,
     () => _dio.get<dynamic>(path, queryParameters: queryParameters),
     parse,
   );
@@ -73,18 +81,19 @@ class DioClient {
     String path, {
     Object? body,
     required T Function(Object? data) parse,
-  }) => _request(() => _dio.post<dynamic>(path, data: body), parse);
+  }) => _request(path, () => _dio.post<dynamic>(path, data: body), parse);
 
   Future<T> patch<T>(
     String path, {
     Object? body,
     required T Function(Object? data) parse,
-  }) => _request(() => _dio.patch<dynamic>(path, data: body), parse);
+  }) => _request(path, () => _dio.patch<dynamic>(path, data: body), parse);
 
   Future<void> delete(String path) =>
-      _request<void>(() => _dio.delete<dynamic>(path), (_) {});
+      _request<void>(path, () => _dio.delete<dynamic>(path), (_) {});
 
   Future<T> _request<T>(
+    String path,
     Future<Response<dynamic>> Function() send,
     T Function(Object? data) parse,
   ) async {
@@ -94,6 +103,10 @@ class DioClient {
       final body = response.data;
 
       if (status == 401) {
+        // 로그인 자체가 401 이면 "로그인 실패" 이지 "로그아웃되었다"가
+        // 아닙니다. baseUrl 에 이미 /api 가 있어 실제 path 는 /auth/login 처럼
+        // 옵니다 — /api/auth 가 아니라 /auth 로 판정합니다.
+        if (!path.startsWith('/auth')) onUnauthorized?.call();
         final map = body is Map<String, dynamic> ? body : null;
         final error = map?['error'];
         final String? message = error is Map<String, dynamic>
