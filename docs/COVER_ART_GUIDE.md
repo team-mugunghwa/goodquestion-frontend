@@ -28,7 +28,7 @@
 | 비율 | **세로 2:3** (그림책 표지) |
 | 권장 크기 | **1024 × 1536** 이상 (같은 2:3면 더 커도 OK, 예: 1365×2048) |
 | 글자 | **넣지 않음** (제목·칩은 앱이 얹음) |
-| 색 | 차가운 파스텔만 (아래 팔레트), 노랑·빨강·네온 금지 |
+| 색 | **이야기에 맞게 자유** (일관성은 색이 아니라 그림체로) |
 
 > ⚠️ 파일명이 **한 글자라도 다르면** 표지가 안 뜨고 임시 표지가 나옵니다. 아래 표 그대로 저장하세요.
 > ⚠️ 워크트리에서 작업 중이면 실제 저장 경로는
@@ -52,26 +52,23 @@
 
 ---
 
-## 2. STYLE BASE (모든 표지에 그대로 복붙 — 절대 수정 금지)
+## 2. STYLE BASE (모든 표지에 그대로 복붙 — SUBJECT만 교체)
+
+> 일관성은 **색이 아니라 그림체(스타일·기법)** 로 잡습니다. 색은 이야기마다 자유롭게.
+> 여기 고정하는 건 ① 스토리북 그림체 ② 앱에 넣기 위한 기술 제약(세로 2:3·주인공 가운데·글자 없음)뿐입니다.
 
 ```
-A warm, cozy children's picture-book cover illustration for ages 7-9, with a
-gentle Korean folk-tale flavor. Hand-drawn storybook feeling: soft painterly
-textures, rounded puffy shapes, smooth gradients, soft ambient shadows, subtle
-inner glow — friendly and inflated forms, like a beloved bedtime storybook.
-Cool pastel palette ONLY: mint #8FD4E3, sky blue #83B9DD, soft green #A0CE99,
-with deep accents #2A6E9E and #387C4C for outlines and eyes. Warm colors are
-FORBIDDEN except a single tiny warm-yellow sparkle as a magic accent. Use only
-cool pastels; absolutely no red, no neon, no dark night, no harsh saturation.
-Pale daytime sky, low rolling hills, gentle morning light from the upper-left.
-Signature motif: one small puffy pastel speech bubble floating softly in the
-scene. Wholesome, calm, safe, never scary. Characters wear simple hanbok, soft
-round faces, big friendly eyes, no red cheeks.
-COMPOSITION — crop-safe: PORTRAIT 2:3, vertical. Put the main character and the
-horizon in the VERTICAL CENTER band; keep the top third calm sky and the bottom
-third soft hills with no essential detail, so the middle can also be cropped to
-a wide 16:9 banner without losing the subject. Clean, uncluttered.
-NO text, NO letters, NO title, NO watermark, NO UI, NO frame.
+A rich, warm children's picture-book cover illustration for ages 7-9, based on a
+classic Korean folk tale. Hand-drawn storybook style: soft painterly texture,
+gentle rounded shapes, expressive friendly characters in hanbok with round faces
+and big kind eyes, cozy inviting atmosphere, a touch of gentle magic. Full, vivid,
+NATURAL colors — each cover uses whatever palette best fits its own story and mood
+(warm sunsets, lush fields, cozy interiors, moonlit nights are all welcome).
+Storybook lighting, soft depth, wholesome and friendly, never scary.
+COMPOSITION: portrait 2:3, vertical book-cover framing. Keep the main character in
+the VERTICAL CENTER so the middle also crops cleanly to a wide banner. Clean,
+uncluttered, generous margins.
+NO text, no letters, no title, no watermark, no logo, no UI, no border.
 ```
 
 ### 표지별 SUBJECT (위 BASE 뒤에 한 줄만 이어 붙이기)
@@ -91,7 +88,7 @@ NO text, NO letters, NO title, NO watermark, NO UI, NO frame.
 ## 3. ChatGPT(GPT-image)로 뽑을 때
 
 - 프롬프트에 비율을 강하게 명시: `"portrait 2:3, vertical, tall book-cover framing"`.
-- **네거티브 프롬프트가 없으므로** 제외 항목은 긍정문으로: BASE에 이미 `"no red, no neon… no text"`가 들어 있음(그대로 두면 됨).
+- **네거티브 프롬프트가 없어도** BASE에 `"NO text… no border"`가 들어 있어 그대로면 됨(글자·워터마크 방지). 색은 일부러 안 막음.
 - **일관성**: ① 앵커 1장을 먼저 뽑아 스타일을 확정 → ② **같은 대화창에서** "같은 아트 스타일·색·질감으로, 이번엔 [SUBJECT]"로 이어가기 → ③ 더 확실히 하려면 앵커 이미지를 **업로드해 참조**시키기("keep this exact style").
 
 ## 4. Gemini(Nano Banana / 2.5 Flash Image)로 뽑을 때 — 세트 만들기엔 이쪽이 강함
@@ -104,7 +101,7 @@ NO text, NO letters, NO title, NO watermark, NO UI, NO frame.
 
 - [ ] STYLE BASE는 **한 글자도 안 바꾼다**. SUBJECT 문장만 교체.
 - [ ] **앵커 1장 먼저** → 그 스타일을 참조/시드로 나머지에 전파.
-- [ ] 팔레트: 민트/스카이블루/소프트그린만. 노랑은 반짝임 하나만, 빨강 0.
+- [ ] 색은 이야기에 맞게 자유. **일관성은 그림체(스타일)로** 잡고 색으로 맞추지 않는다.
 - [ ] 세로 2:3, 주인공은 **세로 가운데**, 글자 없음.
 - [ ] 저장: `assets/images/covers/story_<id>.png` (표 그대로).
 
