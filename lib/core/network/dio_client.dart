@@ -107,7 +107,12 @@ class DioClient {
         // 아닙니다. baseUrl 에 이미 /api 가 있어 실제 path 는 /auth/login 처럼
         // 옵니다 — /api/auth 가 아니라 /auth 로 판정합니다.
         if (!path.startsWith('/auth')) onUnauthorized?.call();
-        throw const UnauthorizedException();
+        final map = body is Map<String, dynamic> ? body : null;
+        final error = map?['error'];
+        final String? message = error is Map<String, dynamic>
+            ? error['message'] as String?
+            : map?['message'] as String?;
+        throw UnauthorizedException(message ?? '로그인이 필요합니다.');
       }
       if (status < 200 || status >= 300) {
         final map = body is Map<String, dynamic> ? body : null;

@@ -51,9 +51,17 @@ void main() {
   /// 시계를 아무리 돌려도 안 끝납니다. `pump(Duration)` 만 반복하면 데이터가
   /// 도착하기 전에 단언이 실행돼 통과했다 말았다 합니다.
   Future<void> pumpAt(WidgetTester tester, String location) async {
+    final bool publicEntry =
+        location == AppRoutes.auth ||
+        location == AppRoutes.login ||
+        location == AppRoutes.findId ||
+        location == AppRoutes.findPassword;
     await tester.pumpWidget(
       MaterialApp.router(
-        routerConfig: createAppRouter(initialLocation: location),
+        routerConfig: createAppRouter(
+          initialLocation: location,
+          authTokenProvider: () async => publicEntry ? null : 'test-token',
+        ),
       ),
     );
     // 목업 Repository 는 "가짜 지연(타이머) → 에셋 읽기(진짜 I/O)" 순서로
@@ -65,6 +73,16 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
     }
   }
+
+  testWidgets('로그인하지 않고 홈에 들어가면 /auth로 이동한다', (WidgetTester tester) async {
+    final router = createAppRouter(authTokenProvider: () async => null);
+    addTearDown(router.dispose);
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+
+    expect(router.routeInformationProvider.value.uri.path, AppRoutes.auth);
+    expect(find.text(AuthStrings.emailSignIn), findsOneWidget);
+  });
 
   // 하단 내비를 가진 탭 루트 화면들. 자리 표시자가 아니라 실제 화면인지
   // 확인합니다.
@@ -88,7 +106,10 @@ void main() {
 
   // 보호자 하위 화면들. 탭 루트가 아니라 하단 내비가 없습니다.
   testWidgets('마이페이지의 설정을 누르면 /settings로 이동한다', (WidgetTester tester) async {
-    final router = createAppRouter(initialLocation: AppRoutes.myPage);
+    final router = createAppRouter(
+      initialLocation: AppRoutes.myPage,
+      authTokenProvider: () async => 'test-token',
+    );
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
     for (int i = 0; i < 6; i++) {
       await tester.runAsync(
@@ -149,6 +170,28 @@ void main() {
     await pumpAt(tester, AppRoutes.login);
     expect(find.text(AuthStrings.socialSignIn), findsOneWidget);
     expect(find.text(AuthStrings.emailSignIn), findsOneWidget);
+  });
+
+  testWidgets('/auth/find-id 로 들어가면 ID 찾기 화면이 뜬다', (WidgetTester tester) async {
+    await pumpAt(tester, AppRoutes.findId);
+    expect(find.text(AuthRecoveryStrings.findIdTitle), findsOneWidget);
+    expect(find.text(AuthRecoveryStrings.guardianName), findsOneWidget);
+  });
+
+  testWidgets('/auth/find-password 로 들어가면 PW 찾기 화면이 뜬다', (
+    WidgetTester tester,
+  ) async {
+    await pumpAt(tester, AppRoutes.findPassword);
+    expect(find.text(AuthRecoveryStrings.resetTitle), findsOneWidget);
+    expect(find.text(AuthRecoveryStrings.email), findsOneWidget);
+  });
+
+  testWidgets('/auth/reset-password 링크에서 새 비밀번호를 입력할 수 있다', (
+    WidgetTester tester,
+  ) async {
+    await pumpAt(tester, '${AppRoutes.resetPassword}?token=test-token');
+    expect(find.text(AuthRecoveryStrings.newPasswordTitle), findsOneWidget);
+    expect(find.text(AuthRecoveryStrings.changePassword), findsOneWidget);
   });
 
   testWidgets('/auth?step=child 는 프로필 등록으로 바로 간다', (WidgetTester tester) async {

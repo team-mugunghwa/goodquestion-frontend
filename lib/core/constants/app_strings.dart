@@ -323,7 +323,10 @@ abstract final class AuthStrings {
   static const String start = '시작하기';
 
   /// 완료 직후의 짧은 환영. 곧바로 홈으로 넘어갑니다.
-  static String welcome(String name) => '$name(이)와 시작해요!';
+  static String welcome(String name) {
+    final String childName = name.trim();
+    return childName.isEmpty ? '반가워요!' : '$childName, 환영해요!';
+  }
 
   /// 프로필 없이 홈에 들어갈 수 없으므로, 여기서의 뒤로가기는 로그아웃입니다.
   static const String signOutConfirm = '로그아웃할까요?\n아이 프로필을 만들어야 시작할 수 있어요.';
@@ -337,4 +340,46 @@ abstract final class AuthStrings {
 
   /// "2/3" — 스텝 인디케이터의 스크린리더용 라벨.
   static String stepOf(int current, int total) => '$total단계 중 $current단계';
+}
+
+/// 로그인 화면에서 이어지는 계정 찾기 화면 문구.
+abstract final class AuthRecoveryStrings {
+  static const String backToLogin = '로그인으로 돌아가기';
+  static const String findIdTab = 'ID 찾기';
+  static const String resetPasswordTab = 'PW 찾기';
+
+  static const String findIdTitle = '가입한 이메일을 찾아드릴게요';
+  static const String findIdDescription = '회원가입할 때 입력한 보호자 정보로 가입 이메일을 확인합니다.';
+  static const String guardianName = '보호자 이름';
+  static const String birthDate = '보호자 생년월일';
+  static const String birthDateHint = '예: 1990.03.15';
+  static const String findIdAction = '가입 이메일 확인하기';
+
+  static const String resetTitle = '비밀번호를 다시 설정해요';
+  static const String resetDescription = '가입한 이메일로 안전한 비밀번호 재설정 링크를 보내드립니다.';
+  static const String email = '가입 이메일';
+  static const String emailHint = 'name@example.com';
+  static const String resetAction = '재설정 링크 받기';
+
+  static const String requiredFields = '입력하지 않은 항목이 있어요.';
+  static const String invalidBirthDate = '생년월일을 YYYY.MM.DD 형식으로 입력해 주세요.';
+  static const String invalidEmail = '올바른 이메일 주소를 입력해 주세요.';
+  static const String requestFailed = '요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+
+  static const String findIdDoneTitle = '가입 이메일을 확인했어요';
+  static const String findIdDoneBody =
+      '백엔드 연결 후에는 입력한 정보와 일치하는 가입 이메일을 이곳에 안전하게 표시합니다.';
+  static const String resetDoneTitle = '재설정 안내를 보냈어요';
+  static const String resetDoneBody =
+      '입력한 이메일로 비밀번호 재설정 링크를 보냈습니다. 메일함을 확인해 주세요.';
+  static const String resend = '다시 보내기';
+  static const String securityNotice = '계정 보호를 위해 가입 여부와 관계없이 동일한 안내를 표시합니다.';
+  static const String newPasswordTitle = '새 비밀번호 설정';
+  static const String newPassword = '새 비밀번호';
+  static const String confirmPassword = '새 비밀번호 확인';
+  static const String passwordRule = '8자 이상 입력해 주세요.';
+  static const String passwordMismatch = '비밀번호가 서로 일치하지 않습니다.';
+  static const String invalidResetLink = '유효하지 않은 비밀번호 재설정 링크입니다.';
+  static const String changePassword = '비밀번호 변경하기';
+  static const String passwordChanged = '비밀번호가 변경되었습니다.';
 }
