@@ -6,6 +6,12 @@ import 'package:goodquestion/core/di/injector.dart';
 import 'package:goodquestion/core/router/app_router.dart';
 import 'package:goodquestion/core/router/app_routes.dart';
 import 'package:goodquestion/core/widgets/app_bottom_nav.dart';
+import 'package:goodquestion/features/home/data/datasources/home_local_data_source.dart';
+import 'package:goodquestion/features/home/data/repositories/home_repository_mock.dart';
+import 'package:goodquestion/features/home/domain/repositories/home_repository.dart';
+import 'package:goodquestion/features/story/data/datasources/story_local_data_source.dart';
+import 'package:goodquestion/features/story/data/repositories/story_repository_mock.dart';
+import 'package:goodquestion/features/story/domain/repositories/story_repository.dart';
 
 /// 라우터 골격이 살아 있는지 확인합니다.
 ///
@@ -14,7 +20,20 @@ import 'package:goodquestion/core/widgets/app_bottom_nav.dart';
 /// (홈은 `test/features/home/` 에 따로 있습니다)
 void main() {
   // 홈이 실제 화면이 되면서 UseCase 를 DI 에서 꺼내 씁니다.
-  setUpAll(configureDependencies);
+  setUpAll(() async {
+    await configureDependencies();
+    // 홈·이야기는 이제 실제 서버를 부릅니다. 이 파일은 "경로 → 화면 연결"만
+    // 보는 자리라 백엔드 없이도 돌아야 해서, 더미로 되돌려 둡니다.
+    getIt
+      ..unregister<HomeRepository>()
+      ..registerLazySingleton<HomeRepository>(
+        () => const HomeRepositoryMock(HomeLocalDataSource()),
+      )
+      ..unregister<StoryRepository>()
+      ..registerLazySingleton<StoryRepository>(
+        () => const StoryRepositoryMock(StoryLocalDataSource()),
+      );
+  });
   tearDownAll(getIt.reset);
 
   // `rootBundle` 은 읽은 에셋의 **Future 를** 캐시합니다. 그 Future 는 만들어진

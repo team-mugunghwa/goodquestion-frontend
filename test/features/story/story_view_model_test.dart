@@ -26,13 +26,13 @@ class _StubRepository implements StoryRepository {
   }
 
   @override
-  Future<StoryDetail?> getStoryDetail(int storyId) async {
+  Future<StoryDetail?> getStoryDetail(String storyId) async {
     if (error != null) throw error!;
     return detail;
   }
 
   @override
-  Future<int> startSession(int storyId) async => 9000 + storyId;
+  Future<String> startSession(String storyId) async => '9000-$storyId';
 }
 
 const StoryCatalog _catalog = StoryCatalog(
@@ -43,13 +43,13 @@ const StoryCatalog _catalog = StoryCatalog(
   ],
   stories: <StorySummary>[
     StorySummary(
-      storyId: 11,
+      storyId: '11',
       title: '방귀 뀌는 며느리',
       estimatedMinutes: 20,
       topicIds: <String>['folk'],
     ),
     StorySummary(
-      storyId: 21,
+      storyId: '21',
       title: '해와 달이 된 오누이',
       estimatedMinutes: 15,
       topicIds: <String>['folk'],
@@ -58,7 +58,7 @@ const StoryCatalog _catalog = StoryCatalog(
 );
 
 const StoryDetail _detail = StoryDetail(
-  storyId: 11,
+  storyId: '11',
   title: '방귀 뀌는 며느리',
   estimatedMinutes: 20,
   difficulty: '쉬움',
@@ -138,7 +138,7 @@ void main() {
   });
 
   group('StoryDetailViewModel', () {
-    StoryDetailViewModel viewModelOf(StoryRepository repository, int id) =>
+    StoryDetailViewModel viewModelOf(StoryRepository repository, String id) =>
         StoryDetailViewModel(
           GetStoryDetailUseCase(repository),
           StartStorySessionUseCase(repository),
@@ -146,7 +146,7 @@ void main() {
         );
 
     test('있는 이야기는 success 이고 notFound 가 아니다', () async {
-      final vm = viewModelOf(_StubRepository(detail: _detail), 11);
+      final vm = viewModelOf(_StubRepository(detail: _detail), '11');
 
       await vm.load();
 
@@ -156,7 +156,7 @@ void main() {
     });
 
     test('없는 이야기는 error 가 아니라 notFound 다', () async {
-      final vm = viewModelOf(_StubRepository(), 999);
+      final vm = viewModelOf(_StubRepository(), '999');
 
       await vm.load();
 
@@ -167,17 +167,17 @@ void main() {
     });
 
     test('시작하기는 sessionId 를 돌려주고 화면을 옮기지 않는다', () async {
-      final vm = viewModelOf(_StubRepository(detail: _detail), 11);
+      final vm = viewModelOf(_StubRepository(detail: _detail), '11');
       await vm.load();
 
-      final int? sessionId = await vm.start();
+      final String? sessionId = await vm.start();
 
-      expect(sessionId, 9011);
+      expect(sessionId, '9000-11');
       expect(vm.isStarting, isFalse);
     });
 
     test('로드 전에는 시작할 수 없다', () async {
-      final vm = viewModelOf(_StubRepository(detail: _detail), 11);
+      final vm = viewModelOf(_StubRepository(detail: _detail), '11');
 
       expect(await vm.start(), isNull);
     });

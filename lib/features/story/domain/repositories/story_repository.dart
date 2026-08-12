@@ -10,9 +10,11 @@ abstract class StoryRepository {
   ///
   /// 잘못된 주소로 들어온 것과 서버가 죽은 것은 아이에게 다른 화면을
   /// 보여 줘야 합니다. ("찾을 수 없어" vs "다시 해볼까?")
-  Future<StoryDetail?> getStoryDetail(int storyId);
+  ///
+  /// `storyId` 는 서버 UUID 라 String 입니다.
+  Future<StoryDetail?> getStoryDetail(String storyId);
 
   /// 이야기를 시작해 세션을 만듭니다. 서비스 전체에서 세션이 생기는
-  /// **유일한 지점**입니다. 만들어진 sessionId 를 돌려줍니다.
-  Future<int> startSession(int storyId);
+  /// **유일한 지점**입니다. 만들어진 sessionId(UUID) 를 돌려줍니다.
+  Future<String> startSession(String storyId);
 }

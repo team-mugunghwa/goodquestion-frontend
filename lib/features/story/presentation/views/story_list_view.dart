@@ -238,8 +238,7 @@ class _Grid extends StatelessWidget {
           titleMaxLines: 1,
           // go 가 아니라 push — 목록을 스택에 남겨야 상세에서 돌아왔을 때
           // 고른 필터가 그대로입니다.
-          onTap: () =>
-              context.push(AppRoutes.storyDetailOf('${story.storyId}')),
+          onTap: () => context.push(AppRoutes.storyDetailOf(story.storyId)),
         );
       },
     );

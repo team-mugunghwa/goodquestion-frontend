@@ -31,14 +31,14 @@ class _StubRepository implements HomeRepository {
 const HomeSummary _withSession = HomeSummary(
   child: ChildProfile(name: '하늘이'),
   inProgressSession: InProgressSession(
-    sessionId: 2481,
+    sessionId: '2481',
     storyTitle: '방귀 뀌는 며느리',
     lastCompletedScene: 3,
     totalScenes: 5,
   ),
   recommendedStories: <RecommendedStory>[
     RecommendedStory(
-      storyId: 21,
+      storyId: '21',
       title: '해와 달이 된 오누이',
       estimatedMinutes: 15,
       topicTag: '용기',
