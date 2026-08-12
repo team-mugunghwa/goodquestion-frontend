@@ -48,6 +48,8 @@ class StoryCard extends StatelessWidget {
     final Widget thumbnail = StoryThumbnail(
       image: image,
       fallbackIcon: AppIcons.stories,
+      // 표지 이미지가 없으면 주제별 코드 표지로 채웁니다.
+      topicTag: topicLabel,
       // 가로 배치에서 16:9 를 쓰면 이미지가 납작해져서 제목 옆에 붙은
       // 장식처럼 보입니다. 정사각이 글자 블록 높이와 맞습니다.
       aspectRatio: horizontal ? StoryThumbnail.square : StoryThumbnail.wide,
