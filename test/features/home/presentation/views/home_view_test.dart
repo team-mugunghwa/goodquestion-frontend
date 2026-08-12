@@ -98,7 +98,11 @@ void main() {
     await pumpHome(tester, _StubRepository(summary: _withSession));
 
     expect(find.text('하늘이'), findsOneWidget);
-    expect(find.text(HomeStrings.recommendedTitle), findsOneWidget);
+    // 섹션 제목은 키워드만 색을 입히려고 RichText 로 그립니다.
+    expect(
+      find.text(HomeStrings.recommendedTitle, findRichText: true),
+      findsOneWidget,
+    );
     expect(find.text('해와 달이 된 오누이'), findsOneWidget);
     expect(find.text(HomeStrings.planetTitle), findsOneWidget);
     expect(find.byType(AppBottomNav), findsOneWidget);

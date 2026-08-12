@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+import 'story_cover.dart';
 
 /// 이야기·행성·단어 그룹의 대표 이미지 자리.
 ///
@@ -15,6 +15,7 @@ class StoryThumbnail extends StatelessWidget {
     required this.fallbackIcon,
     this.aspectRatio = wide,
     this.iconSize = AppSizes.iconChild,
+    this.topicTag,
   });
 
   /// 16:9 — 이야기 카드의 기본. (`docs/DESIGN_SYSTEM.md` 10장)
@@ -39,40 +40,31 @@ class StoryThumbnail extends StatelessWidget {
   /// 칩처럼 작은 자리에서는 [AppSizes.iconInline] 로 줄이세요.
   final double iconSize;
 
+  /// 주제(한글 태그). 이미지가 없을 때 표지 색·모티프를 정합니다.
+  /// 이야기 목록·홈 추천의 `topicTag` 가 그대로 들어옵니다.
+  final String? topicTag;
+
   @override
   Widget build(BuildContext context) {
     final String? path = image;
+    final Widget fallback = StoryCover(
+      palette: StoryCoverPalette.forTopic(topicTag),
+      motifIcon: topicTag == null ? fallbackIcon : null,
+    );
     final Widget content = path == null
-        ? _ThumbnailFallback(icon: fallbackIcon, iconSize: iconSize)
+        ? fallback
         : Image.asset(
             path,
             fit: BoxFit.cover,
             excludeFromSemantics: true,
-            // 파일이 빠졌을 때 빨간 에러 상자 대신 그라디언트가 뜹니다.
+            // 파일이 빠졌을 때 빨간 에러 상자 대신 표지가 뜹니다.
             errorBuilder:
                 (BuildContext context, Object error, StackTrace? stack) =>
-                    _ThumbnailFallback(icon: fallbackIcon, iconSize: iconSize),
+                    fallback,
           );
 
     final double? ratio = aspectRatio;
     if (ratio == null) return SizedBox.expand(child: content);
     return AspectRatio(aspectRatio: ratio, child: content);
-  }
-}
-
-class _ThumbnailFallback extends StatelessWidget {
-  const _ThumbnailFallback({required this.icon, required this.iconSize});
-
-  final IconData icon;
-  final double iconSize;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: const BoxDecoration(gradient: AppColors.brandGradient),
-      child: Center(
-        child: Icon(icon, size: iconSize, color: AppColors.brandBlueDeep),
-      ),
-    );
   }
 }
