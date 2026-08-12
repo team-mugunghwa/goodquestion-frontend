@@ -18,8 +18,12 @@ class StoryThumbnail extends StatelessWidget {
     this.topicTag,
   });
 
-  /// 16:9 — 이야기 카드의 기본. (`docs/DESIGN_SYSTEM.md` 10장)
+  /// 16:9 — 홈 카드(이어하기·추천)의 기본. (`docs/DESIGN_SYSTEM.md` 10장)
   static const double wide = 16 / 9;
+
+  /// 2:3 — 그림책 표지 비율. 이야기 목록(`/stories`) 카드 전용.
+  /// 세로 표지 밑에 제목이 붙는 "책장에 꽂힌 그림책" 느낌을 냅니다.
+  static const double portrait = 2 / 3;
 
   /// 정사각. 행성 썸네일·필터 칩처럼 원이나 작은 타일로 쓰는 자리.
   static const double square = 1;
