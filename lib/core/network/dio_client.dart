@@ -93,7 +93,14 @@ class DioClient {
       final status = response.statusCode ?? 0;
       final body = response.data;
 
-      if (status == 401) throw const UnauthorizedException();
+      if (status == 401) {
+        final map = body is Map<String, dynamic> ? body : null;
+        final error = map?['error'];
+        final String? message = error is Map<String, dynamic>
+            ? error['message'] as String?
+            : map?['message'] as String?;
+        throw UnauthorizedException(message ?? '로그인이 필요합니다.');
+      }
       if (status < 200 || status >= 300) {
         final map = body is Map<String, dynamic> ? body : null;
         final error = map?['error'];

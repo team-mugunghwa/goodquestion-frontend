@@ -1,18 +1,19 @@
 # 로그인 연동 설정
 
-이 문서는 로컬 환경에서 GoodQuestion 프론트엔드와 백엔드를 연결하고 이메일·카카오 로그인을 테스트하는 방법을 설명합니다.
+이 문서는 로컬 환경에서 GoodQuestion 프론트엔드와 백엔드를 연결하고 이메일·카카오·구글 로그인을 테스트하는 방법을 설명합니다.
 
 ## 현재 구현 범위
 
 - 이메일 회원가입 및 로그인은 백엔드의 `/api/auth/signup`, `/api/auth/login`과 연결되어 있습니다.
 - 카카오 로그인은 프론트엔드에서 인가 코드를 받은 뒤 `/api/auth/social/kakao`로 전달합니다.
+- 구글 로그인은 `openid email profile` 범위로 인가 코드를 받은 뒤 `/api/auth/social/google`로 전달합니다.
 - 백엔드는 인가 코드를 카카오 액세스 토큰으로 교환하고 사용자 정보를 조회한 뒤 GoodQuestion JWT를 발급합니다.
 - 발급된 JWT는 이후 `/api/children` 등 인증이 필요한 API 요청에 `Bearer` 토큰으로 첨부됩니다.
 - 아이 프로필이 없는 계정은 아이 프로필 등록 화면으로 이동합니다.
 - 아이 프로필이 있는 계정은 현재 선택된 아이 이름으로 `하늘이, 환영해요!`와 같은 문구를 잠깐 표시한 뒤 홈으로 이동합니다.
 - 로그인 유지가 꺼져 있으면 토큰은 현재 실행 세션에서만 유지됩니다.
 
-카카오 로그인은 프론트엔드만 실행해서는 완료되지 않습니다. 프론트엔드와 백엔드, PostgreSQL이 모두 실행 중이어야 합니다.
+소셜 로그인은 프론트엔드만 실행해서는 완료되지 않습니다. 프론트엔드와 백엔드, PostgreSQL이 모두 실행 중이어야 합니다.
 
 ## 1. 카카오 개발자 콘솔 설정
 
@@ -34,7 +35,27 @@ http://localhost:7357/auth.html/
 
 Client Secret을 카카오 콘솔에서 사용하도록 설정했다면 별도로 발급된 Client Secret을 사용합니다. JavaScript 키, 네이티브 앱 키, REST API 키를 Client Secret 자리에 넣으면 안 됩니다. Client Secret 기능을 사용하지 않는다면 백엔드 값을 비워 둡니다.
 
-## 2. 백엔드 환경변수
+## 2. Google Cloud Console 설정
+
+Google Auth Platform에서 OAuth 동의 화면을 구성하고 OAuth 클라이언트를 **웹 애플리케이션** 유형으로 만듭니다.
+
+승인된 리디렉션 URI에는 다음 값을 정확히 등록합니다.
+
+```text
+http://localhost:7357/auth.html
+```
+
+앱 게시 상태가 `테스트`라면 로그인에 사용할 Google 계정을 테스트 사용자로 추가합니다. 현재 앱은 기본 로그인 정보만 요청하므로 범위는 다음 세 개입니다.
+
+```text
+openid
+email
+profile
+```
+
+웹 OAuth 클라이언트에서 받은 Client ID는 프론트엔드와 백엔드 양쪽에 사용하고, Client secret은 백엔드 `.env`에만 저장합니다.
+
+## 3. 백엔드 환경변수
 
 백엔드 폴더의 `.env`를 설정합니다.
 
@@ -54,6 +75,9 @@ JWT_EXPIRATION_MS=604800000
 
 KAKAO_CLIENT_ID=<카카오 REST API 키>
 KAKAO_CLIENT_SECRET=
+
+GOOGLE_CLIENT_ID=<Google 웹 애플리케이션 Client ID>
+GOOGLE_CLIENT_SECRET=<Google 웹 애플리케이션 Client secret>
 ```
 
 Client Secret 기능을 켠 경우에만 다음처럼 입력합니다.
@@ -64,7 +88,7 @@ KAKAO_CLIENT_SECRET=<카카오에서 별도로 발급한 Client Secret>
 
 `.env`는 Git에 커밋하지 않습니다.
 
-## 3. 백엔드 실행
+## 4. 백엔드 실행
 
 PostgreSQL을 Docker Compose로 실행합니다.
 
@@ -123,7 +147,7 @@ Stop-Process -Id <PID>
 
 그다음 백엔드를 한 번만 다시 실행합니다. `.env`를 수정한 경우에도 기존 프로세스를 완전히 종료하고 재실행해야 변경 내용이 반영됩니다.
 
-## 4. 프론트엔드 실제 로그인 설정
+## 5. 프론트엔드 실제 로그인 설정
 
 프론트엔드 루트에 개인용 `env.json`을 만듭니다.
 
@@ -135,11 +159,12 @@ C:\MVP GoodQuestion 2\goodquestion-frontend\env.json
 {
   "API_BASE_URL": "http://127.0.0.1:8080/api",
   "KAKAO_CLIENT_ID": "<카카오 REST API 키>",
+  "GOOGLE_CLIENT_ID": "<Google 웹 애플리케이션 Client ID>",
   "MOCK_SOCIAL_LOGIN": false
 }
 ```
 
-프론트엔드와 백엔드의 `KAKAO_CLIENT_ID`는 동일한 REST API 키여야 합니다. `env.json`은 `.gitignore`에 포함되어 있으므로 커밋하지 않습니다.
+프론트엔드와 백엔드의 공급자별 Client ID는 서로 같아야 합니다. Google Client secret은 프론트엔드에 넣지 않습니다. `env.json`은 `.gitignore`에 포함되어 있으므로 커밋하지 않습니다.
 
 `env/local_web.json`은 UI 확인용 목 로그인 설정인 `MOCK_SOCIAL_LOGIN=true`를 사용합니다. 실제 카카오 로그인 테스트에는 사용하지 않습니다.
 
@@ -152,7 +177,7 @@ flutter run -d chrome --web-port=7357 --dart-define-from-file=env.json
 
 `dart-define` 값은 빌드 시 적용됩니다. `env.json`을 변경했다면 Hot Reload만 하지 말고 프론트엔드를 완전히 종료한 뒤 다시 실행합니다.
 
-## 5. 로그인 처리 흐름
+## 6. 로그인 처리 흐름
 
 카카오 로그인은 다음 순서로 동작합니다.
 
@@ -167,7 +192,9 @@ flutter run -d chrome --web-port=7357 --dart-define-from-file=env.json
 
 카카오 앱에서 승인을 마쳤는데 로그인 화면에 그대로 남아 있다면 5~7단계의 실패일 가능성이 큽니다.
 
-## 6. 자주 발생하는 오류
+구글도 같은 흐름을 사용하며 엔드포인트만 `/api/auth/social/google`로 달라집니다.
+
+## 7. 자주 발생하는 오류
 
 ### `Did not find the file passed to --dart-define-from-file`
 
@@ -181,7 +208,19 @@ Test-Path "C:\MVP GoodQuestion 2\goodquestion-frontend\env.json"
 
 ### `소셜 로그인 키가 설정되어 있지 않습니다`
 
-프론트엔드 실행 설정에 `KAKAO_CLIENT_ID`가 없거나 변경 후 완전히 재실행하지 않은 경우입니다. `env.json`과 실행 명령을 확인합니다.
+프론트엔드 실행 설정에 해당 공급자의 Client ID가 없거나 변경 후 완전히 재실행하지 않은 경우입니다. `env.json`과 실행 명령을 확인합니다.
+
+### Google `redirect_uri_mismatch`
+
+Google OAuth 웹 클라이언트의 승인된 리디렉션 URI와 앱이 보낸 주소가 다른 경우입니다. scheme, host, port, path와 마지막 `/`까지 확인합니다.
+
+```text
+http://localhost:7357/auth.html
+```
+
+### Google `access_denied` 또는 테스트 사용자 오류
+
+OAuth 동의 화면이 테스트 상태라면 로그인하려는 Google 계정을 테스트 사용자 목록에 추가합니다. 조직 내부용 앱으로 설정했다면 해당 Google Workspace 조직 계정만 로그인할 수 있습니다.
 
 ### `로그인이 필요합니다`
 
@@ -208,7 +247,7 @@ Chrome에서는 프론트엔드가 `http://localhost:7357`, 백엔드가 `http:/
 
 백엔드 실행 터미널에서 `APPLICATION FAILED TO START` 또는 `Port 8080 was already in use`가 있는지 먼저 확인합니다. `BUILD SUCCESSFUL` 문구가 있더라도 애플리케이션 시작 실패 로그가 함께 있으면 서버가 정상 실행된 것이 아닙니다.
 
-## 7. 모바일 실행 참고
+## 8. 모바일 실행 참고
 
 Android 에뮬레이터에서 호스트 PC의 백엔드에 접근할 때는 다음 주소를 사용합니다.
 
@@ -217,3 +256,12 @@ http://10.0.2.2:8080/api
 ```
 
 Android/iOS의 기본 OAuth 콜백은 `goodquestion://oauth`입니다. 모바일에서 실제 소셜 로그인을 연결할 때는 Android Manifest와 iOS URL Scheme도 같은 콜백 scheme으로 설정해야 합니다.
+# 계정 복구와 로그인 보호 (개발 단계)
+
+- 비로그인 사용자가 `/`, `/mypage` 등 보호 화면에 접근하면 `/auth`로 이동합니다.
+- `POST /api/auth/password-reset/request`는 가입 여부를 노출하지 않고 항상 동일한 성공 응답을 사용합니다.
+- 메일 링크는 `/auth/reset-password?token=...`으로 연결되며 토큰은 30분 후 만료됩니다.
+- 로컬 SMTP 테스트는 Docker의 Mailpit을 사용합니다. 받은 메일은 `http://localhost:8025`에서 확인합니다.
+- 로그인 10회 실패 시 24시간 잠급니다. 현재 실패 횟수·잠금·재설정 토큰은 백엔드 메모리 저장소이므로 서버 재시작 시 초기화됩니다.
+- 백엔드 팀이 DB 컬럼/테이블을 추가하면 `LoginAttemptStore`, `PasswordResetTokenStore`의 메모리 구현을 영속 구현으로 교체해야 합니다.
+- ID 찾기는 보호자 생년월일 데이터가 현재 DB에 없어 UI만 제공됩니다. `parents.birth_date` 등 본인 확인 데이터가 준비되기 전에는 실제 이메일을 노출하지 않습니다.
