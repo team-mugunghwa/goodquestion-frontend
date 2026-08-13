@@ -21,7 +21,7 @@ class WordRepositoryMock implements WordRepository {
   final Duration latency;
 
   /// wordId → 좋아요. 더미 값 위에 덮어씁니다.
-  final Map<int, bool> _likeOverrides = <int, bool>{};
+  final Map<String, bool> _likeOverrides = <String, bool>{};
 
   @override
   Future<WordBook> getWordBook() async {
@@ -38,14 +38,14 @@ class WordRepositoryMock implements WordRepository {
   }
 
   @override
-  Future<bool> toggleLike(int wordId) async {
+  Future<bool> toggleLike(String wordId) async {
     final WordBook book = await getWordBook();
     final bool current = book.groups
         .expand((WordGroup g) => g.words)
         .firstWhere(
           (SavedWord w) => w.wordId == wordId,
           orElse: () => const SavedWord(
-            wordId: -1,
+            wordId: '',
             word: '',
             meaning: '',
             sentence: '',

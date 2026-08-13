@@ -14,7 +14,7 @@ class SavedWord {
     this.savedAt,
   });
 
-  final int wordId;
+  final String wordId;
 
   /// 표제어. 목록 카드에서 가장 큰 글씨입니다.
   final String word;

@@ -13,7 +13,7 @@ class WordGroup {
     this.storyImage,
   });
 
-  final int storyId;
+  final String storyId;
   final String storyTitle;
   final String? storyImage;
   final List<SavedWord> words;

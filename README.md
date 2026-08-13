@@ -38,6 +38,7 @@ Flutter 설치부터 필요하면 → **[docs/SETUP.md](docs/SETUP.md)**
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | 새 기능을 어디에 어떻게 만들지 |
 | [API.md](docs/API.md) | 서버와 주고받는 형식 |
 | [DECISIONS.md](docs/DECISIONS.md) | "이거 왜 이렇게 돼 있어요?" |
+| [BACKEND_REQUESTS.md](docs/BACKEND_REQUESTS.md) | API 계약을 바꿔야 풀리는 것 — 백엔드에 요청할 목록 |
 
 ---
 

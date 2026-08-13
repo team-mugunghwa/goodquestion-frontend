@@ -20,7 +20,7 @@ class _StubRepository implements WordRepository {
 
   final WordBook? book;
   final Object? error;
-  final Map<int, bool> likes = <int, bool>{};
+  final Map<String, bool> likes = <String, bool>{};
 
   @override
   Future<WordBook> getWordBook() async {
@@ -29,7 +29,7 @@ class _StubRepository implements WordRepository {
   }
 
   @override
-  Future<bool> toggleLike(int wordId) async {
+  Future<bool> toggleLike(String wordId) async {
     final bool next = !(likes[wordId] ?? false);
     likes[wordId] = next;
     return next;
@@ -41,18 +41,18 @@ const WordBook _book = WordBook(
   childName: '하늘이',
   groups: <WordGroup>[
     WordGroup(
-      storyId: 11,
+      storyId: '11',
       storyTitle: '방귀 뀌는 며느리',
       words: <SavedWord>[
         SavedWord(
-          wordId: 101,
+          wordId: '101',
           word: '며느리',
           meaning: '아들과 결혼한 사람이에요.',
           sentence: '며느리가 살았어요.',
           liked: false,
         ),
         SavedWord(
-          wordId: 102,
+          wordId: '102',
           word: '사랑방',
           meaning: '손님을 맞이하는 방이에요.',
           sentence: '사랑방에서 만났어요.',
@@ -61,11 +61,11 @@ const WordBook _book = WordBook(
       ],
     ),
     WordGroup(
-      storyId: 21,
+      storyId: '21',
       storyTitle: '해와 달이 된 오누이',
       words: <SavedWord>[
         SavedWord(
-          wordId: 201,
+          wordId: '201',
           word: '오누이',
           meaning: '오빠와 여동생이에요.',
           sentence: '오누이가 남았어요.',

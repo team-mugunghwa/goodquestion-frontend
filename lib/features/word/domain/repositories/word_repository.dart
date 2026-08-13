@@ -9,5 +9,5 @@ abstract class WordRepository {
   ///
   /// 서버가 붙기 전에는 메모리에만 남습니다 — 앱을 다시 켜면 더미 값으로
   /// 돌아갑니다. 그게 목업의 정직한 동작입니다.
-  Future<bool> toggleLike(int wordId);
+  Future<bool> toggleLike(String wordId);
 }

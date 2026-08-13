@@ -52,7 +52,7 @@ class WordGroupDto {
   });
 
   factory WordGroupDto.fromJson(Map<String, dynamic> json) => WordGroupDto(
-    storyId: json['storyId'] as int? ?? 0,
+    storyId: (json['storyId'] as num?)?.toString() ?? '',
     storyTitle: json['storyTitle'] as String? ?? '',
     storyImage: json['storyImage'] as String?,
     words: (json['words'] as List<dynamic>? ?? <dynamic>[])
@@ -61,7 +61,7 @@ class WordGroupDto {
         .toList(growable: false),
   );
 
-  final int storyId;
+  final String storyId;
   final String storyTitle;
   final String? storyImage;
   final List<SavedWordDto> words;
@@ -88,7 +88,7 @@ class SavedWordDto {
   });
 
   factory SavedWordDto.fromJson(Map<String, dynamic> json) => SavedWordDto(
-    wordId: json['wordId'] as int? ?? 0,
+    wordId: (json['wordId'] as num?)?.toString() ?? '',
     word: json['word'] as String? ?? '',
     meaning: json['meaning'] as String? ?? '',
     sentence: json['sentence'] as String? ?? '',
@@ -97,7 +97,7 @@ class SavedWordDto {
     savedAt: json['savedAt'] as String?,
   );
 
-  final int wordId;
+  final String wordId;
   final String word;
   final String meaning;
   final String sentence;

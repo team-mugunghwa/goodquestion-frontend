@@ -78,9 +78,11 @@ class WordListView extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
                   _Header(vm: vm, metrics: metrics),
-                  // 담은 게 하나도 없으면 필터 칩을 숨깁니다 —
-                  // 거를 것이 없는데 칩만 남으면 고장으로 보입니다.
-                  if (!vm.isEmpty && vm.allGroups.isNotEmpty) ...<Widget>[
+                  // 담은 게 하나도 없거나 이야기가 하나뿐이면 필터 칩을
+                  // 숨깁니다 — 거를 게 없는데 칩만 남으면 고장으로 보입니다.
+                  // (지금 실제 API는 이야기별 그룹 정보를 안 내려줘서 늘
+                  // 그룹이 하나입니다 → `docs/BACKEND_REQUESTS.md`)
+                  if (!vm.isEmpty && vm.allGroups.length > 1) ...<Widget>[
                     _StoryChips(vm: vm, metrics: metrics),
                     const SizedBox(height: AppSpacing.lg),
                   ],
@@ -256,18 +258,17 @@ class _StoryChips extends StatelessWidget {
   Widget build(BuildContext context) {
     return KidFilterChips(
       metrics: metrics,
-      selectedId: '${vm.selectedStoryId}',
-      onSelected: (String id) =>
-          vm.selectStory(int.tryParse(id) ?? WordListViewModel.allStoryId),
+      selectedId: vm.selectedStoryId,
+      onSelected: vm.selectStory,
       items: <KidFilterChipData>[
         const KidFilterChipData(
-          id: '${WordListViewModel.allStoryId}',
+          id: WordListViewModel.allStoryId,
           label: AppStrings.filterAll,
           icon: AppIcons.topicAll,
         ),
         for (final WordGroup group in vm.allGroups)
           KidFilterChipData(
-            id: '${group.storyId}',
+            id: group.storyId,
             label: group.storyTitle,
             image: group.storyImage,
           ),
