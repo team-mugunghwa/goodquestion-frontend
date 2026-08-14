@@ -115,3 +115,27 @@ class DeviceMissionVoiceRecorder implements MissionVoiceRecorder {
     return Uint8List.fromList(<int>[...header.buffer.asUint8List(), ...pcm]);
   }
 }
+
+/// 데모 모드(`--dart-define=DEMO_MODE=true`)에서 쓰는 가짜 녹음기입니다.
+///
+/// 실제 마이크를 켜면 브라우저 권한 팝업이 뜨고, 데모 환경(발표용 PC 등)에
+/// 따라 거부되거나 장치가 없어 실패할 수 있습니다. 그러면 이야기가 거기서
+/// 멈춰 버리므로, 데모에서는 항상 성공하는 이 가짜 녹음기로 대신합니다.
+/// `lib/main_play_preview.dart` 의 `_PreviewVoiceRecorder` 와 같은 방식이며,
+/// 여러 진입점(대화 화면·미션 오버레이)에서 재사용할 수 있게 여기로
+/// 옮겨 두었습니다.
+class MissionVoiceRecorderMock implements MissionVoiceRecorder {
+  const MissionVoiceRecorderMock();
+
+  @override
+  Future<bool> start() async => true;
+
+  @override
+  Future<Uint8List?> stop() async => Uint8List.fromList(<int>[1, 2, 3]);
+
+  @override
+  Future<void> cancel() async {}
+
+  @override
+  Future<void> dispose() async {}
+}

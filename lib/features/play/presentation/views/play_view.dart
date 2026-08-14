@@ -707,6 +707,10 @@ class _PlayPageState extends State<PlayPage> {
                           submitting: _submittingMission,
                           completed: _missionCompleted,
                           transcribeAudio: _transcribeAudio,
+                          // 대화 화면과 같은 녹음기를 씁니다 — 데모 모드에서
+                          // 마이크 권한 팝업이 미션 오버레이에서만 따로
+                          // 뜨는 걸 막기 위함입니다.
+                          recorder: _voiceRecorder,
                           onSubmit: _submitMission,
                         ),
                       ),

@@ -14,6 +14,7 @@ import '../../features/planet/presentation/views/planet_view.dart';
 import '../../features/play/domain/repositories/play_repository.dart';
 import '../../features/play/presentation/views/play_recap_view.dart';
 import '../../features/play/presentation/views/play_view.dart';
+import '../../features/play/presentation/voice/mission_voice_recorder.dart';
 import '../../features/story/presentation/views/story_detail_view.dart';
 import '../../features/story/presentation/views/story_list_view.dart';
 import '../../features/word/presentation/views/word_list_view.dart';
@@ -95,6 +96,11 @@ GoRouter createAppRouter({
         builder: (BuildContext context, GoRouterState state) => PlayPage(
           sessionId: state.pathParameters[AppRoutes.sessionIdParam]!,
           repository: getIt<PlayRepository>(),
+          // 데모 모드는 진짜 마이크를 켜면 권한 팝업 때문에 흐름이 끊깁니다.
+          // → `MissionVoiceRecorderMock` 문서 참고.
+          voiceRecorder: AppConfig.demoMode
+              ? const MissionVoiceRecorderMock()
+              : null,
         ),
         routes: <RouteBase>[
           GoRoute(

@@ -28,6 +28,7 @@ import '../../features/mypage/domain/repositories/my_page_repository.dart';
 import '../../features/mypage/domain/usecases/my_page_use_cases.dart';
 import '../../features/play/data/datasources/play_remote_data_source.dart';
 import '../../features/play/data/repositories/play_repository_impl.dart';
+import '../../features/play/data/repositories/play_repository_mock.dart';
 import '../../features/play/domain/repositories/play_repository.dart';
 import '../../features/question/data/datasources/question_remote_data_source.dart';
 import '../../features/question/data/repositories/question_repository_mock.dart';
@@ -174,12 +175,15 @@ Future<void> configureDependencies() async {
     );
 
   // ---- play ----
+  // demoMode 에서는 `PlayRepositoryMock`(장면 여러 개를 넘기는 목업)을 씁니다.
   getIt
     ..registerLazySingleton<PlayRemoteDataSource>(
       () => PlayRemoteDataSource(getIt<DioClient>()),
     )
     ..registerLazySingleton<PlayRepository>(
-      () => PlayRepositoryImpl(getIt<PlayRemoteDataSource>()),
+      () => AppConfig.demoMode
+          ? PlayRepositoryMock()
+          : PlayRepositoryImpl(getIt<PlayRemoteDataSource>()),
     );
 
   // ---- word ----
