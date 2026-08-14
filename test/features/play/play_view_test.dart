@@ -1,6 +1,10 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:goodquestion/features/play/presentation/views/play_view.dart';
+import 'package:goodquestion/features/play/presentation/voice/mission_voice_recorder.dart';
+import 'package:goodquestion/features/play/presentation/voice/story_audio_player.dart';
 
 void main() {
   Future<void> pumpPlay(WidgetTester tester) async {
@@ -15,6 +19,8 @@ void main() {
           sessionId: 'preview-session',
           characterName: '토리',
           question: '친구가 속상해할 때는 어떻게 하면 좋을까?',
+          voiceRecorder: _FakeVoiceRecorder(),
+          audioPlayer: _FakeAudioPlayer(),
         ),
       ),
     );
@@ -24,12 +30,13 @@ void main() {
     await pumpPlay(tester);
 
     expect(find.text('토리'), findsOneWidget);
+    expect(find.text('토리의 질문'), findsOneWidget);
     expect(find.text('친구가 속상해할 때는 어떻게 하면 좋을까?'), findsOneWidget);
-    expect(find.text('토리이 말하고 있어요'), findsOneWidget);
-    expect(find.text('질문이 끝나면 마이크가 자동으로 켜져요.'), findsOneWidget);
+    expect(find.text('질문을 듣고 있어요'), findsOneWidget);
+    expect(find.text('질문이 끝나면 마이크가 켜져요.'), findsOneWidget);
   });
 
-  testWidgets('질문이 끝나면 자동으로 마이크가 켜진다', (WidgetTester tester) async {
+  testWidgets('질문이 끝나면 마이크가 자동으로 켜진다', (WidgetTester tester) async {
     await pumpPlay(tester);
 
     expect(find.bySemanticsLabel('마이크 준비 중'), findsOneWidget);
@@ -38,7 +45,7 @@ void main() {
 
     expect(find.bySemanticsLabel('마이크 켜짐'), findsOneWidget);
     expect(find.textContaining('잘 듣고 있어요'), findsOneWidget);
-    expect(find.text('한 문장으로 천천히 말해 주세요'), findsOneWidget);
+    expect(find.text('나는 이렇게 생각해요…'), findsOneWidget);
   });
 
   testWidgets('다시 듣기와 일시정지 동작이 명확하다', (WidgetTester tester) async {
@@ -48,7 +55,7 @@ void main() {
 
     await tester.tap(find.byTooltip('다시 듣기'));
     await tester.pump();
-    expect(find.text('토리이 말하고 있어요'), findsOneWidget);
+    expect(find.text('질문을 듣고 있어요'), findsOneWidget);
 
     await tester.tap(find.byTooltip('잠시 멈춤'));
     await tester.pump();
@@ -77,4 +84,33 @@ void main() {
       matchesGoldenFile('goldens/play_dialogue_template.png'),
     );
   });
+}
+
+class _FakeVoiceRecorder implements MissionVoiceRecorder {
+  const _FakeVoiceRecorder();
+
+  @override
+  Future<void> cancel() async {}
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Future<bool> start() async => true;
+
+  @override
+  Future<Uint8List?> stop() async => Uint8List.fromList(<int>[1, 2, 3]);
+}
+
+class _FakeAudioPlayer implements StoryAudioPlayer {
+  const _FakeAudioPlayer();
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Future<void> playUrl(String url) async {}
+
+  @override
+  Future<void> stop() async {}
 }

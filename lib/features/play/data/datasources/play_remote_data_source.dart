@@ -1,3 +1,7 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../domain/entities/play_session.dart';
@@ -29,4 +33,102 @@ class PlayRemoteDataSource {
           throw const ParseException('장면 전환 응답 형식이 올바르지 않습니다.');
         },
       );
+
+  Future<PlayOpeningMessage> openCurrentScene(String sessionId) =>
+      _client.post<PlayOpeningMessage>(
+        '/sessions/$sessionId/scenes/current/opening',
+        parse: (Object? data) {
+          if (data is Map<String, dynamic>) {
+            final Object? messageValue = data['message'];
+            if (messageValue is Map<String, dynamic>) {
+              final String? text = messageValue['text'] as String?;
+              if (text != null && text.trim().isNotEmpty) {
+                return PlayOpeningMessage(
+                  text: text.trim(),
+                  audioUrl: messageValue['audioUrl'] as String?,
+                  alreadyOpened: data['alreadyOpened'] as bool? ?? false,
+                );
+              }
+            }
+          }
+          throw const ParseException('첫 대사 응답 형식이 올바르지 않습니다.');
+        },
+      );
+
+  Future<PlayMission?> currentMission(String sessionId) =>
+      _client.get<PlayMission?>(
+        '/sessions/$sessionId/missions/current',
+        parse: (Object? data) {
+          if (data is Map<String, dynamic>) {
+            return PlaySessionDto.mission(data['mission']);
+          }
+          throw const ParseException('현재 미션 응답 형식이 올바르지 않습니다.');
+        },
+      );
+
+  Future<PlayTranscription> transcribeAudio(Uint8List wavBytes) =>
+      _client.post<PlayTranscription>(
+        '/stt',
+        body: FormData.fromMap(<String, Object>{
+          'audio': MultipartFile.fromBytes(
+            wavBytes,
+            filename: 'child-speech.wav',
+            contentType: DioMediaType('audio', 'wav'),
+          ),
+        }),
+        parse: (Object? data) {
+          if (data is Map<String, dynamic>) {
+            final String? text = data['text'] as String?;
+            if (text != null && text.trim().isNotEmpty) {
+              return PlayTranscription(
+                text: text.trim(),
+                confidence: (data['confidence'] as num?)?.toDouble(),
+                lowConfidence: data['lowConfidence'] as bool? ?? false,
+              );
+            }
+          }
+          throw const ParseException('음성을 알아듣지 못했어요. 다시 말해 주세요.');
+        },
+      );
+
+  Future<PlaySpeechAudio> synthesizeSpeech({
+    required String text,
+    required String characterName,
+  }) => _client.post<PlaySpeechAudio>(
+    '/tts',
+    body: <String, Object?>{'text': text, 'characterName': characterName},
+    parse: (Object? data) {
+      if (data is Map<String, dynamic>) {
+        final String? audioUrl = data['audioUrl'] as String?;
+        if (audioUrl != null && audioUrl.trim().isNotEmpty) {
+          return PlaySpeechAudio(audioUrl: audioUrl.trim());
+        }
+      }
+      throw const ParseException('음성 합성 응답 형식이 올바르지 않습니다.');
+    },
+  );
+
+  Future<PlayTurnResult> submitUtterance(
+    String sessionId, {
+    required String text,
+    String? missionId,
+    String? sttRawText,
+    double? sttConfidence,
+    int sttRetryCount = 0,
+  }) => _client.post<PlayTurnResult>(
+    '/sessions/$sessionId/utterances',
+    body: <String, Object?>{
+      'text': text,
+      'sttRawText': sttRawText ?? text,
+      'sttConfidence': sttConfidence,
+      'sttRetryCount': sttRetryCount,
+      'missionId': missionId,
+    },
+    parse: (Object? data) {
+      if (data is Map<String, dynamic>) {
+        return PlaySessionDto.fromUtteranceJson(data);
+      }
+      throw const ParseException('대화 응답 형식이 올바르지 않습니다.');
+    },
+  );
 }
