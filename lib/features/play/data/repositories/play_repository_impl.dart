@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failure.dart';
 import '../../domain/entities/play_session.dart';
@@ -16,6 +18,45 @@ class PlayRepositoryImpl implements PlayRepository {
   @override
   Future<PlaySessionSnapshot> completeStoryScene(String sessionId) =>
       _guard(() => _remote.completeStoryScene(sessionId));
+
+  @override
+  Future<PlayOpeningMessage> openCurrentScene(String sessionId) =>
+      _guard(() => _remote.openCurrentScene(sessionId));
+
+  @override
+  Future<PlayMission?> currentMission(String sessionId) =>
+      _guard(() => _remote.currentMission(sessionId));
+
+  @override
+  Future<PlayTranscription> transcribeAudio(Uint8List wavBytes) =>
+      _guard(() => _remote.transcribeAudio(wavBytes));
+
+  @override
+  Future<PlaySpeechAudio> synthesizeSpeech({
+    required String text,
+    required String characterName,
+  }) => _guard(
+    () => _remote.synthesizeSpeech(text: text, characterName: characterName),
+  );
+
+  @override
+  Future<PlayTurnResult> submitUtterance(
+    String sessionId, {
+    required String text,
+    String? missionId,
+    String? sttRawText,
+    double? sttConfidence,
+    int sttRetryCount = 0,
+  }) => _guard(
+    () => _remote.submitUtterance(
+      sessionId,
+      text: text,
+      missionId: missionId,
+      sttRawText: sttRawText,
+      sttConfidence: sttConfidence,
+      sttRetryCount: sttRetryCount,
+    ),
+  );
 
   Future<T> _guard<T>(Future<T> Function() action) async {
     try {
