@@ -11,20 +11,21 @@ abstract interface class StoryAudioPlayer {
 }
 
 class DeviceStoryAudioPlayer implements StoryAudioPlayer {
-  DeviceStoryAudioPlayer() : _player = AudioPlayer();
+  DeviceStoryAudioPlayer();
 
-  final AudioPlayer _player;
+  AudioPlayer? _player;
+  AudioPlayer get _devicePlayer => _player ??= AudioPlayer();
 
   @override
   Future<void> playUrl(String url) async {
-    await _player.stop();
+    await _devicePlayer.stop();
     final Completer<void> completer = Completer<void>();
     late final StreamSubscription<void> subscription;
-    subscription = _player.onPlayerComplete.listen((_) {
+    subscription = _devicePlayer.onPlayerComplete.listen((_) {
       if (!completer.isCompleted) completer.complete();
       unawaited(subscription.cancel());
     });
-    await _player.play(UrlSource(url));
+    await _devicePlayer.play(UrlSource(url));
     await completer.future.timeout(
       const Duration(seconds: 45),
       onTimeout: () => unawaited(subscription.cancel()),
@@ -32,8 +33,13 @@ class DeviceStoryAudioPlayer implements StoryAudioPlayer {
   }
 
   @override
-  Future<void> stop() => _player.stop();
+  Future<void> stop() async {
+    await _player?.stop();
+  }
 
   @override
-  Future<void> dispose() => _player.dispose();
+  Future<void> dispose() async {
+    await _player?.dispose();
+    _player = null;
+  }
 }
