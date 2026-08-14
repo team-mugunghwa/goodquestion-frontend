@@ -84,6 +84,12 @@ flutter:
     # 이야기 표지 원본(세로 2:3). 파일이 없으면 코드 표지로 폴백합니다.
     - assets/images/covers/
     - assets/images/dialogue/
+    # 대화 장면 캐릭터 상태 에셋. 매니페스트는 banggui/states.json.
+    - assets/images/dialogue/banggui/
+    - assets/images/dialogue/banggui/scene_03/
+    - assets/images/dialogue/banggui/scene_05/
+    - assets/images/dialogue/banggui/scene_07/
+    - assets/images/dialogue/banggui/scene_09/
     - assets/images/missions/
     - assets/icons/
 
