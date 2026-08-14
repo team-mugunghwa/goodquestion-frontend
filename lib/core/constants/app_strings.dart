@@ -145,12 +145,14 @@ abstract final class RecapStrings {
   static String slotFilled(int order, String title) => '$order번째 자리, $title';
 
   // ── 2단계 다시 말하기 ──
-  static const String retellGuide = '그림을 보면서 이야기를 들려줄래?';
+  /// 낱말이 과제의 일부임이 첫 문장에서 드러나야 합니다. "그림을 보면서"로만
+  /// 시작하면 낱말은 있어도 그만인 참고자료가 됩니다.
+  ///
+  /// 그래도 **강요는 하지 않습니다** — 낱말을 다 쓰지 않아도 완료할 수 있습니다.
+  /// (`docs/DESIGN_SYSTEM.md` — "아이 화면에 실패는 없다")
+  static const String retellGuide = '그림 아래 낱말을 넣어서 들려줄래?';
   static const String retellListening = '듣고 있어. 천천히 말해도 괜찮아.';
   static const String retellSpoken = '잘했어! 다 말했으면 알려 줘.';
-
-  /// 낱말 칩 앞의 라벨. 별가루가 아니므로 노란색을 쓰지 않습니다.
-  static const String keywords = '써 볼 낱말';
 
   static const String speak = '말하기';
   static const String stopSpeaking = '멈추기';
@@ -162,6 +164,14 @@ abstract final class RecapStrings {
   static const String saving = '저장 중';
 
   static String sceneOrder(int order, String title) => '$order번째 장면, $title';
+
+  /// 낱말이 붙은 장면. 장면과 낱말을 **한 덩어리**로 읽어 줍니다 — 따로 읽으면
+  /// 화면에서 붙여 놓은 뜻("이 장면을 말할 땐 이 말을 쓴다")이 사라집니다.
+  static String sceneOrderWithKeyword(
+    int order,
+    String title,
+    String keyword,
+  ) => '$order번째 장면, $title, 낱말 $keyword';
 
   // ── 완료 ──
   static const String completed = '이야기를 멋지게 들려줬어!';
