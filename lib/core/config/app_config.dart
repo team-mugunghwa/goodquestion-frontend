@@ -27,6 +27,19 @@ abstract final class AppConfig {
     defaultValue: false,
   );
 
+  /// 백엔드 없이 앱의 화면 흐름만 둘러보는 개발 옵션입니다.
+  /// 로그인된 것처럼 라우팅을 통과시키고 Repository 를 전부 목업으로
+  /// 바꿔치기합니다. `flutter run --dart-define=DEMO_MODE=true` 로 켭니다.
+  ///
+  /// **릴리스 빌드에서는 `--dart-define` 을 줘도 켜지지 않습니다.**
+  /// 이 플래그가 켜진 채 배포되면 인증 없이 아무나 들어오는 앱이 됩니다.
+  /// "빌드 명령에 안 붙이면 된다"는 규율에 맡기지 않고 `kReleaseMode` 로
+  /// 못을 박아 둡니다. 둘 다 컴파일 타임 상수라 릴리스에서는 이 값이
+  /// `false` 로 고정되고, 아래 목업·가드 우회 코드는 트리 셰이킹으로
+  /// 번들에서 통째로 빠집니다.
+  static const bool demoMode =
+      !kReleaseMode && bool.fromEnvironment('DEMO_MODE', defaultValue: false);
+
   /// 로컬 백엔드(`localhost:8080`)를 가리키는 기본 주소.
   ///
   /// Android 에뮬레이터에서 `localhost` 는 **에뮬레이터 자신**을 가리킵니다.

@@ -10,13 +10,16 @@ import '../../features/auth/data/datasources/oauth_code_provider.dart';
 import '../../features/auth/data/repositories/auth_repository_impl.dart';
 import '../../features/auth/domain/repositories/auth_repository.dart';
 import '../../features/auth/domain/usecases/auth_use_cases.dart';
+import '../../features/home/data/datasources/home_local_data_source.dart';
 import '../../features/home/data/datasources/home_remote_data_source.dart';
 import '../../features/home/data/repositories/home_repository_impl.dart';
+import '../../features/home/data/repositories/home_repository_mock.dart';
 import '../../features/home/domain/repositories/home_repository.dart';
 import '../../features/home/domain/usecases/get_home_summary_use_case.dart';
 import '../../features/mypage/data/datasources/child_profile_remote_data_source.dart';
 import '../../features/mypage/data/datasources/my_page_local_data_source.dart';
 import '../../features/mypage/data/datasources/settings_remote_data_source.dart';
+import '../../features/mypage/data/repositories/child_profile_repository_mock.dart';
 import '../../features/mypage/data/repositories/my_page_repository_impl.dart';
 import '../../features/mypage/data/repositories/my_page_repository_mock.dart';
 import '../../features/mypage/data/repositories/settings_repository_impl.dart';
@@ -27,12 +30,13 @@ import '../../features/play/data/datasources/play_remote_data_source.dart';
 import '../../features/play/data/repositories/play_repository_impl.dart';
 import '../../features/play/domain/repositories/play_repository.dart';
 import '../../features/question/data/datasources/question_remote_data_source.dart';
-import '../../features/question/data/repositories/question_repository_impl.dart';
 import '../../features/question/data/repositories/question_repository_mock.dart';
 import '../../features/question/domain/repositories/question_repository.dart';
 import '../../features/question/domain/usecases/get_questions_use_case.dart';
+import '../../features/story/data/datasources/story_local_data_source.dart';
 import '../../features/story/data/datasources/story_remote_data_source.dart';
 import '../../features/story/data/repositories/story_repository_impl.dart';
+import '../../features/story/data/repositories/story_repository_mock.dart';
 import '../../features/story/domain/repositories/story_repository.dart';
 import '../../features/story/domain/usecases/get_story_catalog_use_case.dart';
 import '../../features/story/domain/usecases/get_story_detail_use_case.dart';
@@ -42,6 +46,7 @@ import '../../features/word/data/repositories/word_repository_mock.dart';
 import '../../features/word/domain/repositories/word_repository.dart';
 import '../../features/word/domain/usecases/get_word_book_use_case.dart';
 import '../../features/word/domain/usecases/toggle_word_like_use_case.dart';
+import '../config/app_config.dart';
 import '../network/dio_client.dart';
 import '../router/app_router.dart';
 import '../router/app_routes.dart';
@@ -56,12 +61,6 @@ import '../router/app_routes.dart';
 /// 수정 전에 팀 채널에 알리세요. → `docs/CONVENTIONS.md`
 final GetIt getIt = GetIt.instance;
 
-/// 백엔드가 준비되기 전까지 목업 Repository 를 씁니다.
-///
-/// 서버 연동이 시작되면 `false` 로 바꾸기만 하면 됩니다.
-/// 화면·ViewModel 코드는 전혀 손대지 않습니다.
-const bool _useMockRepository = true;
-
 Future<void> configureDependencies() async {
   // ---- core ----
   getIt
@@ -74,15 +73,13 @@ Future<void> configureDependencies() async {
     );
 
   // ---- question ----
+  // 이 기능은 서버 연동 전이라 항상 Mock 을 씁니다. `AppConfig.demoMode` 와는
+  // 무관합니다 — demoMode 를 꺼도 여기는 그대로 Mock 입니다.
   getIt
     ..registerLazySingleton<QuestionRemoteDataSource>(
       () => QuestionRemoteDataSource(getIt<DioClient>()),
     )
-    ..registerLazySingleton<QuestionRepository>(
-      () => _useMockRepository
-          ? QuestionRepositoryMock()
-          : QuestionRepositoryImpl(getIt<QuestionRemoteDataSource>()),
-    )
+    ..registerLazySingleton<QuestionRepository>(QuestionRepositoryMock.new)
     ..registerLazySingleton<GetQuestionsUseCase>(
       () => GetQuestionsUseCase(getIt<QuestionRepository>()),
     );
@@ -127,36 +124,44 @@ Future<void> configureDependencies() async {
     );
 
   // ---- home ----
-  // `HomeRepositoryMock`/`HomeLocalDataSource`(+ `home.json`)는 테스트용으로
-  // 남겨 두고 여기서는 참조하지 않습니다. `ChildProfileRepository` 는 아래
-  // mypage 블록에서 등록되지만, lazySingleton 은 첫 접근 시점에 팩토리를
-  // 실행하므로 등록 순서와 무관합니다.
+  // `ChildProfileRepository` 는 아래 mypage 블록에서 등록되지만, lazySingleton
+  // 은 첫 접근 시점에 팩토리를 실행하므로 등록 순서와 무관합니다.
+  //
+  // demoMode 에서는 `HomeRepositoryMock`(+ `home.json`)을 씁니다.
+  // `tokenProvider` 를 안 넘기는 이유: 데모에는 진짜 토큰이 없으니, 토큰을
+  // 확인하고 아이 없이 보여 주는 대신 곧장 mypage 블록의 데모 아이를 씁니다.
   getIt
     ..registerLazySingleton<HomeRemoteDataSource>(
       () => HomeRemoteDataSource(getIt<DioClient>()),
     )
     ..registerLazySingleton<HomeRepository>(
-      () => HomeRepositoryImpl(
-        getIt<HomeRemoteDataSource>(),
-        getIt<ChildProfileRepository>(),
-      ),
+      () => AppConfig.demoMode
+          ? HomeRepositoryMock(
+              const HomeLocalDataSource(),
+              childProfileRepository: getIt<ChildProfileRepository>(),
+            )
+          : HomeRepositoryImpl(
+              getIt<HomeRemoteDataSource>(),
+              getIt<ChildProfileRepository>(),
+            ),
     )
     ..registerLazySingleton<GetHomeSummaryUseCase>(
       () => GetHomeSummaryUseCase(getIt<HomeRepository>()),
     );
 
   // ---- story ----
-  // `StoryRepositoryMock`/`StoryLocalDataSource`(+ 더미 JSON)도 테스트용으로
-  // 남겨 두고 여기서는 참조하지 않습니다.
+  // demoMode 에서는 `StoryRepositoryMock`(+ 더미 JSON)을 씁니다.
   getIt
     ..registerLazySingleton<StoryRemoteDataSource>(
       () => StoryRemoteDataSource(getIt<DioClient>()),
     )
     ..registerLazySingleton<StoryRepository>(
-      () => StoryRepositoryImpl(
-        getIt<StoryRemoteDataSource>(),
-        getIt<ChildProfileRepository>(),
-      ),
+      () => AppConfig.demoMode
+          ? const StoryRepositoryMock(StoryLocalDataSource())
+          : StoryRepositoryImpl(
+              getIt<StoryRemoteDataSource>(),
+              getIt<ChildProfileRepository>(),
+            ),
     )
     ..registerLazySingleton<GetStoryCatalogUseCase>(
       () => GetStoryCatalogUseCase(getIt<StoryRepository>()),
@@ -199,29 +204,45 @@ Future<void> configureDependencies() async {
   // 쪼개도 화면 코드는 그대로입니다.
   // 세 인터페이스가 **같은 인스턴스**를 가리켜야 합니다. 각각 새로 만들면
   // 리포트를 읽어도 마이페이지의 빨간 점이 안 사라집니다.
+  //
+  // `ChildProfileRepository` 는 서버 연동 때 새로 생긴 인터페이스라
+  // `MyPageRepositoryMock` 은 구현하지 않습니다. demoMode 에서는
+  // `ChildProfileRepositoryMock` 이 따로 그 역할을 맡습니다.
   final MyPageRepositoryMock myPageMock = MyPageRepositoryMock(
     const MyPageLocalDataSource(),
   );
-  final ChildProfileRemoteDataSource childProfileRemote =
-      ChildProfileRemoteDataSource(getIt<DioClient>());
-  final MyPageRepositoryImpl myPageRepository = MyPageRepositoryImpl(
-    childProfileRemote,
-  );
-  final SettingsRemoteDataSource settingsRemote = SettingsRemoteDataSource(
-    getIt<DioClient>(),
-  );
-  final SettingsRepositoryImpl settingsRepository = SettingsRepositoryImpl(
-    const MyPageLocalDataSource(),
-    settingsRemote,
-    myPageRepository,
-  );
+  final MyPageRepository myPageRepository;
+  final ChildProfileRepository childProfileRepository;
+  final SettingsRepository settingsRepository;
+  if (AppConfig.demoMode) {
+    myPageRepository = myPageMock;
+    childProfileRepository = ChildProfileRepositoryMock();
+    settingsRepository = myPageMock;
+  } else {
+    final ChildProfileRemoteDataSource childProfileRemote =
+        ChildProfileRemoteDataSource(getIt<DioClient>());
+    final MyPageRepositoryImpl myPageImpl = MyPageRepositoryImpl(
+      childProfileRemote,
+    );
+    final SettingsRemoteDataSource settingsRemote = SettingsRemoteDataSource(
+      getIt<DioClient>(),
+    );
+    myPageRepository = myPageImpl;
+    childProfileRepository = myPageImpl;
+    settingsRepository = SettingsRepositoryImpl(
+      const MyPageLocalDataSource(),
+      settingsRemote,
+      myPageImpl,
+    );
+    getIt
+      ..registerSingleton<ChildProfileRemoteDataSource>(childProfileRemote)
+      ..registerSingleton<SettingsRemoteDataSource>(settingsRemote);
+  }
   getIt
     ..registerLazySingleton<GuardianGate>(GuardianGate.new)
-    ..registerSingleton<ChildProfileRemoteDataSource>(childProfileRemote)
     ..registerSingleton<MyPageRepository>(myPageRepository)
-    ..registerSingleton<ChildProfileRepository>(myPageRepository)
+    ..registerSingleton<ChildProfileRepository>(childProfileRepository)
     ..registerSingleton<ReportRepository>(myPageMock)
-    ..registerSingleton<SettingsRemoteDataSource>(settingsRemote)
     ..registerSingleton<SettingsRepository>(settingsRepository)
     ..registerLazySingleton<GetMyPageSummaryUseCase>(
       () => GetMyPageSummaryUseCase(getIt<MyPageRepository>()),
@@ -266,6 +287,9 @@ Future<void> configureDependencies() async {
 bool _redirectingToLogin = false;
 
 void _handleUnauthorized() {
+  // 데모 모드는 토큰 없이 로그인된 것처럼 돌아갑니다. 로그아웃·리다이렉트를
+  // 태우면 화면 흐름을 보다가 느닷없이 로그인 화면으로 튕겨 나갑니다.
+  if (AppConfig.demoMode) return;
   final String currentPath =
       appRouter.routerDelegate.currentConfiguration.uri.path;
   if (currentPath == AppRoutes.login || currentPath == AppRoutes.auth) return;

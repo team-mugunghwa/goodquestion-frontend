@@ -17,6 +17,7 @@ import '../../features/play/presentation/views/play_view.dart';
 import '../../features/story/presentation/views/story_detail_view.dart';
 import '../../features/story/presentation/views/story_list_view.dart';
 import '../../features/word/presentation/views/word_list_view.dart';
+import '../config/app_config.dart';
 import '../di/injector.dart';
 import '../widgets/route_placeholder_view.dart';
 import 'app_routes.dart';
@@ -47,6 +48,12 @@ GoRouter createAppRouter({
   return GoRouter(
     initialLocation: initialLocation,
     redirect: (BuildContext context, GoRouterState state) async {
+      // 데모 모드는 토큰 없이 모든 화면을 둘러보는 게 목적입니다. 로그인된
+      // 것처럼 가드를 통과시키되, `/auth`·`/login` 도 직접 주소로 들어오면
+      // 그대로 보여야 하므로(로그인 UI 확인용) 아예 리다이렉트를 하지
+      // 않습니다.
+      if (AppConfig.demoMode) return null;
+
       final bool signedIn = (await readToken())?.isNotEmpty ?? false;
       final String location = state.matchedLocation;
       final bool isRecovery =
