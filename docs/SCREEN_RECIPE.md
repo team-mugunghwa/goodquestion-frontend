@@ -54,6 +54,7 @@ test/features/<feature>/...                      # 아래 4장
 | 화면 바탕 | `AppCanvas.day / .night / .guardian` |
 | 폭에 따른 여백·글자 | `ScreenMetrics.of(constraints.maxWidth)` |
 | 누르는 카드·타일 | `PressScale` (포커스 링·시맨틱스 포함) |
+| 말풍선 (캐릭터 대사·아이 발화) | `KidSpeechBubble` |
 | 아이 화면 주 버튼 | `KidPrimaryButton` (88 · pill · 아이콘+한 단어) |
 | 아이 화면 뒤로가기 | `KidBackButton` |
 | 이야기 카드 | `StoryCard` (홈 추천 · 목록 그리드 공용) |
