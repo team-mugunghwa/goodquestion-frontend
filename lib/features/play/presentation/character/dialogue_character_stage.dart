@@ -103,7 +103,11 @@ class _DialogueCharacterStageState extends State<DialogueCharacterStage>
     final double breathPhase = math.sin(t * 2 * math.pi);
     switch (activity) {
       case DialogueActivity.idle:
-        return _Motion(breath: 1 + breathPhase * .004, lift: breathPhase * -1.2, tilt: 0);
+        return _Motion(
+          breath: 1 + breathPhase * .004,
+          lift: breathPhase * -1.2,
+          tilt: 0,
+        );
       case DialogueActivity.listening:
         // 듣는 동안에는 느린 호흡에 아주 작은 정면 끄덕임을 더한다.
         final double nod = math.sin(t * 4 * math.pi);

@@ -7,7 +7,11 @@ import 'package:flutter/services.dart' show rootBundle;
 /// 원본은 `assets/images/dialogue/banggui/states.json`이고, 그 파일 상단 주석이 계약을 적어 둔다.
 /// 여기에는 **에셋 매핑만** 담긴다 - 대사·충족 기준·미션·턴 수는 서버 응답에서 온다.
 class DialogueCharacterManifest {
-  const DialogueCharacterManifest._(this._scenes, this._confusedValidity, this.closingViaHold);
+  const DialogueCharacterManifest._(
+    this._scenes,
+    this._confusedValidity,
+    this.closingViaHold,
+  );
 
   static const String assetPath = 'assets/images/dialogue/banggui/states.json';
 
@@ -34,15 +38,18 @@ class DialogueCharacterManifest {
         (json['scenes'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
     return DialogueCharacterManifest._(
       scenes.map(
-        (String sceneId, dynamic value) => MapEntry<String, DialogueSceneStates>(
-          sceneId,
-          DialogueSceneStates._fromJson(value as Map<String, dynamic>),
-        ),
+        (String sceneId, dynamic value) =>
+            MapEntry<String, DialogueSceneStates>(
+              sceneId,
+              DialogueSceneStates._fromJson(value as Map<String, dynamic>),
+            ),
       ),
       ((json['confusedValidity'] as List<dynamic>?) ?? const <dynamic>[])
           .map((dynamic e) => e as String)
           .toSet(),
-      Duration(milliseconds: (json['closingViaHoldMs'] as num?)?.toInt() ?? 1200),
+      Duration(
+        milliseconds: (json['closingViaHoldMs'] as num?)?.toInt() ?? 1200,
+      ),
     );
   }
 
@@ -92,7 +99,8 @@ class DialogueSceneStates {
     for (final MapEntry<String, dynamic> entry in rawStates.entries) {
       final Map<String, dynamic> state = entry.value as Map<String, dynamic>;
       assets[entry.key] = state['asset'] as String;
-      for (final dynamic element in (state['elements'] as List<dynamic>?) ?? const <dynamic>[]) {
+      for (final dynamic element
+          in (state['elements'] as List<dynamic>?) ?? const <dynamic>[]) {
         elementToState[element as String] = entry.key;
       }
     }
@@ -108,9 +116,10 @@ class DialogueSceneStates {
       closingVia: json['closingVia'] as String?,
       confusedState: json['confusedState'] as String?,
       states: assets,
-      statePriority: ((json['statePriority'] as List<dynamic>?) ?? const <dynamic>[])
-          .map((dynamic e) => e as String)
-          .toList(growable: false),
+      statePriority:
+          ((json['statePriority'] as List<dynamic>?) ?? const <dynamic>[])
+              .map((dynamic e) => e as String)
+              .toList(growable: false),
       elementToState: elementToState,
     );
   }
