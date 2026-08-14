@@ -92,6 +92,9 @@ flutter:
     - assets/images/dialogue/banggui/scene_07/
     - assets/images/dialogue/banggui/scene_09/
     - assets/images/missions/
+    # 말하기 후 활동(순서 맞추기)의 장면 카드. 글씨 없는 그림만 씁니다.
+    # 원본 PNG 11MB(1920x1080) -> WebP 400KB(960x540). 원본은 저장소에 넣지 않는다.
+    - assets/images/recap/banggui/
     - assets/icons/
 
     # 화면별 더미 JSON. 서버가 나오면 화면 코드가 아니라 이 폴더가 사라집니다.
