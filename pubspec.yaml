@@ -84,7 +84,8 @@ flutter:
     # 이야기 표지 원본(세로 2:3). 파일이 없으면 코드 표지로 폴백합니다.
     - assets/images/covers/
     - assets/images/dialogue/
-    # 대화 장면 캐릭터 상태 에셋. 매니페스트는 banggui/states.json.
+    # 대화 장면 캐릭터 상태 에셋(WebP). 매니페스트는 banggui/states.json.
+    # 원본 PNG 39MB -> WebP 3.4MB. 원본은 저장소에 넣지 않는다.
     - assets/images/dialogue/banggui/
     - assets/images/dialogue/banggui/scene_03/
     - assets/images/dialogue/banggui/scene_05/

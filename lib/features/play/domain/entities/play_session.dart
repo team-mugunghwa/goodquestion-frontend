@@ -111,6 +111,53 @@ class PlayMission {
   final List<PlayMissionCard> cards;
 }
 
+enum PlayResponseMode { normal, guided, closing }
+
+/// 서버 `AnalysisResponse`. 캐릭터 표정·태도 연출의 유일한 트리거다 —
+/// 프런트가 발화 내용을 자체 해석하지 않는다(이야기 전개 가이드 3.0절 4번).
+class PlayAnalysis {
+  const PlayAnalysis({
+    this.childIntent,
+    this.mainPoint,
+    this.detectedElements = const <String>[],
+    this.utteranceValidity,
+  });
+
+  final String? childIntent;
+  final String? mainPoint;
+
+  /// 이번 발화에서 확인된 사고 요소(`DetectedElement.type`). 근거 문구는 연출에 쓰지 않아 버린다.
+  final List<String> detectedElements;
+
+  /// `VALID` / `SHORT` / `UNCLEAR` / `OFF_TOPIC` / `PLAYFUL`
+  final String? utteranceValidity;
+}
+
+/// 서버 `ProgressResponse`.
+class PlayProgress {
+  const PlayProgress({
+    this.mode,
+    this.accumulatedElements = const <String>[],
+    this.missingElements = const <String>[],
+    this.turnCount = 0,
+    this.maxTurns = 0,
+    this.guidanceTarget,
+  });
+
+  final PlayResponseMode? mode;
+
+  /// 현재 장면에서 지금까지 채운 요소. **이번 턴이 반영된 뒤의 값**이다.
+  final List<String> accumulatedElements;
+  final List<String> missingElements;
+  final int turnCount;
+  final int maxTurns;
+
+  /// GUIDED이거나 약한 유도(soft-cue) 턴일 때만 값이 있다.
+  final String? guidanceTarget;
+
+  bool get isClosing => mode == PlayResponseMode.closing;
+}
+
 class PlayTurnResult {
   const PlayTurnResult({
     required this.characterText,
@@ -119,6 +166,8 @@ class PlayTurnResult {
     required this.sceneTransition,
     this.closingReactionText,
     this.closingReactionAudioUrl,
+    this.analysis,
+    this.progress,
   });
 
   final String? characterText;
@@ -127,6 +176,10 @@ class PlayTurnResult {
   final PlaySceneTransition? sceneTransition;
   final String? closingReactionText;
   final String? closingReactionAudioUrl;
+
+  /// 표정 연출 입력. 서버가 항상 내려주지만, 안전 개입 턴 등에서 비어 올 수 있어 nullable로 둔다.
+  final PlayAnalysis? analysis;
+  final PlayProgress? progress;
 
   bool get hasSceneTransition => sceneTransition != null;
 }

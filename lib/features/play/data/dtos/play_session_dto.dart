@@ -63,7 +63,44 @@ class PlaySessionDto {
         sceneTransition: _transition(json['sceneTransition']),
         closingReactionText: _messageText(json['closingReaction']),
         closingReactionAudioUrl: _messageAudioUrl(json['closingReaction']),
+        analysis: _analysis(json['analysis']),
+        progress: _progress(json['progress']),
       );
+
+  static PlayAnalysis? _analysis(Object? value) {
+    if (value is! Map<String, dynamic>) return null;
+    return PlayAnalysis(
+      childIntent: value['childIntent'] as String?,
+      mainPoint: value['mainPoint'] as String?,
+      detectedElements: (value['detectedElements'] as List<dynamic>? ?? const <dynamic>[])
+          .whereType<Map<String, dynamic>>()
+          .map((item) => item['type'] as String?)
+          .whereType<String>()
+          .toList(growable: false),
+      utteranceValidity: value['utteranceValidity'] as String?,
+    );
+  }
+
+  static PlayProgress? _progress(Object? value) {
+    if (value is! Map<String, dynamic>) return null;
+    return PlayProgress(
+      mode: switch (value['mode']) {
+        'NORMAL' => PlayResponseMode.normal,
+        'GUIDED' => PlayResponseMode.guided,
+        'CLOSING' => PlayResponseMode.closing,
+        _ => null,
+      },
+      accumulatedElements: _elementNames(value['accumulatedElements']),
+      missingElements: _elementNames(value['missingElements']),
+      turnCount: (value['turnCount'] as num?)?.toInt() ?? 0,
+      maxTurns: (value['maxTurns'] as num?)?.toInt() ?? 0,
+      guidanceTarget: value['guidanceTarget'] as String?,
+    );
+  }
+
+  static List<String> _elementNames(Object? value) => value is List
+      ? value.whereType<String>().toList(growable: false)
+      : const <String>[];
 
   static List<PlayMessage> _messages(Object? value) => value is List
       ? value
