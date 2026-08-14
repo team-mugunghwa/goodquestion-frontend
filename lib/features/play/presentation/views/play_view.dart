@@ -11,6 +11,9 @@ import '../../../../core/router/app_routes.dart';
 import '../../../../core/widgets/app_state_views.dart';
 import '../../domain/entities/play_session.dart';
 import '../../domain/repositories/play_repository.dart';
+import '../character/dialogue_character_manifest.dart';
+import '../character/dialogue_character_stage.dart';
+import '../character/dialogue_character_state_machine.dart';
 import '../voice/mission_voice_recorder.dart';
 import '../voice/story_audio_player.dart';
 import '../widgets/mission_overlay.dart';
@@ -78,20 +81,81 @@ class _PlayPageState extends State<PlayPage> {
   bool _lastSttLowConfidence = false;
   String? _retainedStoryImageUrl;
   String? _resultImageUrl;
+  DialogueCharacterManifest? _characterManifest;
+  DialogueCharacterStateMachine? _character;
 
   bool get _isListening => _phase == _DialoguePhase.listening;
+
+  /// 캐릭터가 지금 무엇을 하고 있는지. 표정과 별개로 모션만 바꾼다.
+  DialogueActivity get _activity {
+    if (_phase == _DialoguePhase.paused) return DialogueActivity.idle;
+    if (_submittingUtterance || _transcribingVoice) return DialogueActivity.thinking;
+    if (_phase == _DialoguePhase.listening) return DialogueActivity.listening;
+    return DialogueActivity.speaking;
+  }
 
   @override
   void initState() {
     super.initState();
     _voiceRecorder = widget.voiceRecorder ?? DeviceMissionVoiceRecorder();
     _audioPlayer = widget.audioPlayer ?? DeviceStoryAudioPlayer();
+    unawaited(_loadCharacterManifest());
     if (widget.repository == null) {
       _playQuestion();
     } else {
       unawaited(_loadSession());
     }
   }
+
+  /// 에셋 매니페스트는 없어도 화면이 죽지 않아야 한다 - 실패하면 기존 배경 한 장짜리 화면으로
+  /// 굴러간다. 그래서 로드 실패를 _loadError로 올리지 않는다.
+  Future<void> _loadCharacterManifest() async {
+    try {
+      final DialogueCharacterManifest manifest = await DialogueCharacterManifest.load();
+      if (!mounted) return;
+      setState(() => _characterManifest = manifest);
+      _bindCharacterScene();
+    } on Object {
+      // 무시한다.
+    }
+  }
+
+  /// 현재 대화 장면에 맞는 상태머신을 붙인다. 장면이 그대로면 진행 중인 표정을 유지한다.
+  void _bindCharacterScene() {
+    final DialogueCharacterManifest? manifest = _characterManifest;
+    final PlayScene? scene = _snapshot?.currentScene;
+    if (manifest == null || scene == null || scene.sceneType != PlaySceneType.dialogue) {
+      if (_character != null) setState(() => _character = null);
+      return;
+    }
+    final DialogueSceneStates? states = manifest.sceneFor(
+      sceneId: scene.sceneId,
+      sceneOrder: scene.sceneOrder,
+    );
+    if (states == null) {
+      if (_character != null) setState(() => _character = null);
+      return;
+    }
+    if (_character?.scene == states) return;
+
+    final DialogueCharacterStateMachine machine =
+        DialogueCharacterStateMachine(states, manifest);
+    // 이어하기로 들어오면 앞선 턴의 누적은 "새로 충족"이 아니다.
+    machine.primeAccumulated(_accumulatedFromMessages());
+    setState(() => _character = machine);
+
+    // 표정이 늦게 뜨면 턴이 끊긴 것처럼 보인다. 장면에 들어올 때 한 번에 캐시한다.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      for (final String asset in states.allAssets) {
+        unawaited(precacheImage(AssetImage(asset), context));
+      }
+    });
+  }
+
+  /// 이어하기 복원용. 서버가 누적 요소를 스냅샷으로 주지 않으므로 지금은 빈 값이고,
+  /// 첫 턴 응답의 progress로 맞춰진다.
+  Iterable<String> _accumulatedFromMessages() => const <String>[];
 
   @override
   void dispose() {
@@ -141,6 +205,7 @@ class _PlayPageState extends State<PlayPage> {
 
   void _activateSnapshot(PlaySessionSnapshot snapshot) {
     _storyTimer?.cancel();
+    _bindCharacterScene();
     if (snapshot.phase == PlayPhase.postActivity) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) context.go(AppRoutes.playRecapOf(widget.sessionId));
@@ -318,7 +383,32 @@ class _PlayPageState extends State<PlayPage> {
     }
   }
 
+  /// 턴 결과로 표정을 옮긴다. 캐릭터 대사를 재생하기 **전에** 부른다 - 아이 말에 대한 반응이
+  /// 대사보다 늦게 오면 무엇에 반응한 것인지 읽히지 않는다.
+  Future<void> _applyCharacterState(PlayTurnResult result) async {
+    final DialogueCharacterStateMachine? character = _character;
+    if (character == null) return;
+    final DialogueStateTransition? transition = character.apply(result);
+    if (transition == null) return;
+
+    final String? via = transition.via;
+    if (via != null) {
+      // 다 채운 턴은 곧바로 마무리 표정으로 넘어가지 않는다. 확정안이 "잠시 보여준 뒤 전환"으로
+      // 정해 뒀다 - 아이의 마지막 말에 반응한 얼굴을 한 번 보여주고 닫는다.
+      character.moveTo(via);
+      setState(() {});
+      await Future<void>.delayed(
+        _characterManifest?.closingViaHold ?? const Duration(milliseconds: 1200),
+      );
+      if (!mounted) return;
+      character.moveTo(transition.state);
+    }
+    setState(() {});
+  }
+
   Future<void> _presentTurnResult(PlayTurnResult result) async {
+    await _applyCharacterState(result);
+    if (!mounted) return;
     final String? reaction = result.closingReactionText;
     if (reaction != null && reaction.trim().isNotEmpty) {
       await _playCharacterMessage(
@@ -640,7 +730,10 @@ class _PlayPageState extends State<PlayPage> {
             fit: StackFit.expand,
             children: <Widget>[
               _StoryBackdrop(
+                // 제작한 장면 배경이 있으면 그것이 우선이다. 서버 imageUrl은 배경과 캐릭터가
+                // 합쳐진 한 장이라 캐릭터를 따로 얹으면 인물이 둘로 보인다.
                 asset:
+                    _character?.scene.backgroundAsset ??
                     _retainedStoryImageUrl ??
                     dialogueScene?.imageUrl ??
                     widget.backgroundAsset,
@@ -660,6 +753,8 @@ class _PlayPageState extends State<PlayPage> {
                     ),
                     Expanded(
                       child: _DialogueCanvas(
+                        character: _character,
+                        activity: _activity,
                         characterAsset: widget.characterAsset,
                         characterName:
                             dialogueScene?.characterName ??
@@ -1013,6 +1108,8 @@ class _ControlButton extends StatelessWidget {
 
 class _DialogueCanvas extends StatelessWidget {
   const _DialogueCanvas({
+    required this.character,
+    required this.activity,
     required this.characterAsset,
     required this.characterName,
     required this.question,
@@ -1027,6 +1124,9 @@ class _DialogueCanvas extends StatelessWidget {
     required this.lastSttLowConfidence,
   });
 
+  /// 제작한 표정 에셋이 있는 장면에서만 값이 있다. null이면 [characterAsset] 한 장으로 그린다.
+  final DialogueCharacterStateMachine? character;
+  final DialogueActivity activity;
   final String? characterAsset;
   final String characterName;
   final String question;
@@ -1047,7 +1147,21 @@ class _DialogueCanvas extends StatelessWidget {
         return Stack(
           clipBehavior: Clip.none,
           children: <Widget>[
-            if (characterAsset != null && !compact)
+            if (character != null)
+              Positioned(
+                // 제작 캐릭터는 정면 전신이라 화면 가운데를 쓴다. 좌우 말풍선이 인물을 가리지
+                // 않게 폭을 넉넉히 잡고 아래로 붙인다.
+                left: compact ? 0 : constraints.maxWidth * .18,
+                right: compact ? 0 : constraints.maxWidth * .18,
+                top: compact ? 60 : 10,
+                bottom: 0,
+                child: DialogueCharacterStage(
+                  scene: character!.scene,
+                  state: character!.current,
+                  activity: activity,
+                ),
+              )
+            else if (characterAsset != null && !compact)
               Positioned(
                 left: 18,
                 top: 30,
