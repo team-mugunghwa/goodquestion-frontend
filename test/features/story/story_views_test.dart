@@ -34,13 +34,13 @@ class _StubRepository implements StoryRepository {
   }
 
   @override
-  Future<StoryDetail?> getStoryDetail(int storyId) async {
+  Future<StoryDetail?> getStoryDetail(String storyId) async {
     if (error != null) throw error!;
     return detail;
   }
 
   @override
-  Future<int> startSession(int storyId) async => 9000 + storyId;
+  Future<String> startSession(String storyId) async => '9000-$storyId';
 }
 
 const StoryCatalog _catalog = StoryCatalog(
@@ -51,13 +51,13 @@ const StoryCatalog _catalog = StoryCatalog(
   ],
   stories: <StorySummary>[
     StorySummary(
-      storyId: 11,
+      storyId: '11',
       title: '방귀 뀌는 며느리',
       estimatedMinutes: 20,
       topicIds: <String>['folk'],
     ),
     StorySummary(
-      storyId: 21,
+      storyId: '21',
       title: '해와 달이 된 오누이',
       estimatedMinutes: 15,
       topicIds: <String>['folk'],
@@ -66,7 +66,7 @@ const StoryCatalog _catalog = StoryCatalog(
 );
 
 const StoryDetail _detail = StoryDetail(
-  storyId: 11,
+  storyId: '11',
   title: '방귀 뀌는 며느리',
   estimatedMinutes: 20,
   difficulty: '쉬움',
@@ -97,7 +97,7 @@ void main() {
         child: const StoryListView(),
       );
 
-  Widget detailUnder(StoryRepository repository, {int storyId = 11}) =>
+  Widget detailUnder(StoryRepository repository, {String storyId = '11'}) =>
       ChangeNotifierProvider<StoryDetailViewModel>(
         create: (_) => StoryDetailViewModel(
           GetStoryDetailUseCase(repository),
@@ -172,7 +172,7 @@ void main() {
     });
 
     testWidgets('없는 이야기는 목록으로 가는 문을 준다', (WidgetTester tester) async {
-      await pump(tester, detailUnder(_StubRepository(), storyId: 999));
+      await pump(tester, detailUnder(_StubRepository(), storyId: '999'));
 
       expect(find.text(StoryDetailStrings.notFound), findsOneWidget);
       expect(find.text(StoryDetailStrings.goToList), findsOneWidget);

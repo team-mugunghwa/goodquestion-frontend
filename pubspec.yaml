@@ -78,6 +78,9 @@ flutter:
 
   assets:
     - assets/images/
+    # 플러터는 assets/images/ 하위 폴더를 재귀 포함하지 않으므로 명시합니다.
+    # 이야기 표지 원본(세로 2:3). 파일이 없으면 코드 표지로 폴백합니다.
+    - assets/images/covers/
     - assets/icons/
 
     # 화면별 더미 JSON. 서버가 나오면 화면 코드가 아니라 이 폴더가 사라집니다.

@@ -38,9 +38,9 @@ class RecommendedStoriesSection extends StatelessWidget {
         Row(
           children: <Widget>[
             Expanded(
-              child: Text(
-                HomeStrings.recommendedTitle,
-                style: metrics.text(AppTypography.kidTitle),
+              child: _SectionHeading(
+                text: HomeStrings.recommendedTitle,
+                metrics: metrics,
               ),
             ),
             _MoreButton(metrics: metrics, onTap: onMoreTap),
@@ -87,6 +87,37 @@ class RecommendedStoriesSection extends StatelessWidget {
     horizontal: horizontal,
     onTap: () => onStoryTap(story),
   );
+}
+
+/// 섹션 제목. 레퍼런스처럼 **마지막 단어(키워드)만 브랜드 색**으로 강조합니다.
+///
+/// 파스텔은 글자로 못 쓰므로 강조는 대비가 나오는 `brandBlueDeep` 로.
+/// (노랑은 별가루 전용이라 강조에 쓰지 않습니다 — `docs/DESIGN_SYSTEM.md` 3장)
+class _SectionHeading extends StatelessWidget {
+  const _SectionHeading({required this.text, required this.metrics});
+
+  final String text;
+  final ScreenMetrics metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextStyle base = metrics.text(AppTypography.kidTitle);
+    final int split = text.lastIndexOf(' ');
+    final String lead = split < 0 ? '' : text.substring(0, split + 1);
+    final String keyword = split < 0 ? text : text.substring(split + 1);
+    return RichText(
+      text: TextSpan(
+        style: base,
+        children: <TextSpan>[
+          if (lead.isNotEmpty) TextSpan(text: lead),
+          TextSpan(
+            text: keyword,
+            style: base.copyWith(color: AppColors.brandBlueDeep),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _MoreButton extends StatelessWidget {

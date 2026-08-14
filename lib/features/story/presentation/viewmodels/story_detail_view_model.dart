@@ -17,7 +17,7 @@ class StoryDetailViewModel extends BaseViewModel {
 
   final GetStoryDetailUseCase _getStoryDetail;
   final StartStorySessionUseCase _startSession;
-  final int storyId;
+  final String storyId;
 
   StoryDetail? _story;
   bool _starting = false;
@@ -38,7 +38,7 @@ class StoryDetailViewModel extends BaseViewModel {
   ///
   /// **ViewModel 이 화면을 옮기지 않습니다.** 값만 주고, 이동은 View 가 합니다.
   /// (`docs/ARCHITECTURE.md` 4장)
-  Future<int?> start() async {
+  Future<String?> start() async {
     if (_starting || _story == null) return null;
     _starting = true;
     safeNotify();

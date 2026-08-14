@@ -26,11 +26,14 @@ class StoryLocalDataSource {
 
   /// 없는 id 면 `null`. 예외를 던지지 않습니다 —
   /// "잘못된 주소"와 "로드 실패"는 화면이 다르게 그려야 합니다.
-  Future<StoryDetailDto?> fetchStoryDetail(int storyId) async {
+  ///
+  /// `storyId` 는 엔티티와 마찬가지로 String 입니다. 더미 맵의 키도
+  /// 문자열이라 그대로 조회합니다.
+  Future<StoryDetailDto?> fetchStoryDetail(String storyId) async {
     final Map<String, dynamic> all = await _readObject(
       AppAssets.storyDetailsDummy,
     );
-    final Object? entry = all['$storyId'];
+    final Object? entry = all[storyId];
     if (entry is! Map<String, dynamic>) return null;
     return StoryDetailDto.fromJson(entry);
   }

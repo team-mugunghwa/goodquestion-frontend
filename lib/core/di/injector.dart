@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:get_it/get_it.dart';
 
 import '../../features/auth/data/datasources/account_recovery_remote_data_source.dart';
@@ -8,8 +10,8 @@ import '../../features/auth/data/datasources/oauth_code_provider.dart';
 import '../../features/auth/data/repositories/auth_repository_impl.dart';
 import '../../features/auth/domain/repositories/auth_repository.dart';
 import '../../features/auth/domain/usecases/auth_use_cases.dart';
-import '../../features/home/data/datasources/home_local_data_source.dart';
-import '../../features/home/data/repositories/home_repository_mock.dart';
+import '../../features/home/data/datasources/home_remote_data_source.dart';
+import '../../features/home/data/repositories/home_repository_impl.dart';
 import '../../features/home/domain/repositories/home_repository.dart';
 import '../../features/home/domain/usecases/get_home_summary_use_case.dart';
 import '../../features/mypage/data/datasources/child_profile_remote_data_source.dart';
@@ -29,8 +31,8 @@ import '../../features/question/data/repositories/question_repository_impl.dart'
 import '../../features/question/data/repositories/question_repository_mock.dart';
 import '../../features/question/domain/repositories/question_repository.dart';
 import '../../features/question/domain/usecases/get_questions_use_case.dart';
-import '../../features/story/data/datasources/story_local_data_source.dart';
-import '../../features/story/data/repositories/story_repository_mock.dart';
+import '../../features/story/data/datasources/story_remote_data_source.dart';
+import '../../features/story/data/repositories/story_repository_impl.dart';
 import '../../features/story/domain/repositories/story_repository.dart';
 import '../../features/story/domain/usecases/get_story_catalog_use_case.dart';
 import '../../features/story/domain/usecases/get_story_detail_use_case.dart';
@@ -41,6 +43,8 @@ import '../../features/word/domain/repositories/word_repository.dart';
 import '../../features/word/domain/usecases/get_word_book_use_case.dart';
 import '../../features/word/domain/usecases/toggle_word_like_use_case.dart';
 import '../network/dio_client.dart';
+import '../router/app_router.dart';
+import '../router/app_routes.dart';
 
 /// 앱 전역 서비스 로케이터.
 ///
@@ -63,7 +67,10 @@ Future<void> configureDependencies() async {
   getIt
     ..registerLazySingleton<AuthTokenStore>(AuthTokenStore.new)
     ..registerLazySingleton<DioClient>(
-      () => DioClient(tokenProvider: getIt<AuthTokenStore>().read),
+      () => DioClient(
+        tokenProvider: getIt<AuthTokenStore>().read,
+        onUnauthorized: _handleUnauthorized,
+      ),
     );
 
   // ---- question ----
@@ -120,14 +127,18 @@ Future<void> configureDependencies() async {
     );
 
   // ---- home ----
-  // 서버가 나오면 HomeRepositoryImpl 로 바꾸면 됩니다. 화면은 그대로입니다.
+  // `HomeRepositoryMock`/`HomeLocalDataSource`(+ `home.json`)는 테스트용으로
+  // 남겨 두고 여기서는 참조하지 않습니다. `ChildProfileRepository` 는 아래
+  // mypage 블록에서 등록되지만, lazySingleton 은 첫 접근 시점에 팩토리를
+  // 실행하므로 등록 순서와 무관합니다.
   getIt
-    ..registerLazySingleton<HomeLocalDataSource>(HomeLocalDataSource.new)
+    ..registerLazySingleton<HomeRemoteDataSource>(
+      () => HomeRemoteDataSource(getIt<DioClient>()),
+    )
     ..registerLazySingleton<HomeRepository>(
-      () => HomeRepositoryMock(
-        getIt<HomeLocalDataSource>(),
-        childProfileRepository: getIt<ChildProfileRepository>(),
-        tokenProvider: getIt<AuthTokenStore>().read,
+      () => HomeRepositoryImpl(
+        getIt<HomeRemoteDataSource>(),
+        getIt<ChildProfileRepository>(),
       ),
     )
     ..registerLazySingleton<GetHomeSummaryUseCase>(
@@ -135,10 +146,17 @@ Future<void> configureDependencies() async {
     );
 
   // ---- story ----
+  // `StoryRepositoryMock`/`StoryLocalDataSource`(+ 더미 JSON)도 테스트용으로
+  // 남겨 두고 여기서는 참조하지 않습니다.
   getIt
-    ..registerLazySingleton<StoryLocalDataSource>(StoryLocalDataSource.new)
+    ..registerLazySingleton<StoryRemoteDataSource>(
+      () => StoryRemoteDataSource(getIt<DioClient>()),
+    )
     ..registerLazySingleton<StoryRepository>(
-      () => StoryRepositoryMock(getIt<StoryLocalDataSource>()),
+      () => StoryRepositoryImpl(
+        getIt<StoryRemoteDataSource>(),
+        getIt<ChildProfileRepository>(),
+      ),
     )
     ..registerLazySingleton<GetStoryCatalogUseCase>(
       () => GetStoryCatalogUseCase(getIt<StoryRepository>()),
@@ -235,4 +253,32 @@ Future<void> configureDependencies() async {
     ..registerLazySingleton<SetMarketingConsentUseCase>(
       () => SetMarketingConsentUseCase(getIt<SettingsRepository>()),
     );
+}
+
+/// [DioClient] 가 401 을 받았을 때 부르는 훅.
+///
+/// **로그인 화면으로 이미 가 있으면 아무것도 하지 않습니다** — 화면 하나가
+/// 여러 요청을 동시에 보냈다가 한꺼번에 401 을 받으면 이 훅도 여러 번
+/// 불리는데, 매번 로그아웃·이동을 반복할 이유가 없습니다.
+/// 로그아웃·이동이 진행 중인지. 첫 401 이 토큰을 지우는 동안(await) 경로가
+/// 아직 안 바뀌어, 동시에 온 다른 401 이 위 경로 가드를 통과해 버립니다.
+/// 이 플래그로 한 번에 한 번만 이동하게 막습니다.
+bool _redirectingToLogin = false;
+
+void _handleUnauthorized() {
+  final String currentPath =
+      appRouter.routerDelegate.currentConfiguration.uri.path;
+  if (currentPath == AppRoutes.login || currentPath == AppRoutes.auth) return;
+  if (_redirectingToLogin) return;
+  _redirectingToLogin = true;
+  unawaited(_signOutAndRedirectToLogin());
+}
+
+Future<void> _signOutAndRedirectToLogin() async {
+  try {
+    await getIt<AuthTokenStore>().clear();
+    appRouter.go(AppRoutes.login);
+  } finally {
+    _redirectingToLogin = false;
+  }
 }

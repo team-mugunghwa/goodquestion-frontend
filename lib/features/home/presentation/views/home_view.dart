@@ -17,6 +17,7 @@ import '../../domain/entities/recommended_story.dart';
 import '../../domain/usecases/get_home_summary_use_case.dart';
 import '../viewmodels/home_view_model.dart';
 import '../widgets/continue_card.dart';
+import '../widgets/home_backdrop.dart';
 import '../widgets/home_sheets.dart';
 import '../widgets/home_skeleton.dart';
 import '../widgets/home_top_bar.dart';
@@ -65,49 +66,56 @@ class HomeView extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: AppCanvas.day(
-        child: SafeArea(
-          bottom: false,
-          child: LayoutBuilder(
-            builder: (BuildContext context, BoxConstraints constraints) {
-              final ScreenMetrics metrics = ScreenMetrics.of(
-                constraints.maxWidth,
-              );
-              return Column(
-                children: <Widget>[
-                  HomeTopBar(
-                    metrics: metrics,
-                    child: summary?.child,
-                    stardustBalance: summary?.planet.stardustBalance,
-                    isLoading: summary == null && !vm.state.isError,
-                    onProfileTap: () => _openChildSwitch(context, metrics),
-                  ),
-                  Expanded(
-                    child: AnimatedSwitcher(
-                      duration: respect(context, AppDurations.normal),
-                      switchInCurve: AppCurves.standard,
-                      switchOutCurve: AppCurves.exit,
-                      // 기본 layoutBuilder 는 자식을 Stack 가운데에 느슨하게
-                      // 놓습니다. 그러면 본문이 세로로 붕 떠서, 상단 바와
-                      // 이어하기 카드 사이가 화면마다 다르게 벌어집니다.
-                      layoutBuilder: (Widget? current, List<Widget> previous) =>
-                          Stack(
-                            fit: StackFit.expand,
-                            alignment: Alignment.topCenter,
-                            children: <Widget>[
-                              ...previous,
-                              if (current != null) current,
-                            ],
-                          ),
-                      child: _buildBody(context, vm, metrics),
-                    ),
-                  ),
-                  // 로딩·에러 중에도 하단 내비는 즉시 보입니다. 아이가
-                  // 갇힌 느낌을 받으면 안 됩니다.
-                  const AppBottomNav(current: AppNavTab.home),
-                ],
-              );
-            },
-          ),
+        child: Stack(
+          children: <Widget>[
+            // 낮 배경에 깊이를 더하는 장식 레이어(빛·구름·말풍선·언덕).
+            // 콘텐츠 뒤에 깔리고 터치를 통과시킵니다.
+            const Positioned.fill(child: HomeBackdrop()),
+            SafeArea(
+              bottom: false,
+              child: LayoutBuilder(
+                builder: (BuildContext context, BoxConstraints constraints) {
+                  final ScreenMetrics metrics = ScreenMetrics.of(
+                    constraints.maxWidth,
+                  );
+                  return Column(
+                    children: <Widget>[
+                      HomeTopBar(
+                        metrics: metrics,
+                        child: summary?.child,
+                        stardustBalance: summary?.planet.stardustBalance,
+                        isLoading: summary == null && !vm.state.isError,
+                        onProfileTap: () => _openChildSwitch(context, metrics),
+                      ),
+                      Expanded(
+                        child: AnimatedSwitcher(
+                          duration: respect(context, AppDurations.normal),
+                          switchInCurve: AppCurves.standard,
+                          switchOutCurve: AppCurves.exit,
+                          // 기본 layoutBuilder 는 자식을 Stack 가운데에 느슨하게
+                          // 놓습니다. 그러면 본문이 세로로 붕 떠서, 상단 바와
+                          // 이어하기 카드 사이가 화면마다 다르게 벌어집니다.
+                          layoutBuilder:
+                              (Widget? current, List<Widget> previous) => Stack(
+                                fit: StackFit.expand,
+                                alignment: Alignment.topCenter,
+                                children: <Widget>[
+                                  ...previous,
+                                  if (current != null) current,
+                                ],
+                              ),
+                          child: _buildBody(context, vm, metrics),
+                        ),
+                      ),
+                      // 로딩·에러 중에도 하단 내비는 즉시 보입니다. 아이가
+                      // 갇힌 느낌을 받으면 안 됩니다.
+                      const AppBottomNav(current: AppNavTab.home),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -184,7 +192,7 @@ class _HomeContent extends StatelessWidget {
               metrics: metrics,
               onResume: () => _guarded(
                 context,
-                () => context.go(AppRoutes.playOf('${session.sessionId}')),
+                () => context.go(AppRoutes.playOf(session.sessionId)),
               ),
             ),
           SizedBox(height: metrics.sectionGap),
@@ -194,7 +202,7 @@ class _HomeContent extends StatelessWidget {
             // push 입니다 — 상세의 뒤로가기가 홈으로 돌아와야 합니다.
             onStoryTap: (RecommendedStory story) => _guarded(
               context,
-              () => context.push(AppRoutes.storyDetailOf('${story.storyId}')),
+              () => context.push(AppRoutes.storyDetailOf(story.storyId)),
             ),
             onMoreTap: () => context.go(AppRoutes.stories),
           ),
