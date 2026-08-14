@@ -89,7 +89,9 @@ class _PlayPageState extends State<PlayPage> {
   /// 캐릭터가 지금 무엇을 하고 있는지. 표정과 별개로 모션만 바꾼다.
   DialogueActivity get _activity {
     if (_phase == _DialoguePhase.paused) return DialogueActivity.idle;
-    if (_submittingUtterance || _transcribingVoice) return DialogueActivity.thinking;
+    if (_submittingUtterance || _transcribingVoice) {
+      return DialogueActivity.thinking;
+    }
     if (_phase == _DialoguePhase.listening) return DialogueActivity.listening;
     return DialogueActivity.speaking;
   }
@@ -111,7 +113,8 @@ class _PlayPageState extends State<PlayPage> {
   /// 굴러간다. 그래서 로드 실패를 _loadError로 올리지 않는다.
   Future<void> _loadCharacterManifest() async {
     try {
-      final DialogueCharacterManifest manifest = await DialogueCharacterManifest.load();
+      final DialogueCharacterManifest manifest =
+          await DialogueCharacterManifest.load();
       if (!mounted) return;
       setState(() => _characterManifest = manifest);
       _bindCharacterScene();
@@ -124,7 +127,9 @@ class _PlayPageState extends State<PlayPage> {
   void _bindCharacterScene() {
     final DialogueCharacterManifest? manifest = _characterManifest;
     final PlayScene? scene = _snapshot?.currentScene;
-    if (manifest == null || scene == null || scene.sceneType != PlaySceneType.dialogue) {
+    if (manifest == null ||
+        scene == null ||
+        scene.sceneType != PlaySceneType.dialogue) {
       if (_character != null) setState(() => _character = null);
       return;
     }
@@ -138,8 +143,10 @@ class _PlayPageState extends State<PlayPage> {
     }
     if (_character?.scene == states) return;
 
-    final DialogueCharacterStateMachine machine =
-        DialogueCharacterStateMachine(states, manifest);
+    final DialogueCharacterStateMachine machine = DialogueCharacterStateMachine(
+      states,
+      manifest,
+    );
     // 이어하기로 들어오면 앞선 턴의 누적은 "새로 충족"이 아니다.
     machine.primeAccumulated(_accumulatedFromMessages());
     setState(() => _character = machine);
@@ -398,7 +405,8 @@ class _PlayPageState extends State<PlayPage> {
       character.moveTo(via);
       setState(() {});
       await Future<void>.delayed(
-        _characterManifest?.closingViaHold ?? const Duration(milliseconds: 1200),
+        _characterManifest?.closingViaHold ??
+            const Duration(milliseconds: 1200),
       );
       if (!mounted) return;
       character.moveTo(transition.state);
