@@ -1,0 +1,153 @@
+{
+  "_readme": [
+    "대화 장면 캐릭터 상태 매니페스트. 출처는 콘텐츠 확정안 '충족요건/대화{1,2,3,4}_충족조건.md'.",
+    "상태 전환은 서버 UtteranceResponse의 analysis·progress로만 계산한다 (가이드 3.0절 4번).",
+    "  opening  : 고정 첫 대사 재생 시점",
+    "  element  : 이번 턴에 '새로' 충족된 요소 — progress.accumulatedElements를 직전 턴 값과 diff",
+    "  confused : analysis.utteranceValidity 가 PLAYFUL / OFF_TOPIC / UNCLEAR",
+    "  closing  : progress.mode == CLOSING 또는 sceneTransition != null",
+    "여러 요소가 한 턴에 충족되면 priority 배열의 앞에 있는 상태를 고른다.",
+    "confused 가 null 인 장면은 별도 표정으로 바꾸지 않고 현재 상태를 유지한다.",
+    "closingVia 가 있으면 그 상태를 잠시 보여준 뒤 closing 으로 전환한다.",
+    "runtimeStates 는 별도 PNG 없이 현재 상태 이미지 위에 코드 모션으로 처리한다."
+  ],
+  "version": 1,
+  "story": "banggui",
+  "runtimeStates": ["LISTENING", "THINKING", "SPEAKING"],
+  "confusedValidity": ["PLAYFUL", "OFF_TOPIC", "UNCLEAR"],
+  "scenes": {
+    "33333333-3333-3333-3333-000000000003": {
+      "sceneOrder": 3,
+      "label": "대화1",
+      "characterName": "방귀쟁이 며느리",
+      "dir": "assets/images/dialogue/banggui/scene_03",
+      "background": "scene_background_blurred.png",
+      "requiredElements": ["PERSPECTIVE", "EMOTION", "SOLUTION"],
+      "maxTurns": 4,
+      "states": {
+        "OPENING_WORRIED": "character_opening.png",
+        "COMFORTED": "character_comforted.png",
+        "CONSIDERING": "character_considering.png",
+        "HOPEFUL": "character_hopeful.png",
+        "HURT_OR_CONFUSED": "character_hurt_confused.png",
+        "CLOSING_HESITANT": "character_closing.png"
+      },
+      "opening": "OPENING_WORRIED",
+      "confused": "HURT_OR_CONFUSED",
+      "closing": "CLOSING_HESITANT",
+      "closingVia": "HOPEFUL",
+      "elementStates": {
+        "SOLUTION": "HOPEFUL",
+        "PERSPECTIVE": "CONSIDERING",
+        "EMOTION": "COMFORTED"
+      },
+      "priority": ["HOPEFUL", "CONSIDERING", "COMFORTED"],
+      "_todo": [
+        "파일명 확인 필요 — 대화1_충족조건.md 에는 다른 세 장면과 달리 제작 에셋 목록이 없어",
+        "나머지 장면의 명명 규칙(character_<상태 소문자>.png)을 따라 추정했다.",
+        "requiredElements 는 REASON 제거 확정안 기준. 서버 시드 반영 전까지는 4개로 내려온다",
+        "(docs/BACKEND_REQUESTS.md 요청 1)."
+      ]
+    },
+    "33333333-3333-3333-3333-000000000005": {
+      "sceneOrder": 5,
+      "label": "대화2",
+      "characterName": "시아버지",
+      "dir": "assets/images/dialogue/banggui/scene_05",
+      "background": "scene_background_blurred.png",
+      "requiredElements": ["PERSPECTIVE", "EMPATHY", "REASON", "REQUEST"],
+      "maxTurns": 5,
+      "states": {
+        "OPENING_UPSET": "character_opening.png",
+        "CONSIDERING": "character_considering.png",
+        "SOFTENED": "character_softened.png",
+        "RELUCTANT": "character_reluctant.png",
+        "HURT_OR_CONFUSED": "character_hurt_confused.png",
+        "CLOSING_STUBBORN": "character_closing.png"
+      },
+      "opening": "OPENING_UPSET",
+      "confused": "HURT_OR_CONFUSED",
+      "closing": "CLOSING_STUBBORN",
+      "closingVia": "SOFTENED",
+      "elementStates": {
+        "EMPATHY": "SOFTENED",
+        "REQUEST": "RELUCTANT",
+        "PERSPECTIVE": "CONSIDERING",
+        "REASON": "CONSIDERING"
+      },
+      "priority": ["SOFTENED", "RELUCTANT", "CONSIDERING"]
+    },
+    "33333333-3333-3333-3333-000000000007": {
+      "sceneOrder": 7,
+      "label": "대화3",
+      "characterName": "마을 이장",
+      "dir": "assets/images/dialogue/banggui/scene_07",
+      "background": "scene_background_blurred.png",
+      "requiredElements": ["SOLUTION", "REASON", "REQUEST", "RESULT"],
+      "maxTurns": 5,
+      "mission": "PROBLEM_SOLVING",
+      "states": {
+        "OPENING_PUZZLED": "character_opening.png",
+        "IDEA_INTERESTED": "character_idea_interested.png",
+        "FEASIBILITY_CONSIDERING": "character_feasibility_considering.png",
+        "SAFETY_PLANNING": "character_safety_planning.png",
+        "RESULT_HOPEFUL": "character_result_hopeful.png",
+        "HURT_OR_CONFUSED": "character_hurt_confused.png",
+        "CLOSING_DELIGHTED": "character_closing.png"
+      },
+      "opening": "OPENING_PUZZLED",
+      "confused": "HURT_OR_CONFUSED",
+      "closing": "CLOSING_DELIGHTED",
+      "closingVia": "RESULT_HOPEFUL",
+      "elementStates": {
+        "RESULT": "RESULT_HOPEFUL",
+        "REQUEST": "SAFETY_PLANNING",
+        "REASON": "FEASIBILITY_CONSIDERING",
+        "SOLUTION": "IDEA_INTERESTED"
+      },
+      "priority": [
+        "RESULT_HOPEFUL",
+        "SAFETY_PLANNING",
+        "FEASIBILITY_CONSIDERING",
+        "IDEA_INTERESTED"
+      ],
+      "_todo": [
+        "priority 확인 필요 — 대화3_충족조건.md 에는 동시 충족 우선순위 표가 없다.",
+        "대화1·2가 '가장 진전된 반응'을 우선한 것과 맞춰 요소 진행 단계가 늦은 순으로 제안했다.",
+        "캐릭터는 시아버지로 교체 검토 중 (docs/BACKEND_REQUESTS.md 요청 4). 지금은 이장 유지."
+      ]
+    },
+    "33333333-3333-3333-3333-000000000009": {
+      "sceneOrder": 9,
+      "label": "대화4",
+      "characterName": "방귀쟁이 며느리",
+      "dir": "assets/images/dialogue/banggui/scene_09",
+      "background": "scene_background_blurred.png",
+      "requiredElements": ["EMOTION", "PERSPECTIVE", "RESULT", "SOLUTION"],
+      "maxTurns": 4,
+      "mission": "PERSPECTIVE_SHIFT",
+      "states": {
+        "OPENING_SHY_HOPEFUL": "character_opening.png",
+        "REASSURED": "character_reassured.png",
+        "PURPOSEFUL_HOPEFUL": "character_purposeful_hopeful.png",
+        "CLOSING_CONFIDENT": "character_closing.png"
+      },
+      "opening": "OPENING_SHY_HOPEFUL",
+      "confused": null,
+      "closing": "CLOSING_CONFIDENT",
+      "closingVia": "PURPOSEFUL_HOPEFUL",
+      "elementStates": {
+        "SOLUTION": "PURPOSEFUL_HOPEFUL",
+        "RESULT": "PURPOSEFUL_HOPEFUL",
+        "PERSPECTIVE": "REASSURED",
+        "EMOTION": "REASSURED"
+      },
+      "priority": ["PURPOSEFUL_HOPEFUL", "REASSURED"],
+      "_todo": [
+        "priority 확인 필요 — 대화4_충족조건.md 에도 동시 충족 우선순위 표가 없다.",
+        "confused 가 null 인 것은 문서 명시 사항이다 — 놀림·비난·모호한 답변에도",
+        "별도 표정으로 바꾸지 않고 현재 상태를 유지한다."
+      ]
+    }
+  }
+}
