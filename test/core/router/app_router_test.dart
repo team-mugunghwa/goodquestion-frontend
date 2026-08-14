@@ -9,6 +9,8 @@ import 'package:goodquestion/core/widgets/app_bottom_nav.dart';
 import 'package:goodquestion/features/home/data/datasources/home_local_data_source.dart';
 import 'package:goodquestion/features/home/data/repositories/home_repository_mock.dart';
 import 'package:goodquestion/features/home/domain/repositories/home_repository.dart';
+import 'package:goodquestion/features/play/presentation/views/play_recap_view.dart';
+import 'package:goodquestion/features/play/presentation/views/play_view.dart';
 import 'package:goodquestion/features/story/data/datasources/story_local_data_source.dart';
 import 'package:goodquestion/features/story/data/repositories/story_repository_mock.dart';
 import 'package:goodquestion/features/story/domain/repositories/story_repository.dart';
@@ -209,10 +211,24 @@ void main() {
     expect(find.byType(AppBottomNav), findsNothing);
   });
 
+  // 경로 → 실제 화면. 자리 표시자였던 장면 진행·말하기 후 활동이 진짜 화면이
+  // 되면서 문구 대신 화면 자체를 봅니다. 화면 내용은 각 화면 테스트가 봅니다
+  // (`test/features/play/`). 이 파일은 백엔드 없이 도는 자리라 데이터를 못 받아
+  // 에러 상태로 그려질 수 있는데, 그래도 위젯은 있으므로 연결 확인에는 충분합니다.
+  final Map<String, Type> expectedPage = <String, Type>{
+    AppRoutes.playOf('abc'): PlayPage,
+    AppRoutes.playRecapOf('abc'): PlayRecapPage,
+  };
+
+  expectedPage.forEach((String location, Type page) {
+    testWidgets('$location 로 들어가면 $page 가 뜬다', (WidgetTester tester) async {
+      await pumpAt(tester, location);
+      expect(find.byType(page), findsOneWidget);
+    });
+  });
+
   // 경로 → 아직 자리 표시자인 화면에 보여야 하는 문구.
   final Map<String, String> expectedText = <String, String>{
-    AppRoutes.playOf('abc'): '/play/abc - 장면 진행',
-    AppRoutes.playRecapOf('abc'): '/play/abc/recap - 말하기 후 활동',
     AppRoutes.planet: '/planet - 내 행성',
   };
 

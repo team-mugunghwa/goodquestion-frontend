@@ -11,6 +11,7 @@ import '../../features/mypage/presentation/views/report_detail_view.dart';
 import '../../features/mypage/presentation/views/report_list_view.dart';
 import '../../features/mypage/presentation/views/settings_view.dart';
 import '../../features/planet/presentation/views/planet_view.dart';
+import '../../features/play/domain/repositories/play_repository.dart';
 import '../../features/play/presentation/views/play_recap_view.dart';
 import '../../features/play/presentation/views/play_view.dart';
 import '../../features/story/presentation/views/story_detail_view.dart';
@@ -86,6 +87,7 @@ GoRouter createAppRouter({
         path: AppRoutes.playPath,
         builder: (BuildContext context, GoRouterState state) => PlayPage(
           sessionId: state.pathParameters[AppRoutes.sessionIdParam]!,
+          repository: getIt<PlayRepository>(),
         ),
         routes: <RouteBase>[
           GoRoute(
