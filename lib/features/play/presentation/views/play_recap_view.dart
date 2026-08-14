@@ -62,7 +62,7 @@ class RecapSceneCard {
 /// ## 세로 예산은 역산으로 짭니다
 ///
 /// 1280×720에서 "장면 그림 + 받아쓰기 + 마이크 120 + 스크롤 없음"은 그냥
-/// 쌓아서는 성립하지 않습니다. 그래서 [_sceneMinHeight] 를 **먼저 보장**하고,
+/// 쌓아서는 성립하지 않습니다. 그래서 [_sceneImageMinHeight] 를 **먼저 보장**하고,
 /// 남은 높이를 받아쓰기 줄 수([_transcriptMinLines]~[_transcriptMaxLines])로
 /// 환산한 뒤, 그러고도 남는 높이를 다시 장면 그림에 돌려줍니다.
 class PlayRecapPage extends StatefulWidget {
@@ -79,6 +79,15 @@ class PlayRecapPage extends StatefulWidget {
 
   /// **이야기 순서(정답 순서)대로** 넣어 주세요. 화면에서는 섞어서 보여 줍니다.
   final List<RecapSceneCard> sceneCards;
+
+  /// 장면과 **1:1로 짝지어지는** 낱말. `keywords[i]` 가 [sceneCards]`[i]` 의
+  /// 낱말이고, 2단계에서 그 장면 카드 안에 붙어서 보입니다.
+  ///
+  /// 개수가 [sceneCards] 와 달라도 화면은 깨지지 않습니다(모자라면 낱말 없는
+  /// 장면, 남으면 마지막 장면에 몰아 붙임). 다만 그건 콘텐츠 오류입니다.
+  ///
+  /// **1단계에서는 쓰지 않습니다** — 낱말이 곧 장면의 정답 단서라 순서가
+  /// 새어 나갑니다. (`docs/BACKEND_REQUESTS_POST_ACTIVITY.md` 3장)
   final List<String> keywords;
 
   static const List<RecapSceneCard> _defaultCards = <RecapSceneCard>[
@@ -1164,7 +1173,14 @@ class _SceneImageFallback extends StatelessWidget {
 // 2단계 — 다시 말하기
 // ─────────────────────────────────────────────────────────
 
-/// 정답 순서 그림 + 낱말을 보며 이야기를 다시 말합니다.
+/// 정답 순서 그림을 보며 이야기를 다시 말합니다. **낱말은 장면에 붙어 있습니다.**
+///
+/// 낱말을 그림 아래 별도의 칩 줄로 모아 두면 아이에게 "참고자료"로 읽혀서
+/// 안 쓰고 넘어갑니다. 이 활동의 목표가 어휘 사용이므로, 낱말은 장면 카드
+/// 안에 들어가 **"이 장면을 말할 땐 이 말을 쓰는 것"** 이 돼야 합니다.
+///
+/// 다만 **판정하지는 않습니다.** 낱말을 다 쓰지 않아도 완료를 막지 않습니다 —
+/// 아이 화면에 실패는 없고, 안내문도 "똑같이 말하지 않아도 괜찮아요"입니다.
 ///
 /// 좌우 2단을 쓰지 않는 이유: 참고판과 받아쓰기가 **둘 다 폭을 원하는 요소**라
 /// 좌우로 자르면 양쪽 폭이 반토막 나고, 정작 모자란 세로는 아무도 쓰지 않습니다.
@@ -1192,10 +1208,14 @@ class _RetellStep extends StatelessWidget {
   final VoidCallback onMic;
   final VoidCallback onComplete;
 
-  /// 장면 그림 한 장의 **세로 하한**. 예산을 짤 때 이걸 먼저 확보하고,
-  /// 남은 높이를 받아쓰기 줄 수로 환산합니다.
-  static const double _sceneMinHeight = 108;
-  static const double _sceneMaxHeight = 200;
+  /// 장면 **그림**(카드 테와 낱말 띠를 뺀 순수 그림) 한 장의 세로 하한.
+  /// 예산을 짤 때 이걸 먼저 확보하고, 남은 높이를 받아쓰기 줄 수로 환산합니다.
+  ///
+  /// 카드 기준이 아니라 그림 기준인 이유: 카드 안에 낱말 띠가 들어오면서
+  /// 카드 높이와 그림 높이가 갈라졌습니다. 아이가 보는 건 그림이므로
+  /// 하한도 그림에 겁니다.
+  static const double _sceneImageMinHeight = 100;
+  static const double _sceneImageMaxHeight = 200;
 
   /// 받아쓰기는 최소 2줄을 보장하고 3줄까지만 키웁니다. 더 키우면 그만큼
   /// 장면 그림이 작아지는데, 말할 때 아이가 보는 건 그림입니다.
@@ -1227,9 +1247,6 @@ class _RetellStep extends StatelessWidget {
               final double contentWidth =
                   constraints.maxWidth - metrics.screenPadding * 2;
               final double guide = _GuideBubble.heightOf(context, metrics);
-              final double chipRow =
-                  metrics.lineHeight(context, AppTypography.kidLabel) +
-                  AppSpacing.xs * 2;
               final double lineHeight = metrics.lineHeight(
                 context,
                 AppTypography.kidTranscript,
@@ -1237,27 +1254,40 @@ class _RetellStep extends StatelessWidget {
               final double bubbleChrome = KidSpeechBubble.chromeOf(
                 _bubblePadding,
               );
+              // 낱말 띠는 장면 카드 **안에** 있으므로 그림이 아니라 카드 테에
+              // 얹힙니다. 낱말이 하나도 없으면 띠 자리를 잡지 않습니다.
+              final double cardChrome =
+                  AppSpacing.xs * 2 +
+                  (keywords.isEmpty
+                      ? 0
+                      : AppSpacing.xs +
+                            _KeywordBand.heightOf(context, metrics));
 
-              // 세로 예산 역산 — 안내·낱말·가름 여백을 먼저 빼고,
-              // 장면 그림의 하한을 확보한 뒤 남은 높이를 줄 수로 바꿉니다.
+              // 세로 예산 역산 — 안내와 가름 여백을 먼저 빼고, 장면 카드의
+              // 하한(그림 하한 + 카드 테)을 확보한 뒤 남은 높이를 줄 수로 바꿉니다.
+              // 낱말 칩 줄(31.4 + 간격 16)이 사라진 자리를 카드 테(43.4)가
+              // 일부만 도로 먹어서, 합치면 12px 이 남습니다 — 그림이 그만큼 큽니다.
               final double free =
-                  constraints.maxHeight - guide - chipRow - AppSpacing.md * 3;
+                  constraints.maxHeight - guide - AppSpacing.md * 2;
               final int lines =
-                  ((free - _sceneMinHeight - bubbleChrome) / lineHeight)
+                  ((free - _sceneImageMinHeight - cardChrome - bubbleChrome) /
+                          lineHeight)
                       .floor()
                       .clamp(_transcriptMinLines, _transcriptMaxLines);
               final double bubbleHeight = lines * lineHeight + bubbleChrome;
 
               // 그러고도 남는 높이는 장면 그림에 돌려줍니다. 단, 폭이 허락하는
               // 크기를 넘기면 그림이 잘리므로 가로 기준으로도 한 번 깎습니다.
+              // (카드 좌우 테를 뺀 뒤 16:9 로 되돌려야 그림이 정확히 16:9 입니다)
               final double byWidth =
-                  (contentWidth - _arrowWidth * (cards.length - 1)) /
-                  cards.length *
+                  ((contentWidth - _arrowWidth * (cards.length - 1)) /
+                          cards.length -
+                      AppSpacing.xs * 2) *
                   9 /
                   16;
-              final double sceneHeight = math
-                  .min(free - bubbleHeight, byWidth)
-                  .clamp(_sceneMinHeight, _sceneMaxHeight);
+              final double sceneImageHeight = math
+                  .min(free - bubbleHeight - cardChrome, byWidth)
+                  .clamp(_sceneImageMinHeight, _sceneImageMaxHeight);
 
               return SingleChildScrollView(
                 padding: EdgeInsets.symmetric(
@@ -1271,13 +1301,14 @@ class _RetellStep extends StatelessWidget {
                       _GuideBubble(metrics: metrics, message: message),
                       const SizedBox(height: AppSpacing.md),
                       _SceneStrip(
+                        metrics: metrics,
                         cards: cards,
-                        height: sceneHeight,
+                        keywords: keywords,
+                        imageHeight: sceneImageHeight,
+                        cardHeight: sceneImageHeight + cardChrome,
                         available: contentWidth,
                         arrowWidth: _arrowWidth,
                       ),
-                      const SizedBox(height: AppSpacing.md),
-                      _KeywordRow(metrics: metrics, keywords: keywords),
                       const SizedBox(height: AppSpacing.md),
                       _TranscriptBubble(
                         metrics: metrics,
@@ -1357,30 +1388,73 @@ class _RetellStep extends StatelessWidget {
   }
 }
 
-/// 정답 순서대로 놓인 장면 그림 줄. 번호는 그림 위 배지입니다.
+/// 정답 순서대로 놓인 장면 카드 줄. **한 장이 그림 + 낱말 한 덩어리**입니다.
+///
+/// ```
+/// ┌───────────────┐   ┌───────────────┐
+/// │ ①             │   │ ②             │
+/// │   장면 그림    │ › │   장면 그림    │ › …
+/// │               │   │               │
+/// │ ╭───────────╮ │   │ ╭───────────╮ │
+/// │ │   참다     │ │   │ │  쫓겨나다  │ │
+/// │ ╰───────────╯ │   │ ╰───────────╯ │
+/// └───────────────┘   └───────────────┘
+/// ```
+///
+/// 낱말은 그림 **위에 얹지 않습니다.** 아이는 말하는 내내 그림을 보고 있어서,
+/// 조금이라도 가리면 이야기의 단서가 사라집니다.
 class _SceneStrip extends StatelessWidget {
   const _SceneStrip({
+    required this.metrics,
     required this.cards,
-    required this.height,
+    required this.keywords,
+    required this.imageHeight,
+    required this.cardHeight,
     required this.available,
     required this.arrowWidth,
   });
 
+  final ScreenMetrics metrics;
   final List<RecapSceneCard> cards;
-  final double height;
+
+  /// **정답 순서와 같은 순서**로 들어옵니다 — `keywords[i]` 가 i 번째 장면의
+  /// 낱말입니다. (`docs/BACKEND_REQUESTS_POST_ACTIVITY.md` 3장)
+  final List<String> keywords;
+
+  /// 낱말 띠를 뺀 순수 그림의 높이.
+  final double imageHeight;
+
+  /// 카드 전체 높이. 낱말이 없는 장면은 그림이 이 높이를 다 씁니다.
+  final double cardHeight;
   final double available;
   final double arrowWidth;
 
+  /// [index] 장면에 붙는 낱말. 없으면 `null`.
+  ///
+  /// 개수는 어긋날 수 있습니다 — 둘 다 **콘텐츠 오류이지 예외가 아닙니다.**
+  /// - 낱말이 적으면: 남는 장면은 낱말 없이 그립니다.
+  /// - 낱말이 많으면: 남는 낱말을 마지막 장면에 몰아 붙입니다. 조용히 버리면
+  ///   어휘가 화면에서 사라진 걸 아무도 모르고, 새 줄을 만들면 이번에 없앤
+  ///   "참고자료 칩 줄"이 그대로 돌아옵니다.
+  String? _keywordFor(int index) {
+    if (index >= keywords.length) return null;
+    final bool isLast = index == cards.length - 1;
+    if (isLast && keywords.length > cards.length) {
+      return keywords.sublist(index).join(' · ');
+    }
+    return keywords[index];
+  }
+
   @override
   Widget build(BuildContext context) {
-    final double thumbWidth = height * 16 / 9;
+    final double cardWidth = imageHeight * 16 / 9 + AppSpacing.xs * 2;
     final double content =
-        thumbWidth * cards.length + arrowWidth * (cards.length - 1);
+        cardWidth * cards.length + arrowWidth * (cards.length - 1);
     // 다 들어가면 가운데로 모으고, 넘치면 가로로 스크롤합니다.
     final double sidePad = math.max(0, (available - content) / 2);
 
     return SizedBox(
-      height: height,
+      height: cardHeight,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: EdgeInsets.symmetric(horizontal: sidePad),
@@ -1397,10 +1471,25 @@ class _SceneStrip extends StatelessWidget {
         ),
         itemBuilder: (BuildContext context, int index) {
           final RecapSceneCard card = cards[index];
+          final String? word = _keywordFor(index);
           return Semantics(
-            label: RecapStrings.sceneOrder(index + 1, card.title),
+            // 장면과 낱말을 한 덩어리로 읽어 줍니다. 낱말을 따로 떼어 읽으면
+            // 화면에서 붙여 놓은 뜻이 스크린리더에서만 사라집니다.
+            //
+            // `container` + `excludeSemantics` 가 그 "한 덩어리"를 만듭니다.
+            // 빼지 않으면 번호 배지와 낱말 띠가 각자 노드가 돼서
+            // "1", "1번째 장면 …", "참다" 로 세 번 끊겨 읽힙니다.
+            container: true,
+            excludeSemantics: true,
+            label: word == null
+                ? RecapStrings.sceneOrder(index + 1, card.title)
+                : RecapStrings.sceneOrderWithKeyword(
+                    index + 1,
+                    card.title,
+                    word,
+                  ),
             child: SizedBox(
-              width: thumbWidth,
+              width: cardWidth,
               child: Stack(
                 children: <Widget>[
                   Positioned.fill(
@@ -1412,10 +1501,22 @@ class _SceneStrip extends StatelessWidget {
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(AppSpacing.xs),
-                        child: _SceneImage(
-                          card: card,
-                          fallbackLabel: '${index + 1}',
-                          radius: AppRadius.md,
+                        child: Column(
+                          children: <Widget>[
+                            // 낱말이 없는 장면은 그림이 띠 자리까지 씁니다.
+                            // 빈 흰 칸을 남기면 그 카드만 고장 난 것처럼 보입니다.
+                            Expanded(
+                              child: _SceneImage(
+                                card: card,
+                                fallbackLabel: '${index + 1}',
+                                radius: AppRadius.md,
+                              ),
+                            ),
+                            if (word != null) ...<Widget>[
+                              const SizedBox(height: AppSpacing.xs),
+                              _KeywordBand(metrics: metrics, word: word),
+                            ],
+                          ],
                         ),
                       ),
                     ),
@@ -1435,57 +1536,45 @@ class _SceneStrip extends StatelessWidget {
   }
 }
 
-/// 꼭 써 볼 낱말.
+/// 장면 카드 맨 아래의 낱말 띠.
 ///
-/// 칩을 노란색으로 칠하지 않습니다. 노랑은 별가루(보상) 전용이라, 낱말에
-/// 쓰면 아이가 낱말을 보상으로 오해합니다. (`docs/DESIGN_SYSTEM.md` 3장)
-class _KeywordRow extends StatelessWidget {
-  const _KeywordRow({required this.metrics, required this.keywords});
+/// 노란색을 쓰지 않습니다. 노랑은 별가루(보상) 전용이라, 낱말에 쓰면 아이가
+/// 낱말을 보상으로 오해합니다. (`docs/DESIGN_SYSTEM.md` 3장)
+///
+/// 글자는 [AppColors.brandBlueDeep] 입니다 — 흰 카드 위 옅은 파랑 면에서
+/// [AppColors.ink700] 보다 낱말이 먼저 눈에 들어옵니다.
+class _KeywordBand extends StatelessWidget {
+  const _KeywordBand({required this.metrics, required this.word});
 
   final ScreenMetrics metrics;
-  final List<String> keywords;
+  final String word;
+
+  /// 띠 한 줄의 높이. 세로 예산 계산에 씁니다. 한 줄로 고정하지 않으면
+  /// 낱말이 길어질 때 카드마다 높이가 달라져 줄이 들쭉날쭉해집니다.
+  static double heightOf(BuildContext context, ScreenMetrics metrics) =>
+      metrics.lineHeight(context, AppTypography.kidLabel) + AppSpacing.xs * 2;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Padding(
-          padding: const EdgeInsets.only(top: AppSpacing.xs),
-          child: Text(
-            RecapStrings.keywords,
-            style: metrics
-                .text(AppTypography.kidLabel)
-                .copyWith(color: AppColors.ink500),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.md),
-        Expanded(
-          child: Wrap(
-            spacing: AppSpacing.sm,
-            runSpacing: AppSpacing.sm,
-            // 개수를 자르지 않습니다. take(n) 으로 잘라 두면 낱말이 늘었을 때
-            // 말없이 사라집니다.
-            children: <Widget>[
-              for (final String word in keywords)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                    vertical: AppSpacing.xs,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.brandBlueSurface,
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                  ),
-                  child: Text(
-                    word,
-                    style: metrics.text(AppTypography.kidLabel),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ],
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.brandBlueSurface,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Text(
+        word,
+        textAlign: TextAlign.center,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: metrics
+            .text(AppTypography.kidLabel)
+            .copyWith(color: AppColors.brandBlueDeep),
+      ),
     );
   }
 }
