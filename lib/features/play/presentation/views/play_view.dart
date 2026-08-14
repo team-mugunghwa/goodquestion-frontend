@@ -1,14 +1,19 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../../../core/constants/app_icons.dart';
 import '../../../../core/error/failure.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/widgets/app_state_views.dart';
 import '../../domain/entities/play_session.dart';
 import '../../domain/repositories/play_repository.dart';
+import '../voice/mission_voice_recorder.dart';
+import '../voice/story_audio_player.dart';
+import '../widgets/mission_overlay.dart';
 
 /// 모든 이야기가 공유하는 대화 장면 템플릿입니다.
 ///
@@ -23,6 +28,8 @@ class PlayPage extends StatefulWidget {
     this.characterName = '이야기 친구',
     this.question = '이럴 때는 어떻게 하면 좋을까?',
     this.repository,
+    this.voiceRecorder,
+    this.audioPlayer,
     super.key,
   });
 
@@ -32,6 +39,8 @@ class PlayPage extends StatefulWidget {
   final String characterName;
   final String question;
   final PlayRepository? repository;
+  final MissionVoiceRecorder? voiceRecorder;
+  final StoryAudioPlayer? audioPlayer;
 
   @override
   State<PlayPage> createState() => _PlayPageState();
@@ -40,13 +49,13 @@ class PlayPage extends StatefulWidget {
 enum _DialoguePhase { characterSpeaking, listening, paused }
 
 class _PlayPageState extends State<PlayPage> {
-  static const Duration _previewQuestionDuration = Duration(seconds: 2);
-
   _DialoguePhase _phase = _DialoguePhase.characterSpeaking;
   _DialoguePhase _phaseBeforePause = _DialoguePhase.characterSpeaking;
   Timer? _questionTimer;
   Timer? _listeningTimer;
   Timer? _storyTimer;
+  late final MissionVoiceRecorder _voiceRecorder;
+  late final StoryAudioPlayer _audioPlayer;
   int _listeningSeconds = 0;
   bool _soundOn = true;
   bool _loadingSession = false;
@@ -55,12 +64,28 @@ class _PlayPageState extends State<PlayPage> {
   int _narrationIndex = 0;
   String? _loadError;
   PlaySessionSnapshot? _snapshot;
+  PlayMission? _mission;
+  String? _characterReply;
+  bool _submittingUtterance = false;
+  bool _submittingMission = false;
+  bool _missionCompleted = false;
+  bool _recordingVoice = false;
+  bool _transcribingVoice = false;
+  List<String> _characterSentences = const <String>[];
+  int _characterSentenceIndex = 0;
+  int _speechToken = 0;
+  String? _lastChildText;
+  bool _lastSttLowConfidence = false;
+  String? _retainedStoryImageUrl;
+  String? _resultImageUrl;
 
   bool get _isListening => _phase == _DialoguePhase.listening;
 
   @override
   void initState() {
     super.initState();
+    _voiceRecorder = widget.voiceRecorder ?? DeviceMissionVoiceRecorder();
+    _audioPlayer = widget.audioPlayer ?? DeviceStoryAudioPlayer();
     if (widget.repository == null) {
       _playQuestion();
     } else {
@@ -73,6 +98,8 @@ class _PlayPageState extends State<PlayPage> {
     _questionTimer?.cancel();
     _listeningTimer?.cancel();
     _storyTimer?.cancel();
+    unawaited(_voiceRecorder.dispose());
+    unawaited(_audioPlayer.dispose());
     super.dispose();
   }
 
@@ -85,9 +112,21 @@ class _PlayPageState extends State<PlayPage> {
       final PlaySessionSnapshot snapshot = await widget.repository!.resume(
         widget.sessionId,
       );
+      final PlayMission? recoveredMission =
+          snapshot.mission ??
+          await widget.repository!.currentMission(widget.sessionId);
+      String? recoveredChildText;
+      for (final PlayMessage message in snapshot.messages) {
+        if (message.speaker == PlaySpeaker.child) {
+          recoveredChildText = message.text;
+        }
+      }
       if (!mounted) return;
       setState(() {
         _snapshot = snapshot;
+        _mission = recoveredMission;
+        _characterReply = null;
+        _lastChildText = recoveredChildText;
         _loadingSession = false;
       });
       _activateSnapshot(snapshot);
@@ -115,12 +154,237 @@ class _PlayPageState extends State<PlayPage> {
       return;
     }
     if (snapshot.phase == PlayPhase.story) {
+      _retainedStoryImageUrl = snapshot.currentScene?.imageUrl;
       _narrationIndex = 0;
       _storyPaused = false;
       _scheduleCurrentNarration();
       return;
     }
-    _playQuestion();
+    if ((snapshot.openingText ?? '').trim().isNotEmpty) {
+      _characterReply = snapshot.openingText;
+      unawaited(
+        _playCharacterMessage(
+          snapshot.openingText!,
+          audioUrl: snapshot.openingAudioUrl,
+          onComplete: _startListening,
+        ),
+      );
+    } else {
+      unawaited(_loadOpeningMessage());
+    }
+  }
+
+  Future<void> _loadOpeningMessage() async {
+    final PlayRepository? repository = widget.repository;
+    if (repository == null) {
+      await _playQuestion();
+      return;
+    }
+    try {
+      final PlayOpeningMessage opening = await repository.openCurrentScene(
+        widget.sessionId,
+      );
+      if (!mounted) return;
+      setState(() => _characterReply = opening.text);
+      await _playCharacterMessage(
+        opening.text,
+        audioUrl: opening.audioUrl,
+        onComplete: _startListening,
+      );
+    } on Failure catch (error) {
+      if (!mounted) return;
+      setState(() => _loadError = error.message);
+    }
+  }
+
+  String get _visibleCharacterText {
+    if (_characterSentences.isNotEmpty) {
+      return _characterSentences[_characterSentenceIndex.clamp(
+        0,
+        _characterSentences.length - 1,
+      )];
+    }
+    return _characterReply ?? _snapshot?.openingText ?? widget.question;
+  }
+
+  Future<void> _submitDialogue(
+    String text, {
+    String? sttRawText,
+    double? sttConfidence,
+    bool lowConfidence = false,
+  }) async {
+    final String normalized = text.trim();
+    if (normalized.isEmpty ||
+        _submittingUtterance ||
+        widget.repository == null) {
+      return;
+    }
+    _questionTimer?.cancel();
+    _listeningTimer?.cancel();
+    setState(() {
+      _submittingUtterance = true;
+      _phase = _DialoguePhase.characterSpeaking;
+      _loadError = null;
+      _lastChildText = normalized;
+      _lastSttLowConfidence = lowConfidence;
+    });
+    try {
+      final PlayTurnResult result = await widget.repository!.submitUtterance(
+        widget.sessionId,
+        text: normalized,
+        sttRawText: sttRawText,
+        sttConfidence: sttConfidence,
+      );
+      if (!mounted) return;
+      setState(() {
+        _submittingUtterance = false;
+        _transcribingVoice = false;
+        _characterReply = result.characterText;
+      });
+      await _presentTurnResult(result);
+    } on Failure catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _submittingUtterance = false;
+        _transcribingVoice = false;
+        _loadError = error.message;
+      });
+    }
+  }
+
+  Future<String> _transcribeAudio(Uint8List wavBytes) async {
+    final PlayRepository? repository = widget.repository;
+    if (repository == null) {
+      throw const UnknownFailure('음성 인식 연결이 필요합니다.');
+    }
+    return (await repository.transcribeAudio(wavBytes)).text;
+  }
+
+  Future<void> _toggleVoiceAnswer() async {
+    if (!_isListening || _transcribingVoice || _submittingUtterance) return;
+    if (!_recordingVoice) {
+      try {
+        final bool allowed = await _voiceRecorder.start();
+        if (!mounted) return;
+        if (!allowed) {
+          setState(() => _loadError = '마이크 권한을 허용해 주세요.');
+          return;
+        }
+        setState(() {
+          _recordingVoice = true;
+          _listeningSeconds = 0;
+        });
+        _listeningTimer?.cancel();
+        _listeningTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+          if (mounted && _recordingVoice) {
+            setState(() => _listeningSeconds++);
+          }
+        });
+      } on Object {
+        if (mounted) setState(() => _loadError = '마이크를 켜지 못했어요.');
+      }
+      return;
+    }
+
+    _listeningTimer?.cancel();
+    setState(() {
+      _recordingVoice = false;
+      _transcribingVoice = true;
+    });
+    try {
+      final Uint8List? audio = await _voiceRecorder.stop();
+      if (audio == null || audio.isEmpty) throw StateError('empty audio');
+      final PlayTranscription transcription = await widget.repository!
+          .transcribeAudio(audio);
+      if (!mounted) return;
+      await _submitDialogue(
+        transcription.text,
+        sttRawText: transcription.text,
+        sttConfidence: transcription.confidence,
+        lowConfidence: transcription.lowConfidence,
+      );
+    } on Failure catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _transcribingVoice = false;
+        _loadError = error.message;
+      });
+    } on Object {
+      if (!mounted) return;
+      setState(() {
+        _transcribingVoice = false;
+        _loadError = '목소리를 잘 듣지 못했어요. 다시 말해 주세요.';
+      });
+    }
+  }
+
+  Future<void> _presentTurnResult(PlayTurnResult result) async {
+    final String? reaction = result.closingReactionText;
+    if (reaction != null && reaction.trim().isNotEmpty) {
+      await _playCharacterMessage(
+        reaction,
+        audioUrl: result.closingReactionAudioUrl,
+      );
+    }
+    final String? reply = result.characterText;
+    if (reply != null && reply.trim().isNotEmpty) {
+      await _playCharacterMessage(reply, audioUrl: result.characterAudioUrl);
+    }
+    if (!mounted) return;
+
+    if (result.mission != null) {
+      setState(() => _mission = result.mission);
+      return;
+    }
+    final PlaySceneTransition? transition = result.sceneTransition;
+    if (transition != null) {
+      if ((transition.resultImageUrl ?? '').isNotEmpty) {
+        setState(() => _resultImageUrl = transition.resultImageUrl);
+        await Future<void>.delayed(const Duration(milliseconds: 2200));
+        if (!mounted) return;
+        setState(() => _resultImageUrl = null);
+      }
+      await _loadSession();
+      return;
+    }
+    _startListening();
+  }
+
+  Future<void> _submitMission(String answer) async {
+    final PlayMission? mission = _mission;
+    if (mission == null || _submittingMission || widget.repository == null) {
+      return;
+    }
+    setState(() {
+      _submittingMission = true;
+      _loadError = null;
+    });
+    try {
+      final PlayTurnResult result = await widget.repository!.submitUtterance(
+        widget.sessionId,
+        text: answer,
+        missionId: mission.missionId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _submittingMission = false;
+        _missionCompleted = true;
+        _characterReply = result.characterText;
+      });
+      await Future<void>.delayed(const Duration(milliseconds: 950));
+      if (!mounted) return;
+      setState(() {
+        _mission = null;
+        _missionCompleted = false;
+      });
+      await _presentTurnResult(result);
+    } on Failure catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _submittingMission = false;
+        _loadError = error.message;
+      });
+    }
   }
 
   void _scheduleCurrentNarration() {
@@ -171,14 +435,99 @@ class _PlayPageState extends State<PlayPage> {
     if (!_storyPaused) _scheduleCurrentNarration();
   }
 
-  void _playQuestion() {
+  Future<void> _playQuestion() async {
+    if (_recordingVoice) {
+      await _voiceRecorder.cancel();
+      if (!mounted) return;
+      setState(() => _recordingVoice = false);
+    }
+    unawaited(
+      _playCharacterMessage(
+        _characterReply ?? _snapshot?.openingText ?? widget.question,
+        audioUrl: _snapshot?.openingAudioUrl,
+        onComplete: _startListening,
+      ),
+    );
+  }
+
+  Future<void> _playCharacterMessage(
+    String text, {
+    String? audioUrl,
+    VoidCallback? onComplete,
+  }) async {
+    final int token = ++_speechToken;
     _questionTimer?.cancel();
     _listeningTimer?.cancel();
-    _listeningSeconds = 0;
-    if (mounted) setState(() => _phase = _DialoguePhase.characterSpeaking);
+    await _audioPlayer.stop();
+    final List<String> sentences = _splitSentences(text);
+    if (!mounted || sentences.isEmpty) {
+      onComplete?.call();
+      return;
+    }
+    setState(() {
+      _phase = _DialoguePhase.characterSpeaking;
+      _characterSentences = sentences;
+      _characterSentenceIndex = 0;
+      _listeningSeconds = 0;
+    });
 
-    // 실제 연동 시에는 TTS player의 onComplete에서 _startListening을 호출합니다.
-    _questionTimer = Timer(_previewQuestionDuration, _startListening);
+    for (int index = 0; index < sentences.length; index++) {
+      if (!mounted || token != _speechToken) return;
+      setState(() => _characterSentenceIndex = index);
+      bool played = false;
+      if (_soundOn && widget.repository != null) {
+        try {
+          final String source = index == 0 && sentences.length == 1
+              ? (audioUrl ??
+                    (await widget.repository!.synthesizeSpeech(
+                      text: sentences[index],
+                      characterName:
+                          _snapshot?.currentScene?.characterName ??
+                          widget.characterName,
+                    )).audioUrl)
+              : (await widget.repository!.synthesizeSpeech(
+                  text: sentences[index],
+                  characterName:
+                      _snapshot?.currentScene?.characterName ??
+                      widget.characterName,
+                )).audioUrl;
+          if (source.isNotEmpty) {
+            final String resolvedSource = source.startsWith('/')
+                ? Uri.parse(AppConfig.apiBaseUrl).resolve(source).toString()
+                : source;
+            await _audioPlayer.playUrl(resolvedSource);
+            played = true;
+          }
+        } on Object {
+          played = false;
+        }
+      }
+      if (!played) {
+        final int milliseconds = widget.repository == null
+            ? 2000
+            : (1200 + sentences[index].length * 55).clamp(1800, 5200).toInt();
+        await _waitForSpeech(Duration(milliseconds: milliseconds));
+      }
+    }
+    if (mounted && token == _speechToken) onComplete?.call();
+  }
+
+  Future<void> _waitForSpeech(Duration duration) {
+    final Completer<void> completer = Completer<void>();
+    _questionTimer?.cancel();
+    _questionTimer = Timer(duration, () {
+      if (!completer.isCompleted) completer.complete();
+    });
+    return completer.future;
+  }
+
+  List<String> _splitSentences(String text) {
+    final List<String> sentences = RegExp(r'[^.!?。！？]+[.!?。！？]?')
+        .allMatches(text)
+        .map((match) => match.group(0)?.trim() ?? '')
+        .where((sentence) => sentence.isNotEmpty)
+        .toList(growable: false);
+    return sentences.isEmpty ? <String>[text.trim()] : sentences;
   }
 
   void _startListening() {
@@ -186,10 +535,14 @@ class _PlayPageState extends State<PlayPage> {
     setState(() {
       _phase = _DialoguePhase.listening;
       _listeningSeconds = 0;
+      _recordingVoice = false;
+      _transcribingVoice = false;
     });
     _listeningTimer?.cancel();
-    _listeningTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && _isListening) setState(() => _listeningSeconds++);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _phase == _DialoguePhase.listening && !_recordingVoice) {
+        unawaited(_toggleVoiceAnswer());
+      }
     });
   }
 
@@ -205,9 +558,16 @@ class _PlayPageState extends State<PlayPage> {
     }
 
     _phaseBeforePause = _phase;
+    _speechToken++;
     _questionTimer?.cancel();
     _listeningTimer?.cancel();
-    setState(() => _phase = _DialoguePhase.paused);
+    if (_recordingVoice) unawaited(_voiceRecorder.cancel());
+    unawaited(_audioPlayer.stop());
+    setState(() {
+      _recordingVoice = false;
+      _transcribingVoice = false;
+      _phase = _DialoguePhase.paused;
+    });
   }
 
   Future<void> _confirmExit() async {
@@ -280,7 +640,10 @@ class _PlayPageState extends State<PlayPage> {
             fit: StackFit.expand,
             children: <Widget>[
               _StoryBackdrop(
-                asset: dialogueScene?.imageUrl ?? widget.backgroundAsset,
+                asset:
+                    _retainedStoryImageUrl ??
+                    dialogueScene?.imageUrl ??
+                    widget.backgroundAsset,
               ),
               const _BackdropShade(),
               SafeArea(
@@ -301,11 +664,16 @@ class _PlayPageState extends State<PlayPage> {
                         characterName:
                             dialogueScene?.characterName ??
                             widget.characterName,
-                        question: _snapshot?.openingText ?? widget.question,
+                        question: _visibleCharacterText,
                         phase: _phase,
                         listeningSeconds: _listeningSeconds,
+                        recording: _recordingVoice,
+                        transcribing: _transcribingVoice,
                         compact: compact,
-                        onMicTap: _isListening ? _startListening : null,
+                        onMicTap: _isListening ? _toggleVoiceAnswer : null,
+                        submitting: _submittingUtterance,
+                        lastChildText: _lastChildText,
+                        lastSttLowConfidence: _lastSttLowConfidence,
                       ),
                     ),
                   ],
@@ -313,6 +681,38 @@ class _PlayPageState extends State<PlayPage> {
               ),
               if (_phase == _DialoguePhase.paused)
                 _PauseOverlay(onResume: _togglePause, onExit: _confirmExit),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 430),
+                reverseDuration: const Duration(milliseconds: 320),
+                transitionBuilder: (Widget child, Animation<double> animation) {
+                  return FadeTransition(
+                    opacity: animation,
+                    child: ScaleTransition(
+                      scale: Tween<double>(begin: .9, end: 1).animate(
+                        CurvedAnimation(
+                          parent: animation,
+                          curve: Curves.easeOutBack,
+                        ),
+                      ),
+                      child: child,
+                    ),
+                  );
+                },
+                child: _mission == null
+                    ? const SizedBox.shrink(key: ValueKey<String>('no-mission'))
+                    : SizedBox.expand(
+                        key: ValueKey<String>(_mission!.missionId),
+                        child: MissionOverlay(
+                          mission: _mission!,
+                          submitting: _submittingMission,
+                          completed: _missionCompleted,
+                          transcribeAudio: _transcribeAudio,
+                          onSubmit: _submitMission,
+                        ),
+                      ),
+              ),
+              if (_resultImageUrl != null)
+                _ResultSceneOverlay(imageUrl: _resultImageUrl!),
             ],
           );
         },
@@ -444,16 +844,19 @@ class _StoryBackdrop extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (asset != null) {
-      final Uri? uri = Uri.tryParse(asset!);
+      final String resolvedAsset = asset!.startsWith('/')
+          ? Uri.parse(AppConfig.apiBaseUrl).resolve(asset!).toString()
+          : asset!;
+      final Uri? uri = Uri.tryParse(resolvedAsset);
       if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
         return Image.network(
-          asset!,
+          resolvedAsset,
           fit: BoxFit.cover,
           errorBuilder: (_, __, ___) => const _FallbackStoryBackdrop(),
         );
       }
       return Image.asset(
-        asset!,
+        resolvedAsset,
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => const _FallbackStoryBackdrop(),
       );
@@ -615,8 +1018,13 @@ class _DialogueCanvas extends StatelessWidget {
     required this.question,
     required this.phase,
     required this.listeningSeconds,
+    required this.recording,
+    required this.transcribing,
     required this.compact,
     required this.onMicTap,
+    required this.submitting,
+    required this.lastChildText,
+    required this.lastSttLowConfidence,
   });
 
   final String? characterAsset;
@@ -624,76 +1032,193 @@ class _DialogueCanvas extends StatelessWidget {
   final String question;
   final _DialoguePhase phase;
   final int listeningSeconds;
+  final bool recording;
+  final bool transcribing;
   final bool compact;
   final VoidCallback? onMicTap;
+  final bool submitting;
+  final String? lastChildText;
+  final bool lastSttLowConfidence;
 
   @override
   Widget build(BuildContext context) {
-    if (compact) {
-      return Column(
-        children: <Widget>[
-          Expanded(
-            child: Stack(
-              children: <Widget>[
-                Align(
-                  alignment: Alignment.bottomLeft,
-                  child: _CharacterSlot(
-                    asset: characterAsset,
-                    name: characterName,
-                    compact: true,
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        return Stack(
+          clipBehavior: Clip.none,
+          children: <Widget>[
+            if (characterAsset != null && !compact)
+              Positioned(
+                left: 18,
+                top: 30,
+                bottom: 0,
+                width: constraints.maxWidth * .29,
+                child: Semantics(
+                  image: true,
+                  label: '$characterName 캐릭터',
+                  child: Image.asset(
+                    characterAsset!,
+                    fit: BoxFit.contain,
+                    alignment: Alignment.bottomLeft,
                   ),
                 ),
-                Align(
-                  alignment: Alignment.topRight,
-                  child: FractionallySizedBox(
-                    widthFactor: .72,
-                    child: _QuestionBubble(
-                      name: characterName,
-                      question: question,
-                      speaking: phase == _DialoguePhase.characterSpeaking,
-                    ),
-                  ),
-                ),
-              ],
+              ),
+            Positioned(
+              left: compact ? 10 : constraints.maxWidth * .23,
+              right: compact ? 10 : 20,
+              top: compact ? 18 : 44,
+              child: _QuestionBubble(
+                characterName: characterName,
+                question: question,
+                compact: compact,
+              ),
             ),
-          ),
-          _ChildBubble(
-            phase: phase,
-            seconds: listeningSeconds,
-            onMicTap: onMicTap,
-            compact: true,
-          ),
-        ],
-      );
-    }
+            if (!compact)
+              Positioned(
+                left: 20,
+                bottom: 22,
+                child: _CharacterNameBadge(name: characterName),
+              ),
+            Positioned(
+              right: compact ? 10 : 0,
+              bottom: compact ? 10 : 20,
+              width: compact
+                  ? constraints.maxWidth - 20
+                  : constraints.maxWidth * .52,
+              child: _ChildVoiceBubble(
+                phase: phase,
+                seconds: listeningSeconds,
+                recording: recording,
+                transcribing: transcribing,
+                submitting: submitting,
+                onMicTap: onMicTap,
+                lastChildText: lastChildText,
+                lowConfidence: lastSttLowConfidence,
+                compact: compact,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
 
+class _CharacterNameBadge extends StatelessWidget {
+  const _CharacterNameBadge({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xDD173A5D),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white70),
+      ),
+      child: Text(
+        name,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 18,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _QuestionBubble extends StatelessWidget {
+  const _QuestionBubble({
+    required this.characterName,
+    required this.question,
+    required this.compact,
+  });
+
+  final String characterName;
+  final String question;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
     return Stack(
+      clipBehavior: Clip.none,
       children: <Widget>[
         Positioned(
-          left: 16,
-          bottom: 0,
-          width: 390,
-          top: 72,
-          child: _CharacterSlot(asset: characterAsset, name: characterName),
-        ),
-        Positioned(
-          left: 330,
-          right: 90,
-          top: 72,
-          child: _QuestionBubble(
-            name: characterName,
-            question: question,
-            speaking: phase == _DialoguePhase.characterSpeaking,
+          left: -17,
+          top: 62,
+          child: Transform.rotate(
+            angle: .78,
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFCF3),
+                border: Border.all(color: const Color(0xFFFFD66B), width: 2),
+              ),
+            ),
           ),
         ),
-        Positioned(
-          right: 12,
-          bottom: 20,
-          width: 560,
-          child: _ChildBubble(
-            phase: phase,
-            seconds: listeningSeconds,
-            onMicTap: onMicTap,
+        Container(
+          constraints: BoxConstraints(minHeight: compact ? 138 : 176),
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 22 : 34,
+            vertical: compact ? 19 : 25,
+          ),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFFCF3),
+            borderRadius: BorderRadius.circular(compact ? 24 : 32),
+            border: Border.all(color: const Color(0xFFFFD66B), width: 3),
+            boxShadow: const <BoxShadow>[
+              BoxShadow(
+                color: Color(0x55081729),
+                blurRadius: 28,
+                offset: Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    color: Color(0xFF4EA883),
+                    size: 25,
+                  ),
+                  const SizedBox(width: 9),
+                  Text(
+                    '$characterName의 질문',
+                    style: const TextStyle(
+                      color: Color(0xFF496179),
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Semantics(
+                liveRegion: true,
+                label: question,
+                child: Text(
+                  question,
+                  maxLines: compact ? 3 : 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: const Color(0xFF172A3E),
+                    fontSize: compact ? 27 : 34,
+                    height: 1.35,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -.5,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -701,10 +1226,136 @@ class _DialogueCanvas extends StatelessWidget {
   }
 }
 
+class _ChildVoiceBubble extends StatelessWidget {
+  const _ChildVoiceBubble({
+    required this.phase,
+    required this.seconds,
+    required this.recording,
+    required this.transcribing,
+    required this.submitting,
+    required this.onMicTap,
+    required this.lastChildText,
+    required this.lowConfidence,
+    required this.compact,
+  });
+
+  final _DialoguePhase phase;
+  final int seconds;
+  final bool recording;
+  final bool transcribing;
+  final bool submitting;
+  final VoidCallback? onMicTap;
+  final String? lastChildText;
+  final bool lowConfidence;
+  final bool compact;
+
+  bool get listening => phase == _DialoguePhase.listening;
+
+  @override
+  Widget build(BuildContext context) {
+    final String status = transcribing
+        ? '목소리를 글로 바꾸고 있어요'
+        : submitting
+        ? '이야기 친구가 답을 준비하고 있어요'
+        : recording
+        ? '잘 듣고 있어요 · $seconds초'
+        : listening
+        ? '이제 말할 차례예요'
+        : '질문을 듣고 있어요';
+    final String body = lastChildText?.trim().isNotEmpty == true
+        ? lastChildText!.trim()
+        : recording
+        ? '나는 이렇게 생각해요…'
+        : transcribing
+        ? '말한 내용을 잠깐 확인하고 있어요.'
+        : listening
+        ? '마이크가 자동으로 켜졌어요.'
+        : '질문이 끝나면 마이크가 켜져요.';
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      constraints: BoxConstraints(minHeight: compact ? 128 : 154),
+      padding: EdgeInsets.all(compact ? 15 : 20),
+      decoration: BoxDecoration(
+        color: const Color(0xF2123252),
+        borderRadius: BorderRadius.circular(compact ? 22 : 28),
+        border: Border.all(
+          color: listening ? const Color(0xFF77E0C4) : Colors.white38,
+          width: listening ? 3 : 1.5,
+        ),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            color: Color(0x66000000),
+            blurRadius: 24,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
+        children: <Widget>[
+          _ListeningMic(
+            ready: listening,
+            recording: recording,
+            busy: transcribing || submitting,
+            onTap: onMicTap,
+          ),
+          const SizedBox(width: 18),
+          Expanded(
+            child: Semantics(
+              liveRegion: true,
+              label: lastChildText == null ? status : '내가 한 말: $lastChildText',
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    status,
+                    style: const TextStyle(
+                      color: Color(0xFF8DE7CF),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 9),
+                  Text(
+                    body,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: compact ? 20 : 23,
+                      height: 1.35,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  if (lowConfidence && lastChildText != null) ...<Widget>[
+                    const SizedBox(height: 6),
+                    const Text(
+                      '잘 들었는지 한 번 더 확인해 주세요.',
+                      style: TextStyle(
+                        color: Color(0xFFFFD56A),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// TODO: Remove after downstream story branches finish migrating to the overlay UI.
+// ignore: unused_element
 class _CharacterSlot extends StatelessWidget {
   const _CharacterSlot({
     required this.asset,
     required this.name,
+    // ignore: unused_element_parameter
     this.compact = false,
   });
 
@@ -717,114 +1368,236 @@ class _CharacterSlot extends StatelessWidget {
     return Semantics(
       image: true,
       label: '$name 캐릭터',
-      child: Stack(
-        alignment: Alignment.bottomCenter,
-        children: <Widget>[
-          if (asset != null)
-            Image.asset(
-              asset!,
-              fit: BoxFit.contain,
-              alignment: Alignment.bottomCenter,
-            )
-          else
-            CustomPaint(
-              size: Size(compact ? 220 : 360, compact ? 320 : 520),
-              painter: const _CharacterPlaceholderPainter(),
-            ),
-          Positioned(
-            bottom: 10,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(compact ? 24 : 34),
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            if (asset != null)
+              _StoryBackdrop(asset: asset)
+            else
+              const _FallbackStoryBackdrop(),
+            const DecoratedBox(
               decoration: BoxDecoration(
-                color: const Color(0xE6173150),
-                borderRadius: BorderRadius.circular(99),
-                border: Border.all(color: Colors.white54),
-              ),
-              child: Text(
-                name,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: <Color>[
+                    Color(0x00142C46),
+                    Color(0x22142C46),
+                    Color(0xD9142C46),
+                  ],
                 ),
               ),
             ),
-          ),
-        ],
+            Positioned(
+              left: compact ? 16 : 24,
+              right: compact ? 16 : 24,
+              bottom: compact ? 14 : 22,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text(
+                    '이야기 친구',
+                    style: TextStyle(
+                      color: Color(0xFFFFDE79),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: compact ? 24 : 31,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _QuestionBubble extends StatelessWidget {
-  const _QuestionBubble({
-    required this.name,
+// TODO: Remove after downstream story branches finish migrating to the overlay UI.
+// ignore: unused_element
+class _DialoguePanel extends StatelessWidget {
+  const _DialoguePanel({
+    required this.characterName,
     required this.question,
-    required this.speaking,
+    required this.phase,
+    required this.seconds,
+    required this.recording,
+    required this.transcribing,
+    required this.submitting,
+    required this.onMicTap,
+    required this.lastChildText,
+    required this.lastSttLowConfidence,
+    // ignore: unused_element_parameter
+    this.compact = false,
   });
 
-  final String name;
+  final String characterName;
   final String question;
-  final bool speaking;
+  final _DialoguePhase phase;
+  final int seconds;
+  final bool recording;
+  final bool transcribing;
+  final bool submitting;
+  final VoidCallback? onMicTap;
+  final String? lastChildText;
+  final bool lastSttLowConfidence;
+  final bool compact;
+
+  bool get listening => phase == _DialoguePhase.listening;
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: const _LeftTailPainter(color: Color(0xFFFFFCF2)),
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 142, maxWidth: 720),
-        padding: const EdgeInsets.fromLTRB(30, 22, 30, 24),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFFCF2),
-          borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: const Color(0xFFFFD56A), width: 3),
-          boxShadow: const <BoxShadow>[
-            BoxShadow(
-              color: Color(0x55000000),
-              blurRadius: 24,
-              offset: Offset(0, 10),
+    final String status = transcribing
+        ? '목소리를 글로 바꾸는 중'
+        : submitting
+        ? '$characterName 친구가 생각하는 중'
+        : recording
+        ? '아이가 말하는 중 · $seconds초'
+        : listening
+        ? '딩동! 이제 네 차례'
+        : '$characterName 친구가 이야기하는 중';
+    final Color accent = listening || recording
+        ? const Color(0xFF1C9B75)
+        : const Color(0xFF396EA8);
+
+    return Container(
+      padding: EdgeInsets.all(compact ? 18 : 28),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFCF3),
+        borderRadius: BorderRadius.circular(compact ? 24 : 34),
+        border: Border.all(color: const Color(0xFFFFD66B), width: 3),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            color: Color(0x44081729),
+            blurRadius: 28,
+            offset: Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: .12),
+              borderRadius: BorderRadius.circular(18),
             ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Row(
+            child: Row(
               children: <Widget>[
                 Icon(
-                  speaking
-                      ? AppIcons.characterSpeaking
-                      : Icons.check_circle_rounded,
-                  color: speaking
-                      ? const Color(0xFF4B8EC2)
-                      : const Color(0xFF4A9B78),
+                  recording
+                      ? Icons.graphic_eq_rounded
+                      : listening
+                      ? Icons.notifications_active_rounded
+                      : transcribing || submitting
+                      ? Icons.hourglass_top_rounded
+                      : AppIcons.characterSpeaking,
+                  color: accent,
+                  size: 28,
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  speaking ? '$name이 말하고 있어요' : '$name의 질문',
-                  style: const TextStyle(
-                    color: Color(0xFF47607A),
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    status,
+                    style: TextStyle(
+                      color: accent,
+                      fontSize: compact ? 18 : 21,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            Text(
-              question,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Color(0xFF1C2C40),
-                fontSize: 25,
-                height: 1.45,
-                fontWeight: FontWeight.w900,
+          ),
+          SizedBox(height: compact ? 14 : 22),
+          Expanded(
+            child: Semantics(
+              liveRegion: true,
+              label: question,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '“$question”',
+                  maxLines: compact ? 3 : 4,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: const Color(0xFF172A3E),
+                    fontSize: compact ? 27 : 34,
+                    height: 1.42,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -.4,
+                  ),
+                ),
               ),
             ),
+          ),
+          if (lastChildText != null && (submitting || !listening)) ...<Widget>[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0F5F3),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: <Widget>[
+                  const Icon(
+                    Icons.child_care_rounded,
+                    color: Color(0xFF527267),
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      '내가 한 말: $lastChildText',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF385448),
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  if (lastSttLowConfidence)
+                    const Padding(
+                      padding: EdgeInsets.only(left: 8),
+                      child: Text(
+                        '다시 확인해도 좋아요',
+                        style: TextStyle(
+                          color: Color(0xFFC56636),
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
           ],
-        ),
+          _ChildBubble(
+            phase: phase,
+            seconds: seconds,
+            recording: recording,
+            transcribing: transcribing,
+            onMicTap: onMicTap,
+            compact: compact,
+            submitting: submitting,
+          ),
+        ],
       ),
     );
   }
@@ -834,13 +1607,19 @@ class _ChildBubble extends StatelessWidget {
   const _ChildBubble({
     required this.phase,
     required this.seconds,
+    required this.recording,
+    required this.transcribing,
     required this.onMicTap,
+    required this.submitting,
     this.compact = false,
   });
 
   final _DialoguePhase phase;
   final int seconds;
+  final bool recording;
+  final bool transcribing;
   final VoidCallback? onMicTap;
+  final bool submitting;
   final bool compact;
 
   bool get listening => phase == _DialoguePhase.listening;
@@ -870,7 +1649,12 @@ class _ChildBubble extends StatelessWidget {
         ),
         child: Row(
           children: <Widget>[
-            _ListeningMic(active: listening, onTap: onMicTap),
+            _ListeningMic(
+              ready: listening,
+              recording: recording,
+              busy: transcribing || submitting,
+              onTap: onMicTap,
+            ),
             const SizedBox(width: 18),
             Expanded(
               child: Column(
@@ -878,7 +1662,15 @@ class _ChildBubble extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    listening ? '잘 듣고 있어요 · $seconds초' : '질문을 듣고 있어요',
+                    transcribing
+                        ? '목소리를 글로 바꾸고 있어요'
+                        : submitting
+                        ? '생각을 이야기 친구에게 전했어요'
+                        : recording
+                        ? '잘 듣고 있어요 · $seconds초'
+                        : listening
+                        ? '말할 준비가 됐어요'
+                        : '질문을 듣고 있어요',
                     style: const TextStyle(
                       color: Color(0xFF8DE7CF),
                       fontSize: 16,
@@ -887,7 +1679,15 @@ class _ChildBubble extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    listening ? '나는 이렇게 생각해요…' : '질문이 끝나면 마이크가 자동으로 켜져요.',
+                    recording
+                        ? '나는 이렇게 생각해요!'
+                        : transcribing
+                        ? '잠깐만 기다려 주세요...'
+                        : submitting
+                        ? '대답을 준비하고 있어요. 잠시만 기다려요.'
+                        : listening
+                        ? '마이크를 누르고 이야기해 주세요.'
+                        : '질문이 끝나면 말할 차례가 와요.',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -897,10 +1697,10 @@ class _ChildBubble extends StatelessWidget {
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                  if (listening) ...<Widget>[
+                  if (recording) ...<Widget>[
                     const SizedBox(height: 10),
                     const Text(
-                      '한 문장으로 천천히 말해 주세요',
+                      '말을 마치면 마이크를 다시 눌러 주세요',
                       style: TextStyle(
                         color: Colors.white70,
                         fontSize: 14,
@@ -919,26 +1719,41 @@ class _ChildBubble extends StatelessWidget {
 }
 
 class _ListeningMic extends StatelessWidget {
-  const _ListeningMic({required this.active, required this.onTap});
+  const _ListeningMic({
+    required this.ready,
+    required this.recording,
+    required this.busy,
+    required this.onTap,
+  });
 
-  final bool active;
+  final bool ready;
+  final bool recording;
+  final bool busy;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: active ? '마이크 켜짐' : '마이크 준비 중',
+      label: recording
+          ? '마이크 켜짐'
+          : ready
+          ? '마이크 준비됨'
+          : '마이크 준비 중',
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
-        width: 80,
-        height: 80,
+        width: 96,
+        height: 96,
         decoration: BoxDecoration(
-          color: active ? const Color(0xFF77E0C4) : const Color(0xFF6D8094),
+          color: recording
+              ? const Color(0xFFFF7B68)
+              : ready
+              ? const Color(0xFF77E0C4)
+              : const Color(0xFF6D8094),
           shape: BoxShape.circle,
-          boxShadow: active
+          boxShadow: recording
               ? const <BoxShadow>[
                   BoxShadow(
-                    color: Color(0x8877E0C4),
+                    color: Color(0x88FF7B68),
                     blurRadius: 18,
                     spreadRadius: 4,
                   ),
@@ -946,10 +1761,16 @@ class _ListeningMic extends StatelessWidget {
               : null,
         ),
         child: IconButton(
-          tooltip: active ? '듣고 있어요' : '질문이 끝나면 자동으로 켜져요',
-          onPressed: onTap,
-          icon: Icon(active ? AppIcons.speaking : AppIcons.speak),
-          iconSize: 38,
+          tooltip: recording
+              ? '말하기 완료'
+              : ready
+              ? '눌러서 말하기'
+              : '질문을 듣는 중이에요',
+          onPressed: busy ? null : onTap,
+          icon: busy
+              ? const CircularProgressIndicator(strokeWidth: 3)
+              : Icon(recording ? Icons.stop_rounded : AppIcons.speak),
+          iconSize: 44,
           color: const Color(0xFF123252),
         ),
       ),
@@ -1003,24 +1824,52 @@ class _PauseOverlay extends StatelessWidget {
   }
 }
 
-class _LeftTailPainter extends CustomPainter {
-  const _LeftTailPainter({required this.color});
-  final Color color;
+class _ResultSceneOverlay extends StatelessWidget {
+  const _ResultSceneOverlay({required this.imageUrl});
+
+  final String imageUrl;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    canvas.drawPath(
-      Path()
-        ..moveTo(4, 56)
-        ..lineTo(-28, 78)
-        ..lineTo(6, 90)
-        ..close(),
-      Paint()..color = color,
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: const Color(0xE60D2238),
+      child: SafeArea(
+        minimum: const EdgeInsets.all(28),
+        child: Center(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(32),
+            child: Stack(
+              alignment: Alignment.bottomCenter,
+              children: <Widget>[
+                SizedBox(
+                  width: 1060,
+                  height: 620,
+                  child: _StoryBackdrop(asset: imageUrl),
+                ),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 28,
+                    vertical: 22,
+                  ),
+                  color: const Color(0xD9142C46),
+                  child: const Text(
+                    '네 생각이 이야기 속에서 펼쳐지고 있어요!',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 27,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _RightTailPainter extends CustomPainter {
@@ -1036,58 +1885,6 @@ class _RightTailPainter extends CustomPainter {
         ..lineTo(size.width - 5, 68)
         ..close(),
       Paint()..color = color,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _CharacterPlaceholderPainter extends CustomPainter {
-  const _CharacterPlaceholderPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final Paint glow = Paint()..color = const Color(0x334EE0C2);
-    canvas.drawCircle(
-      Offset(size.width * .5, size.height * .35),
-      size.width * .4,
-      glow,
-    );
-    final Paint body = Paint()..color = const Color(0xFF92C4D9);
-    canvas.drawCircle(
-      Offset(size.width * .5, size.height * .28),
-      size.width * .22,
-      body,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(
-          size.width * .18,
-          size.height * .48,
-          size.width * .64,
-          size.height * .52,
-        ),
-        Radius.circular(size.width * .28),
-      ),
-      body,
-    );
-    final Paint face = Paint()..color = const Color(0xFF264866);
-    canvas.drawCircle(Offset(size.width * .43, size.height * .27), 5, face);
-    canvas.drawCircle(Offset(size.width * .57, size.height * .27), 5, face);
-    canvas.drawArc(
-      Rect.fromCenter(
-        center: Offset(size.width * .5, size.height * .34),
-        width: 42,
-        height: 24,
-      ),
-      0,
-      3.14,
-      false,
-      Paint()
-        ..color = const Color(0xFF264866)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 4,
     );
   }
 

@@ -14,6 +14,8 @@ class PlaySessionDto {
       currentScene: _scene(json['currentScene']),
       openingText: _messageText(json['lastCharacterMessage']),
       openingAudioUrl: _messageAudioUrl(json['lastCharacterMessage']),
+      mission: mission(json['exposedMission']),
+      messages: _messages(json['messages']),
     );
   }
 
@@ -24,6 +26,118 @@ class PlaySessionDto {
         openingText: _messageText(json['openingMessage']),
         openingAudioUrl: _messageAudioUrl(json['openingMessage']),
       );
+
+  static PlayMission? mission(Object? value) {
+    if (value == null) return null;
+    if (value is! Map<String, dynamic>) {
+      throw const ParseException('미션 응답 형식이 올바르지 않습니다.');
+    }
+    final String? missionId = value['missionId'] as String?;
+    final String? missionType = value['missionType'] as String?;
+    if (missionId == null || missionType == null) {
+      throw const ParseException('미션 식별 정보가 없습니다.');
+    }
+    final Object? payloadValue = value['payload'];
+    final Map<String, dynamic> payload = payloadValue is Map<String, dynamic>
+        ? payloadValue
+        : const <String, dynamic>{};
+    return PlayMission(
+      missionId: missionId,
+      missionType: switch (missionType) {
+        'PROBLEM_SOLVING' => PlayMissionType.problemSolving,
+        'PERSPECTIVE_SHIFT' => PlayMissionType.perspectiveShift,
+        _ => throw ParseException('알 수 없는 미션 종류입니다: $missionType'),
+      },
+      title: value['title'] as String? ?? '생각 미션',
+      description: value['description'] as String? ?? '천천히 생각하고 답해 보세요.',
+      questions: _questions(payload['questions']),
+      cards: _cards(payload['cards']),
+    );
+  }
+
+  static PlayTurnResult fromUtteranceJson(Map<String, dynamic> json) =>
+      PlayTurnResult(
+        characterText: _messageText(json['characterMessage']),
+        characterAudioUrl: _messageAudioUrl(json['characterMessage']),
+        mission: mission(json['mission']),
+        sceneTransition: _transition(json['sceneTransition']),
+        closingReactionText: _messageText(json['closingReaction']),
+        closingReactionAudioUrl: _messageAudioUrl(json['closingReaction']),
+      );
+
+  static List<PlayMessage> _messages(Object? value) => value is List
+      ? value
+            .whereType<Map<String, dynamic>>()
+            .map((item) {
+              return PlayMessage(
+                messageId: item['messageId']?.toString() ?? '',
+                speaker: switch (item['speakerType']) {
+                  'CHILD' => PlaySpeaker.child,
+                  'CHARACTER' => PlaySpeaker.character,
+                  _ => PlaySpeaker.system,
+                },
+                turnOrder: (item['turnOrder'] as num?)?.toInt() ?? 0,
+                text: item['text'] as String? ?? '',
+                sttLowConfidence: item['sttLowConfidence'] as bool? ?? false,
+              );
+            })
+            .where((item) => item.text.isNotEmpty)
+            .toList(growable: false)
+      : const <PlayMessage>[];
+
+  static PlaySceneTransition? _transition(Object? value) {
+    if (value == null) return null;
+    if (value is! Map<String, dynamic>) {
+      throw const ParseException('장면 전환 응답 형식이 올바르지 않습니다.');
+    }
+    final String? next = value['next'] as String?;
+    if (next == null) throw const ParseException('다음 장면 정보가 없습니다.');
+    return PlaySceneTransition(
+      next: switch (next) {
+        'SCENE' => PlayTransitionTarget.scene,
+        'POST_ACTIVITY' => PlayTransitionTarget.postActivity,
+        'COMPLETED' => PlayTransitionTarget.completed,
+        _ => throw ParseException('알 수 없는 장면 전환입니다: $next'),
+      },
+      nextSceneId: value['nextSceneId']?.toString(),
+      nextSceneOrder: (value['nextSceneOrder'] as num?)?.toInt(),
+      nextSceneType: switch (value['nextSceneType']) {
+        'STORY' => PlaySceneType.story,
+        'DIALOGUE' => PlaySceneType.dialogue,
+        _ => null,
+      },
+      closingReason: value['closingReason'] as String?,
+      resultImageUrl: value['resultImageUrl'] as String?,
+    );
+  }
+
+  static List<PlayMissionQuestion> _questions(Object? value) => value is List
+      ? value
+            .whereType<Map<String, dynamic>>()
+            .map((item) {
+              return PlayMissionQuestion(
+                key: item['key'] as String? ?? '',
+                label: item['label'] as String? ?? '',
+              );
+            })
+            .where((item) => item.key.isNotEmpty)
+            .toList(growable: false)
+      : const <PlayMissionQuestion>[];
+
+  static List<PlayMissionCard> _cards(Object? value) => value is List
+      ? value
+            .whereType<Map<String, dynamic>>()
+            .map((item) {
+              return PlayMissionCard(
+                key: item['key'] as String? ?? '',
+                label: item['label'] as String? ?? '',
+                imageUrl: item['imageUrl'] as String?,
+                template: item['template'] as String?,
+              );
+            })
+            .where((item) => item.key.isNotEmpty)
+            .toList(growable: false)
+      : const <PlayMissionCard>[];
 
   static PlayPhase _phase(Object? value) => switch (value) {
     'STORY' => PlayPhase.story,
