@@ -306,6 +306,7 @@ Pretendard 는 숫자·영문이 정갈해서 리포트의 수치와 날짜에 �
 |---|---|
 | `AppCanvas.day/.night/.guardian` | 화면 바탕 세 종류 |
 | `PressScale` | 누르면 살짝 줄어드는 터치 영역. 카드·탭·버튼의 바닥 |
+| `KidSpeechBubble` | 말풍선 (`KidSpeaker.character` 왼쪽·흰 면 / `.child` 오른쪽·`brandBlue` 10% 면). 꼬리를 **박스 안쪽에** 그려서 `height` 하나로 세로 예산을 짤 수 있습니다 |
 | `KidPrimaryButton` | 아이 화면 주 버튼 (88 · pill · 아이콘+한 단어) |
 | `StardustChip.day/.night` | 별가루 잔액 칩 |
 | `AppBottomNav` | 하단 내비 4탭. 홈·이야기·단어장·마이페이지가 공유 |
