@@ -21,6 +21,9 @@ import '../../features/mypage/data/repositories/settings_repository_impl.dart';
 import '../../features/mypage/domain/guardian_gate.dart';
 import '../../features/mypage/domain/repositories/my_page_repository.dart';
 import '../../features/mypage/domain/usecases/my_page_use_cases.dart';
+import '../../features/play/data/datasources/play_remote_data_source.dart';
+import '../../features/play/data/repositories/play_repository_impl.dart';
+import '../../features/play/domain/repositories/play_repository.dart';
 import '../../features/question/data/datasources/question_remote_data_source.dart';
 import '../../features/question/data/repositories/question_repository_impl.dart';
 import '../../features/question/data/repositories/question_repository_mock.dart';
@@ -145,6 +148,15 @@ Future<void> configureDependencies() async {
     )
     ..registerLazySingleton<StartStorySessionUseCase>(
       () => StartStorySessionUseCase(getIt<StoryRepository>()),
+    );
+
+  // ---- play ----
+  getIt
+    ..registerLazySingleton<PlayRemoteDataSource>(
+      () => PlayRemoteDataSource(getIt<DioClient>()),
+    )
+    ..registerLazySingleton<PlayRepository>(
+      () => PlayRepositoryImpl(getIt<PlayRemoteDataSource>()),
     );
 
   // ---- word ----
