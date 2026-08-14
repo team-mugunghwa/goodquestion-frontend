@@ -3,7 +3,21 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_icons.dart';
+import '../../../../core/constants/app_strings.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_motion.dart';
+import '../../../../core/theme/app_shadows.dart';
+import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/theme/app_typography.dart';
+import '../../../../core/widgets/app_canvas.dart';
+import '../../../../core/widgets/app_state_views.dart';
+import '../../../../core/widgets/kid_button.dart';
+import '../../../../core/widgets/kid_speech_bubble.dart';
+import '../../../../core/widgets/press_scale.dart';
+import '../../../../core/widgets/screen_metrics.dart';
+import '../../../../core/widgets/story_cover.dart';
 
 /// 말하기 후 활동에서 사용하는 장면 카드 데이터입니다.
 ///
@@ -29,7 +43,28 @@ class RecapSceneCard {
   final String image;
 }
 
-/// 이야기 종료 후 `순서 맞추기 → 다시 말하기 → 저장 완료`를 진행하는 공통 화면입니다.
+/// 이야기 종료 후 `순서 맞추기 → 다시 말하기 → 저장 완료`를 진행하는 아이 화면입니다.
+///
+/// ## 배치 — 전 폭에서 하나의 세로 레이아웃
+///
+/// ```
+/// 상단 바 (뒤로 · 단계)        고정
+/// ────────────────────────
+/// 본문                        스크롤(넘칠 때만)
+/// ────────────────────────
+/// 하단 조작 (확인 / 마이크)     고정
+/// ```
+///
+/// 폭에 따라 레이아웃을 갈아 끼우지 않습니다. 본문 높이가 모자라면 본문만
+/// 스크롤되고 **하단 조작은 늘 같은 자리**에 남습니다. 폰 가로(844×390)처럼
+/// 세로가 짧은 화면에서 "넓은 화면"으로 분류돼 무너지는 일이 없습니다.
+///
+/// ## 세로 예산은 역산으로 짭니다
+///
+/// 1280×720에서 "장면 그림 + 받아쓰기 + 마이크 120 + 스크롤 없음"은 그냥
+/// 쌓아서는 성립하지 않습니다. 그래서 [_sceneMinHeight] 를 **먼저 보장**하고,
+/// 남은 높이를 받아쓰기 줄 수([_transcriptMinLines]~[_transcriptMaxLines])로
+/// 환산한 뒤, 그러고도 남는 높이를 다시 장면 그림에 돌려줍니다.
 class PlayRecapPage extends StatefulWidget {
   const PlayRecapPage({
     required this.sessionId,
@@ -104,13 +139,22 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
   String? _selectedCardId;
   bool _showRetryHint = false;
   bool _isListening = false;
+
+  /// **말하기를 한 번이라도 시작했는가.**
+  ///
+  /// 받아쓰기 띠와 완료 버튼의 조건을 `transcript == null` 이나 녹음 시간에서
+  /// 파생시키면, 0초에 멈춘 아이의 화면에서 띠가 접히고 완료 버튼이 죽습니다.
+  /// 상태를 이름으로 분리해 두면 실제 STT 를 붙일 때도 그대로 살아남습니다.
+  bool _hasSpoken = false;
   bool _isSaving = false;
-  int _recordingSeconds = 0;
-  Timer? _recordingTimer;
+
+  /// 저장 시뮬레이션. `Future.delayed` 대신 [Timer] 를 쓰고 [dispose] 에서 끕니다
+  /// — 화면을 나간 뒤 `setState` 가 불리면 위젯 테스트가 죽습니다.
+  Timer? _saveTimer;
 
   static const String _demoTranscript =
-      '며느리가 방귀를 참느라 시무룩했어요. 방귀 때문에 시아버지 갓이 날아가서 쫓겨났는데, '
-      '배나무의 배를 우수수 떨어뜨려서 마을 사람들이 고마워했어요.';
+      '며느리가 방귀를 참다가 시아버지 갓을 날려서 쫓겨났어요. '
+      '그런데 방귀로 배를 우수수 떨어뜨려서 마을 사람들이 고마워했어요.';
 
   @override
   void initState() {
@@ -138,7 +182,7 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
 
   @override
   void dispose() {
-    _recordingTimer?.cancel();
+    _saveTimer?.cancel();
     super.dispose();
   }
 
@@ -216,167 +260,198 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
       _selectedCardId = null;
       _showRetryHint = false;
     });
-    Timer(const Duration(milliseconds: 700), _startListening);
+    // 마이크를 대신 눌러 주지 않습니다. 아이가 직접 누르는 게 "내 차례"의
+    // 신호이고, 자동으로 켜면 "말하기 전" 상태가 한순간만 존재합니다. (PRD F-04)
   }
 
-  void _startListening() {
-    if (!mounted || _step != _RecapStep.retell) return;
+  void _toggleListening() {
     setState(() {
-      _isListening = true;
-      _recordingSeconds = 0;
-    });
-    _recordingTimer?.cancel();
-    _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && _isListening) setState(() => _recordingSeconds++);
+      _isListening = !_isListening;
+      if (_isListening) _hasSpoken = true;
     });
   }
 
-  void _stopListening() {
-    _recordingTimer?.cancel();
-    setState(() => _isListening = false);
-  }
-
-  Future<void> _completeActivity() async {
-    _stopListening();
-    setState(() => _isSaving = true);
-    await Future<void>.delayed(const Duration(milliseconds: 700));
-    if (!mounted) return;
+  void _completeActivity() {
+    if (_isSaving) return;
     setState(() {
-      _isSaving = false;
-      _step = _RecapStep.completed;
+      _isListening = false;
+      _isSaving = true;
+    });
+    _saveTimer?.cancel();
+    _saveTimer = Timer(AppDurations.turn, () {
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _step = _RecapStep.completed;
+      });
     });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // 초록은 진행바·확인 버튼·놓을 자리 같은 "신호"에만 씁니다.
-      // 바탕까지 초록이면 신호가 묻히므로 바탕은 옅은 하늘빛으로 둡니다.
-      backgroundColor: const Color(0xFFEFF4F8),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (BuildContext context, BoxConstraints constraints) {
-            final bool compact = constraints.maxWidth < 780;
-            return Column(
-              children: <Widget>[
-                _RecapTopBar(
-                  title: widget.storyTitle,
-                  step: _step,
-                  onExit: () => Navigator.of(context).maybePop(),
-                ),
-                Expanded(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 350),
-                    child: switch (_step) {
-                      _RecapStep.arrange => _ArrangeStep(
-                        key: const ValueKey<String>('arrange'),
-                        slots: _slots,
-                        tray: _trayCards,
-                        selectedCardId: _selectedCardId,
-                        showRetryHint: _showRetryHint,
-                        isReady: _isReady,
-                        compact: compact,
-                        onSlotTap: _handleSlotTap,
-                        onTrayCardTap: _handleTrayCardTap,
-                        onDropOnSlot: _drop,
-                        onReturnToTray: _returnToTray,
-                        onCheck: _checkOrder,
-                      ),
-                      _RecapStep.retell => _RetellStep(
-                        key: const ValueKey<String>('retell'),
-                        cards: widget.sceneCards,
-                        keywords: widget.keywords,
-                        isListening: _isListening,
-                        seconds: _recordingSeconds,
-                        isSaving: _isSaving,
-                        compact: compact,
-                        transcript: _isListening || _recordingSeconds > 0
-                            ? _demoTranscript
-                            : null,
-                        onMic: _isListening ? _stopListening : _startListening,
-                        onComplete: _completeActivity,
-                      ),
-                      _RecapStep.completed => _CompletionStep(
-                        key: const ValueKey<String>('completed'),
-                        onDone: () => Navigator.of(context).maybePop(),
-                      ),
-                    },
+      backgroundColor: Colors.transparent,
+      body: AppCanvas.day(
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              final ScreenMetrics metrics = ScreenMetrics.of(
+                constraints.maxWidth,
+              );
+              return Column(
+                children: <Widget>[
+                  _RecapTopBar(
+                    metrics: metrics,
+                    step: _step,
+                    onExit: () => Navigator.of(context).maybePop(),
                   ),
-                ),
-              ],
-            );
-          },
+                  Expanded(
+                    child: AnimatedSwitcher(
+                      duration: respect(context, AppDurations.normal),
+                      switchInCurve: AppCurves.standard,
+                      switchOutCurve: AppCurves.exit,
+                      // 기본 layoutBuilder 는 자식을 Stack 가운데에 느슨하게
+                      // 놓습니다. 세로로 쌓은 본문을 그렇게 두면 전환 중 두
+                      // 단계가 동시에 트리에 있는 동안 넘칩니다.
+                      layoutBuilder: (Widget? current, List<Widget> previous) =>
+                          Stack(
+                            fit: StackFit.expand,
+                            alignment: Alignment.topCenter,
+                            children: <Widget>[
+                              ...previous,
+                              if (current != null) current,
+                            ],
+                          ),
+                      child: _buildStep(metrics),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
   }
+
+  Widget _buildStep(ScreenMetrics metrics) {
+    return switch (_step) {
+      _RecapStep.arrange => _ArrangeStep(
+        key: const ValueKey<String>('arrange'),
+        metrics: metrics,
+        slots: _slots,
+        tray: _trayCards,
+        selectedCardId: _selectedCardId,
+        showRetryHint: _showRetryHint,
+        isReady: _isReady,
+        onSlotTap: _handleSlotTap,
+        onTrayCardTap: _handleTrayCardTap,
+        onDropOnSlot: _drop,
+        onReturnToTray: _returnToTray,
+        onCheck: _checkOrder,
+      ),
+      _RecapStep.retell => _RetellStep(
+        key: const ValueKey<String>('retell'),
+        metrics: metrics,
+        cards: widget.sceneCards,
+        keywords: widget.keywords,
+        isListening: _isListening,
+        hasSpoken: _hasSpoken,
+        isSaving: _isSaving,
+        transcript: _demoTranscript,
+        onMic: _toggleListening,
+        onComplete: _completeActivity,
+      ),
+      _RecapStep.completed => AppKidMessageView(
+        key: const ValueKey<String>('completed'),
+        message: RecapStrings.completed,
+        messageStyle: metrics.text(AppTypography.kidTitle),
+        actionIcon: AppIcons.home,
+        actionLabel: RecapStrings.completedAction,
+        onAction: () => Navigator.of(context).maybePop(),
+      ),
+    };
+  }
 }
 
+// ─────────────────────────────────────────────────────────
+// 공통 뼈대
+// ─────────────────────────────────────────────────────────
+
+/// 상단 바 — 나가는 문 + 지금 몇 단계인지.
+///
+/// 진행바 대신 점과 **단어**를 씁니다. 초1~3은 막대가 얼마나 찼는지보다
+/// "순서 맞추기 / 다시 말하기"라는 말을 훨씬 빨리 읽습니다.
 class _RecapTopBar extends StatelessWidget {
   const _RecapTopBar({
-    required this.title,
+    required this.metrics,
     required this.step,
     required this.onExit,
   });
 
-  final String title;
+  final ScreenMetrics metrics;
   final _RecapStep step;
   final VoidCallback onExit;
 
   @override
   Widget build(BuildContext context) {
-    final int progress = step == _RecapStep.arrange ? 1 : 2;
+    final int current = step == _RecapStep.arrange ? 1 : 2;
+    final String label = step == _RecapStep.arrange
+        ? RecapStrings.stepArrange
+        : RecapStrings.stepRetell;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 12, 18, 10),
+      padding: EdgeInsets.fromLTRB(
+        metrics.screenPadding,
+        AppSpacing.sm,
+        metrics.screenPadding,
+        AppSpacing.md,
+      ),
       child: Row(
         children: <Widget>[
-          IconButton.filledTonal(
-            tooltip: '활동 나가기',
+          KidBackButton(
             onPressed: onExit,
-            icon: const Icon(AppIcons.close),
-            style: IconButton.styleFrom(minimumSize: const Size(52, 52)),
+            labelStyle: metrics.text(AppTypography.kidLabel),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: AppSpacing.md),
+          // Spacer 를 쓰면 남은 폭을 전부 먹어서, 좁은 화면에서 단계 칩이
+          // "다…" 로 뭉개집니다. 칩에 남은 폭을 주고 오른쪽으로 붙입니다.
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF294662),
-                    fontWeight: FontWeight.w900,
-                    fontSize: 15,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Semantics(
+                label: RecapStrings.stepOf(current, 2),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.sm,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                    boxShadow: AppShadows.soft,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      for (int i = 1; i <= 2; i++) ...<Widget>[
+                        if (i > 1) const SizedBox(width: AppSpacing.xs),
+                        _StepDot(filled: i <= current),
+                      ],
+                      const SizedBox(width: AppSpacing.sm),
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: metrics
+                              .text(AppTypography.kidLabel)
+                              .copyWith(color: AppColors.brandBlueDeep),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 7),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(99),
-                  child: LinearProgressIndicator(
-                    value: progress / 2,
-                    minHeight: 9,
-                    color: const Color(0xFF53AE91),
-                    backgroundColor: const Color(0xFFD6E8E5),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 14),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 9),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(99),
-              border: Border.all(color: const Color(0xFFC9DFDA)),
-            ),
-            child: Text(
-              step == _RecapStep.completed ? '완료!' : '$progress / 2 단계',
-              style: const TextStyle(
-                color: Color(0xFF357963),
-                fontWeight: FontWeight.w900,
               ),
             ),
           ),
@@ -386,15 +461,126 @@ class _RecapTopBar extends StatelessWidget {
   }
 }
 
-/// 1단계 — 위쪽 빈 자리에 아래 트레이의 그림 카드를 끌어다 놓습니다.
+class _StepDot extends StatelessWidget {
+  const _StepDot({required this.filled});
+
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: AppSpacing.md,
+      height: AppSpacing.md,
+      decoration: BoxDecoration(
+        color: filled ? AppColors.brandBlueDeep : AppColors.ink300,
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+}
+
+/// 화면 아래에 고정되는 조작 줄. 두 단계가 같은 자리·같은 여백을 씁니다.
+class _BottomBar extends StatelessWidget {
+  const _BottomBar({required this.metrics, required this.child});
+
+  final ScreenMetrics metrics;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        metrics.screenPadding,
+        AppSpacing.md,
+        metrics.screenPadding,
+        AppSpacing.md,
+      ),
+      child: child,
+    );
+  }
+}
+
+/// 캐릭터가 거는 말. 두 단계가 같은 자리에서 같은 말풍선을 씁니다.
+///
+/// 안내·힌트·상태를 **한 자리**에 몰아넣은 이유는 두 가지입니다.
+/// 한 화면에 한 가지만 시키기 위해서, 그리고 힌트가 뜰 때마다 아래 것들이
+/// 밀려 내려가지 않게 하기 위해서입니다.
+class _GuideBubble extends StatelessWidget {
+  const _GuideBubble({
+    required this.metrics,
+    required this.message,
+    this.caution = false,
+  });
+
+  final ScreenMetrics metrics;
+  final String message;
+
+  /// "한 번 더 해볼까?" 톤. 아이 화면에서 빨강 대신 쓰는 유일한 경고색입니다.
+  final bool caution;
+
+  static const EdgeInsets padding = EdgeInsets.symmetric(
+    horizontal: AppSpacing.lg,
+    vertical: AppSpacing.md,
+  );
+
+  /// 한 줄짜리 안내가 차지하는 높이. 세로 예산 계산에 씁니다.
+  static double heightOf(BuildContext context, ScreenMetrics metrics) =>
+      metrics.lineHeight(context, AppTypography.kidBody) +
+      KidSpeechBubble.chromeOf(padding);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        // 캐릭터 에셋이 나오기 전까지는 로고의 말풍선 Q 가 대신 말합니다.
+        Image.asset(
+          AppAssets.logoMark,
+          width: AppSizes.tapChildSecondary,
+          height: AppSizes.tapChildSecondary,
+          fit: BoxFit.contain,
+          excludeFromSemantics: true,
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Flexible(
+          child: KidSpeechBubble(
+            padding: padding,
+            color: caution ? AppColors.cautionSurface : null,
+            child: AnimatedSwitcher(
+              duration: respect(context, AppDurations.quick),
+              child: Text(
+                message,
+                key: ValueKey<String>(message),
+                style: metrics
+                    .text(AppTypography.kidBody)
+                    .copyWith(
+                      color: caution ? AppColors.caution : AppColors.ink900,
+                    ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// 1단계 — 순서 맞추기
+// ─────────────────────────────────────────────────────────
+
+/// 위쪽 빈 자리에 아래 트레이의 그림 카드를 끌어다 놓습니다.
+///
+/// **트레이가 비면 트레이 영역을 접습니다.** 빈 흰 띠를 남기면 화면에
+/// "아직 할 일이 있다"는 거짓 신호가 남고, 접은 만큼 장면 그림이 커집니다.
 class _ArrangeStep extends StatelessWidget {
   const _ArrangeStep({
+    required this.metrics,
     required this.slots,
     required this.tray,
     required this.selectedCardId,
     required this.showRetryHint,
     required this.isReady,
-    required this.compact,
     required this.onSlotTap,
     required this.onTrayCardTap,
     required this.onDropOnSlot,
@@ -403,137 +589,144 @@ class _ArrangeStep extends StatelessWidget {
     super.key,
   });
 
+  final ScreenMetrics metrics;
   final List<RecapSceneCard?> slots;
   final List<RecapSceneCard> tray;
   final String? selectedCardId;
   final bool showRetryHint;
   final bool isReady;
-  final bool compact;
   final ValueChanged<int> onSlotTap;
   final ValueChanged<RecapSceneCard> onTrayCardTap;
   final void Function(_RecapDragData data, int slotIndex) onDropOnSlot;
   final ValueChanged<int> onReturnToTray;
   final VoidCallback onCheck;
 
-  static const double _gap = 14;
+  /// 카드 그림 둘레의 흰 테. 이보다 얇으면 카드가 배경에 붙어 보입니다.
+  static const double _cardPad = AppSpacing.sm;
 
-  /// 자리 줄과 트레이 사이(안내 문구 포함)에 들어가는 세로 여백입니다.
-  static const double _boardToTrayGap = 14 + 20 + 8;
-
-  /// 순서 자리는 트레이 카드보다 작습니다. 큰 그림은 트레이에 두고,
-  /// 자리는 놓을 곳을 가리키는 표지 역할만 합니다.
-  static const double _slotScale = .68;
+  /// 이보다 작아지면 아이가 장면을 알아보지 못합니다. 여기서 더 줄이는 대신
+  /// 2열로 접고, 그래도 모자라면 본문을 스크롤합니다.
+  static const double _cardMinWidth = 120;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(compact ? 14 : 22, 8, compact ? 14 : 22, 20),
-      child: Column(
-        children: <Widget>[
-          const _InstructionHeader(
-            eyebrow: '첫 번째 활동',
-            title: '장면을 이야기 순서대로 놓아 보세요',
-            description: '아래 카드를 위쪽 빈 자리에 끌어다 놓아요. 카드를 누른 뒤 자리를 눌러도 돼요.',
-            icon: Icons.view_carousel_rounded,
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (BuildContext context, BoxConstraints constraints) {
-                final double width = constraints.maxWidth;
-                final int count = slots.length;
+    final String message = showRetryHint
+        ? RecapStrings.arrangeRetry
+        : isReady
+        ? RecapStrings.arrangeReady
+        : RecapStrings.arrangeGuide;
 
-                // 한 줄에 다 펼쳤을 때 칸이 너무 얇아지면(카드가 많거나 화면이 좁으면)
-                // 2열 격자로 접습니다. 4장 기준 매직 넘버 없이 개수에서 파생시킵니다.
-                final double oneRowWidth = (width - _gap * (count - 1)) / count;
-                final bool grid = compact || oneRowWidth < 150;
-                final int perRow = grid ? 2 : count;
-                final int rows = (count / perRow).ceil();
+    return Column(
+      children: <Widget>[
+        Expanded(
+          child: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              final double contentWidth =
+                  constraints.maxWidth - metrics.screenPadding * 2;
+              final int count = slots.length;
+              final bool trayVisible = tray.isNotEmpty;
 
-                // 아이가 들여다보는 건 트레이의 그림입니다. 그래서 **트레이 카드 크기를
-                // 먼저 정하고** 순서 자리는 그보다 작게 둡니다. 자리는 "여기에 놓는다"만
-                // 알려 주면 되는 표지라 클 필요가 없습니다.
-                // 32 = 트레이 안쪽 여백 24 + 테두리 여유 8
-                final double trayFit = (width - 32 - 12 * (count - 1)) / count;
-                final bool trayScrolls = compact || trayFit < 150;
-                final double chrome =
-                    rows * 12 + (rows - 1) * _gap + _boardToTrayGap + 38;
-                final double byHeight =
-                    (constraints.maxHeight - chrome) *
-                    16 /
-                    9 /
-                    (rows * _slotScale + 1);
-                final double trayWidth = trayScrolls
-                    // 스크롤되는 트레이는 폭에 매이지 않으니 화면의 62%까지 키웁니다.
-                    // 다음 카드가 살짝 걸쳐 보여서 "옆에 더 있다"도 같이 알려 줍니다.
-                    ? math.max(180, math.min(byHeight, width * .62))
-                    : math.max(150, math.min(trayFit, byHeight));
-                final double slotWidth = trayWidth * _slotScale;
+              // ① 한 줄에 다 펼쳤을 때 카드가 너무 얇아지면 2열로 접습니다.
+              //    카드 4장을 가정하지 않고 개수에서 파생시킵니다.
+              double widthFor(int perRow) =>
+                  (contentWidth -
+                      AppSpacing.md * 2 -
+                      AppSpacing.md * (perRow - 1)) /
+                  perRow;
+              int perRow = count;
+              if (widthFor(perRow) < _cardMinWidth && count > 2) perRow = 2;
+              final int rows = (count / perRow).ceil();
 
-                // 자리와 트레이는 한 덩어리로 세로 가운데에 둡니다. 위로 붙여 놓으면
-                // 넓은 화면에서 확인 버튼과의 사이가 텅 빈 채로 남습니다.
-                return SingleChildScrollView(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minHeight: constraints.maxHeight,
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: <Widget>[
-                        _buildBoard(slotWidth, perRow),
-                        const SizedBox(height: 14),
-                        const _TrayCaption(),
-                        const SizedBox(height: 8),
-                        _buildTray(trayWidth, scrollable: trayScrolls),
-                      ],
-                    ),
+              // ② 세로로도 담기는 폭을 구합니다. 트레이가 접히면 프레임이
+              //    하나 줄어서 그만큼 장면 그림이 커집니다.
+              final double guide = _GuideBubble.heightOf(context, metrics);
+              final int frames = rows + (trayVisible ? 1 : 0);
+              final double chrome =
+                  frames * _cardPad * 2 +
+                  (rows - 1) * AppSpacing.md +
+                  (trayVisible ? AppSpacing.md * 2 + AppSpacing.lg : 0);
+              final double free =
+                  constraints.maxHeight - guide - AppSpacing.md - chrome;
+              final double byHeight = free / frames * 16 / 9;
+
+              // ③ 세로가 아주 짧은 화면(폰 가로)에서는 어차피 본문이 스크롤됩니다.
+              //    그럴 때까지 카드를 쥐어짜면 넓은 화면에 손톱만 한 그림이
+              //    떠 있게 되므로, 최소 폭 아래로 내려가면 세로 기준을 버리고
+              //    폭 기준을 씁니다.
+              final double fit = math.min(widthFor(perRow), byHeight);
+              final double cardWidth = math.max(
+                _cardMinWidth,
+                fit >= _cardMinWidth ? fit : widthFor(perRow),
+              );
+              // 트레이 카드가 한 줄에 다 안 들어가면 가로 스크롤로 바뀝니다.
+              // 다음 카드가 살짝 걸쳐 보여서 "옆에 더 있다"도 함께 알려 줍니다.
+              final bool trayScrolls =
+                  tray.length * cardWidth + (tray.length - 1) * AppSpacing.md >
+                  contentWidth - AppSpacing.md * 2;
+
+              return SingleChildScrollView(
+                padding: EdgeInsets.symmetric(
+                  horizontal: metrics.screenPadding,
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: <Widget>[
+                      _GuideBubble(
+                        metrics: metrics,
+                        message: message,
+                        caution: showRetryHint,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      _buildBoard(cardWidth, perRow),
+                      // 트레이가 비면 캡션과 띠를 통째로 접습니다.
+                      AnimatedSize(
+                        duration: respect(context, AppDurations.normal),
+                        curve: AppCurves.standard,
+                        alignment: Alignment.topCenter,
+                        child: trayVisible
+                            ? Padding(
+                                padding: const EdgeInsets.only(
+                                  top: AppSpacing.lg,
+                                ),
+                                child: _buildTray(
+                                  cardWidth,
+                                  scrollable: trayScrolls,
+                                ),
+                              )
+                            : const SizedBox(width: double.infinity),
+                      ),
+                    ],
                   ),
-                );
-              },
-            ),
+                ),
+              );
+            },
           ),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            child: showRetryHint
-                ? const Padding(
-                    padding: EdgeInsets.only(top: 12, bottom: 10),
-                    child: _GentleHint(),
-                  )
-                : const SizedBox(height: 42),
-          ),
-          SizedBox(
-            width: compact ? double.infinity : 340,
-            height: 64,
-            child: FilledButton.icon(
+        ),
+        _BottomBar(
+          metrics: metrics,
+          child: Center(
+            child: KidPrimaryButton(
+              icon: AppIcons.done,
+              label: RecapStrings.check,
+              labelStyle: metrics.text(AppTypography.kidButton),
               onPressed: isReady ? onCheck : null,
-              icon: const Icon(Icons.check_circle_rounded, size: 28),
-              label: const Text('이 순서로 확인하기'),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF347F69),
-                disabledBackgroundColor: const Color(0xFFCBDCD8),
-                disabledForegroundColor: const Color(0xFF6E8B85),
-                textStyle: const TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.w900,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-              ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _buildBoard(double slotWidth, int perRow) {
+  Widget _buildBoard(double cardWidth, int perRow) {
     final List<Widget> tiles = List<Widget>.generate(
       slots.length,
       (int index) => _OrderSlot(
         index: index,
         card: slots[index],
-        width: slotWidth,
+        width: cardWidth,
+        pad: _cardPad,
         // 트레이 카드를 고른 상태에서는 빈 자리를 눈에 띄게 해서
         // "여기를 누르면 놓인다"를 그림만으로 알 수 있게 합니다.
         highlightEmpty: selectedCardId != null,
@@ -556,10 +749,11 @@ class _ArrangeStep extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             for (int j = 0; j < chunk.length; j++) ...<Widget>[
-              if (j > 0) const SizedBox(width: _gap),
+              if (j > 0) const SizedBox(width: AppSpacing.md),
               chunk[j],
             ],
-            for (int j = 0; j < missing; j++) SizedBox(width: slotWidth + _gap),
+            for (int j = 0; j < missing; j++)
+              SizedBox(width: cardWidth + AppSpacing.md),
           ],
         ),
       );
@@ -568,7 +762,7 @@ class _ArrangeStep extends StatelessWidget {
     return Column(
       children: <Widget>[
         for (int i = 0; i < rows.length; i++) ...<Widget>[
-          if (i > 0) const SizedBox(height: _gap),
+          if (i > 0) const SizedBox(height: AppSpacing.md),
           rows[i],
         ],
       ],
@@ -576,13 +770,14 @@ class _ArrangeStep extends StatelessWidget {
   }
 
   Widget _buildTray(double cardWidth, {required bool scrollable}) {
-    final double cardHeight = cardWidth * 9 / 16 + 10;
+    final double cardHeight = cardWidth * 9 / 16 + _cardPad * 2;
     final List<Widget> cards = <Widget>[
       for (int i = 0; i < tray.length; i++) ...<Widget>[
-        if (i > 0) const SizedBox(width: 12),
+        if (i > 0) const SizedBox(width: AppSpacing.md),
         _TrayCard(
           card: tray[i],
           width: cardWidth,
+          pad: _cardPad,
           // 그림이 없을 때 카드를 서로 구분하려고 트레이 자리 번호를 씁니다.
           // (섞인 자리 번호라 정답이 새지 않습니다)
           fallbackLabel: '${i + 1}',
@@ -606,82 +801,30 @@ class _ArrangeStep extends StatelessWidget {
           ) {
             final bool hovered = candidate.isNotEmpty;
             return AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              padding: const EdgeInsets.all(12),
+              key: const ValueKey<String>('recap-tray'),
+              duration: respect(context, AppDurations.quick),
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.md),
               decoration: BoxDecoration(
-                color: hovered ? const Color(0xFFE4F2EC) : Colors.white,
-                borderRadius: BorderRadius.circular(26),
-                border: Border.all(
-                  color: hovered
-                      ? const Color(0xFF347F69)
-                      : const Color(0xFFDCE5EB),
-                  width: hovered ? 3 : 2,
-                ),
+                color: hovered
+                    ? AppColors.brandBlueSurface
+                    : AppColors.ink100.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(AppRadius.xl),
               ),
               child: SizedBox(
-                // 가로 스크롤일 때만 화면 폭을 다 씁니다. 넓은 화면에서는
-                // 카드 폭만큼만 차지해서 띠가 텅 비어 보이지 않게 합니다.
-                width: scrollable || tray.isEmpty ? double.infinity : null,
                 height: cardHeight,
-                child: tray.isEmpty
-                    ? const Center(child: _TrayEmptyMessage())
-                    : scrollable
+                child: scrollable
                     ? ListView(
                         scrollDirection: Axis.horizontal,
                         children: cards,
                       )
-                    : Row(mainAxisSize: MainAxisSize.min, children: cards),
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: cards,
+                      ),
               ),
             );
           },
-    );
-  }
-}
-
-class _TrayCaption extends StatelessWidget {
-  const _TrayCaption();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: <Widget>[
-        Icon(Icons.arrow_upward_rounded, size: 20, color: Color(0xFF6C8798)),
-        SizedBox(width: 6),
-        Text(
-          '여기 있는 카드를 위 자리에 놓아요',
-          style: TextStyle(
-            color: Color(0xFF5B7688),
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _TrayEmptyMessage extends StatelessWidget {
-  const _TrayEmptyMessage();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Row(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        Icon(Icons.done_all_rounded, color: Color(0xFF347F69)),
-        SizedBox(width: 8),
-        Flexible(
-          child: Text(
-            '카드를 다 놓았어요! 순서를 확인해 볼까요?',
-            style: TextStyle(
-              color: Color(0xFF3E7266),
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -692,6 +835,7 @@ class _OrderSlot extends StatelessWidget {
     required this.index,
     required this.card,
     required this.width,
+    required this.pad,
     required this.highlightEmpty,
     required this.onTap,
     required this.onAccept,
@@ -700,6 +844,7 @@ class _OrderSlot extends StatelessWidget {
   final int index;
   final RecapSceneCard? card;
   final double width;
+  final double pad;
   final bool highlightEmpty;
   final VoidCallback onTap;
   final ValueChanged<_RecapDragData> onAccept;
@@ -708,7 +853,7 @@ class _OrderSlot extends StatelessWidget {
   Widget build(BuildContext context) {
     final int order = index + 1;
     final RecapSceneCard? placed = card;
-    final double height = width * 9 / 16 + 12;
+    final double height = width * 9 / 16 + pad * 2;
 
     return DragTarget<_RecapDragData>(
       onWillAcceptWithDetails: (DragTargetDetails<_RecapDragData> details) =>
@@ -723,82 +868,71 @@ class _OrderSlot extends StatelessWidget {
           ) {
             final bool hovered = candidate.isNotEmpty;
             // 카드를 고르면 빈 자리는 테두리만 굵어집니다. 면까지 칠하면
-            // 자리가 전부 초록으로 물들어서 "지금 여기"가 안 보입니다.
+            // 자리가 전부 물들어서 "지금 여기"가 안 보입니다.
             final bool outlined = highlightEmpty && placed == null;
-            return Semantics(
-              button: true,
-              label: placed == null
-                  ? '$order번째 자리, 비어 있음'
-                  : '$order번째 자리, ${placed.title}',
-              child: GestureDetector(
-                key: ValueKey<String>('recap-slot-$index'),
-                behavior: HitTestBehavior.opaque,
-                onTap: onTap,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 160),
-                  width: width,
-                  height: height,
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: hovered ? const Color(0xFFDFF1E9) : Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: hovered || outlined
-                          ? const Color(0xFF347F69)
-                          : const Color(0xFFCBD8E0),
-                      width: hovered || outlined ? 4 : 3,
-                    ),
-                    boxShadow: hovered
-                        ? const <BoxShadow>[
-                            BoxShadow(
-                              color: Color(0x3D347F69),
-                              blurRadius: 18,
-                              offset: Offset(0, 6),
-                            ),
-                          ]
-                        : null,
+            return PressScale(
+              key: ValueKey<String>('recap-slot-$index'),
+              onTap: onTap,
+              borderRadius: AppRadius.xl,
+              semanticLabel: placed == null
+                  ? RecapStrings.slotEmpty(order)
+                  : RecapStrings.slotFilled(order, placed.title),
+              child: AnimatedContainer(
+                duration: respect(context, AppDurations.quick),
+                width: width,
+                height: height,
+                padding: EdgeInsets.all(pad),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.xl),
+                  border: Border.all(
+                    color: hovered || outlined
+                        ? AppColors.brandBlueDeep
+                        : AppColors.ink300,
+                    width: hovered || outlined ? 3 : 2,
                   ),
-                  child: placed == null
-                      ? _EmptySlotBody(
-                          order: order,
-                          size: math.min(66, width * 9 / 16 * .62),
-                        )
-                      : Stack(
-                          children: <Widget>[
-                            Positioned.fill(
-                              child: Draggable<_RecapDragData>(
-                                data: _RecapDragData(
-                                  card: placed,
-                                  fromSlot: index,
-                                ),
-                                feedback: _dragFeedback(
-                                  card: placed,
-                                  width: width,
-                                  fallbackLabel: '$order',
-                                ),
-                                childWhenDragging: Opacity(
-                                  opacity: .25,
-                                  child: _SceneImage(
-                                    card: placed,
-                                    fallbackLabel: '$order',
-                                    radius: 18,
-                                  ),
-                                ),
+                  boxShadow: hovered ? AppShadows.lift : AppShadows.soft,
+                ),
+                child: placed == null
+                    ? _EmptySlotBody(
+                        order: order,
+                        size: math.min(72, width * 9 / 16 * 0.6),
+                      )
+                    : Stack(
+                        children: <Widget>[
+                          Positioned.fill(
+                            child: Draggable<_RecapDragData>(
+                              data: _RecapDragData(
+                                card: placed,
+                                fromSlot: index,
+                              ),
+                              feedback: _dragFeedback(
+                                card: placed,
+                                width: width,
+                                fallbackLabel: '$order',
+                              ),
+                              childWhenDragging: Opacity(
+                                opacity: 0.25,
                                 child: _SceneImage(
                                   card: placed,
                                   fallbackLabel: '$order',
-                                  radius: 18,
+                                  radius: AppRadius.lg,
                                 ),
                               ),
+                              child: _SceneImage(
+                                card: placed,
+                                fallbackLabel: '$order',
+                                radius: AppRadius.lg,
+                              ),
                             ),
-                            Positioned(
-                              left: 8,
-                              top: 8,
-                              child: _OrderBadge(order: order),
-                            ),
-                          ],
-                        ),
-                ),
+                          ),
+                          Positioned(
+                            left: AppSpacing.sm,
+                            top: AppSpacing.sm,
+                            child: _OrderBadge(order: order),
+                          ),
+                        ],
+                      ),
               ),
             );
           },
@@ -823,15 +957,14 @@ class _EmptySlotBody extends StatelessWidget {
         height: size,
         alignment: Alignment.center,
         decoration: const BoxDecoration(
-          color: Color(0xFFEDF2F7),
+          color: AppColors.ink100,
           shape: BoxShape.circle,
         ),
         child: Text(
           '$order',
-          style: TextStyle(
-            color: const Color(0xFF4C6B82),
-            fontSize: size * .48,
-            fontWeight: FontWeight.w900,
+          style: AppTypography.kidTitle.copyWith(
+            fontSize: size * 0.46,
+            color: AppColors.ink500,
           ),
         ),
       ),
@@ -839,29 +972,31 @@ class _EmptySlotBody extends StatelessWidget {
   }
 }
 
+/// 그림 위 좌상단의 순서 배지.
+///
+/// 그림 **밑에** 번호를 두면 줄 높이를 이미지 + 상수로 잡은 자리에서 글자
+/// 확대 설정을 만나는 순간 넘칩니다. 두 단계가 같은 표기를 쓰는 이점도 있습니다.
 class _OrderBadge extends StatelessWidget {
   const _OrderBadge({required this.order});
 
   final int order;
 
+  static const double size = 36;
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 34,
-      height: 34,
+      width: size,
+      height: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: const Color(0xFF173B57),
+        color: AppColors.brandBlueDeep,
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2),
+        border: Border.all(color: AppColors.surface, width: 2),
       ),
       child: Text(
         '$order',
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 16,
-          fontWeight: FontWeight.w900,
-        ),
+        style: AppTypography.kidLabel.copyWith(color: AppColors.surface),
       ),
     );
   }
@@ -872,6 +1007,7 @@ class _TrayCard extends StatelessWidget {
   const _TrayCard({
     required this.card,
     required this.width,
+    required this.pad,
     required this.fallbackLabel,
     required this.selected,
     required this.scrollable,
@@ -880,6 +1016,7 @@ class _TrayCard extends StatelessWidget {
 
   final RecapSceneCard card;
   final double width;
+  final double pad;
   final String fallbackLabel;
   final bool selected;
 
@@ -890,38 +1027,35 @@ class _TrayCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double height = width * 9 / 16 + 10;
+    final double height = width * 9 / 16 + pad * 2;
     final Widget body = AnimatedContainer(
-      duration: const Duration(milliseconds: 160),
+      duration: respect(context, AppDurations.quick),
       width: width,
       height: height,
-      padding: const EdgeInsets.all(5),
+      padding: EdgeInsets.all(pad),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
         border: Border.all(
-          color: selected ? const Color(0xFF347F69) : const Color(0xFFDCE5EB),
-          width: selected ? 4 : 2,
+          color: selected ? AppColors.brandBlueDeep : AppColors.surface,
+          width: selected ? 3 : 2,
         ),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: selected ? const Color(0x40347F69) : const Color(0x1F3B5771),
-            blurRadius: selected ? 16 : 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: selected ? AppShadows.lift : AppShadows.soft,
       ),
-      child: _SceneImage(card: card, fallbackLabel: fallbackLabel, radius: 17),
+      child: _SceneImage(
+        card: card,
+        fallbackLabel: fallbackLabel,
+        radius: AppRadius.lg,
+      ),
     );
 
     return Semantics(
-      button: true,
       selected: selected,
-      label: card.title,
-      child: GestureDetector(
+      child: PressScale(
         key: ValueKey<String>('recap-tray-${card.id}'),
-        behavior: HitTestBehavior.opaque,
         onTap: onTap,
+        borderRadius: AppRadius.xl,
+        semanticLabel: card.title,
         child: Draggable<_RecapDragData>(
           data: _RecapDragData(card: card),
           affinity: scrollable ? Axis.vertical : null,
@@ -930,7 +1064,7 @@ class _TrayCard extends StatelessWidget {
             width: width,
             fallbackLabel: fallbackLabel,
           ),
-          childWhenDragging: Opacity(opacity: .25, child: body),
+          childWhenDragging: Opacity(opacity: 0.25, child: body),
           child: body,
         ),
       ),
@@ -947,18 +1081,23 @@ Widget _dragFeedback({
   final double dragWidth = width * 1.08;
   return Material(
     color: Colors.transparent,
-    elevation: 16,
-    shadowColor: const Color(0x66234B5F),
-    borderRadius: BorderRadius.circular(20),
-    child: SizedBox(
+    child: Container(
       width: dragWidth,
       height: dragWidth * 9 / 16,
-      child: _SceneImage(card: card, fallbackLabel: fallbackLabel, radius: 20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        boxShadow: AppShadows.lift,
+      ),
+      child: _SceneImage(
+        card: card,
+        fallbackLabel: fallbackLabel,
+        radius: AppRadius.lg,
+      ),
     ),
   );
 }
 
-/// 장면 그림. 에셋이 없어도 알아볼 수 있는 폴백을 그립니다.
+/// 장면 그림. 에셋이 없어도 카드끼리 구분되는 폴백을 그립니다.
 class _SceneImage extends StatelessWidget {
   const _SceneImage({
     required this.card,
@@ -974,506 +1113,375 @@ class _SceneImage extends StatelessWidget {
   Widget build(BuildContext context) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
-      child: Container(
-        color: const Color(0xFFECF1F6),
-        child: Image.asset(
-          card.image,
-          fit: BoxFit.cover,
-          width: double.infinity,
-          height: double.infinity,
-          errorBuilder:
-              (BuildContext context, Object error, StackTrace? stackTrace) =>
-                  _SceneImageFallback(label: fallbackLabel),
-        ),
+      child: Image.asset(
+        card.image,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        excludeFromSemantics: true,
+        errorBuilder:
+            (BuildContext context, Object error, StackTrace? stackTrace) =>
+                _SceneImageFallback(seed: card.id, label: fallbackLabel),
       ),
     );
   }
 }
 
+/// 그림 에셋이 없을 때의 표지.
+///
+/// 네 장이 전부 같은 그림이면 순서 맞추기 자체가 불가능해집니다.
+/// 카드 id 에서 뽑은 색으로 서로 달라 보이게 합니다.
 class _SceneImageFallback extends StatelessWidget {
-  const _SceneImageFallback({required this.label});
+  const _SceneImageFallback({required this.seed, required this.label});
 
+  final String seed;
   final String label;
 
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: <Color>[Color(0xFFE7EEF5), Color(0xFFD6E3EF)],
-        ),
-      ),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            const Icon(Icons.image_rounded, size: 26, color: Color(0xFF83A6B0)),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Color(0xFF4E7684),
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _GentleHint extends StatelessWidget {
-  const _GentleHint();
+  static const List<String> _topics = <String>['옛이야기', '가족', '용기', '동물', '일상'];
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 42,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF2D9),
-        borderRadius: BorderRadius.circular(99),
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Icon(Icons.lightbulb_rounded, color: Color(0xFF9A6618)),
-          SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              '거의 다 왔어요! 처음에 어떤 일이 있었는지 다시 살펴볼까요?',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: Color(0xFF795218),
-                fontWeight: FontWeight.w800,
-              ),
-            ),
+    // hashCode 는 실행마다 달라질 수 있어 골든이 흔들립니다. 코드 유닛 합은
+    // 같은 문자열이면 늘 같은 값입니다.
+    final int index =
+        seed.codeUnits.fold<int>(0, (int a, int b) => a + b) % _topics.length;
+    return Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        StoryCover(palette: StoryCoverPalette.forTopic(_topics[index])),
+        Center(
+          child: Text(
+            label,
+            style: AppTypography.kidTitle.copyWith(color: AppColors.surface),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
+// ─────────────────────────────────────────────────────────
+// 2단계 — 다시 말하기
+// ─────────────────────────────────────────────────────────
+
+/// 정답 순서 그림 + 낱말을 보며 이야기를 다시 말합니다.
+///
+/// 좌우 2단을 쓰지 않는 이유: 참고판과 받아쓰기가 **둘 다 폭을 원하는 요소**라
+/// 좌우로 자르면 양쪽 폭이 반토막 나고, 정작 모자란 세로는 아무도 쓰지 않습니다.
 class _RetellStep extends StatelessWidget {
   const _RetellStep({
+    required this.metrics,
     required this.cards,
     required this.keywords,
     required this.isListening,
-    required this.seconds,
+    required this.hasSpoken,
     required this.isSaving,
-    required this.compact,
     required this.transcript,
     required this.onMic,
     required this.onComplete,
     super.key,
   });
 
+  final ScreenMetrics metrics;
   final List<RecapSceneCard> cards;
   final List<String> keywords;
   final bool isListening;
-  final int seconds;
+  final bool hasSpoken;
   final bool isSaving;
-  final bool compact;
-  final String? transcript;
+  final String transcript;
   final VoidCallback onMic;
   final VoidCallback onComplete;
 
+  /// 장면 그림 한 장의 **세로 하한**. 예산을 짤 때 이걸 먼저 확보하고,
+  /// 남은 높이를 받아쓰기 줄 수로 환산합니다.
+  static const double _sceneMinHeight = 108;
+  static const double _sceneMaxHeight = 200;
+
+  /// 받아쓰기는 최소 2줄을 보장하고 3줄까지만 키웁니다. 더 키우면 그만큼
+  /// 장면 그림이 작아지는데, 말할 때 아이가 보는 건 그림입니다.
+  static const int _transcriptMinLines = 2;
+  static const int _transcriptMaxLines = 3;
+
+  static const EdgeInsets _bubblePadding = EdgeInsets.all(AppSpacing.lg);
+
+  /// 장면 사이 화살표가 차지하는 폭.
+  static const double _arrowWidth = AppSizes.iconInline + AppSpacing.sm * 2;
+
+  /// 마이크 옆에 완료 버튼을 놓으려면 한쪽에 이만큼은 있어야 합니다.
+  /// (아이콘 40 + 여백 + "다 했어")
+  static const double _finishSlot = 190;
+
   @override
   Widget build(BuildContext context) {
-    final Widget reference = _StoryReference(cards: cards, keywords: keywords);
-    final Widget recorder = _RetellRecorder(
-      isListening: isListening,
-      seconds: seconds,
-      isSaving: isSaving,
-      transcript: transcript,
-      onMic: onMic,
-      onComplete: onComplete,
-    );
+    final String message = isListening
+        ? RecapStrings.retellListening
+        : hasSpoken
+        ? RecapStrings.retellSpoken
+        : RecapStrings.retellGuide;
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(compact ? 14 : 28, 8, compact ? 14 : 28, 22),
-      child: Column(
-        children: <Widget>[
-          const _InstructionHeader(
-            eyebrow: '두 번째 활동',
-            title: '장면과 낱말을 보며 이야기를 들려주세요',
-            description: '정답처럼 똑같이 말하지 않아도 괜찮아요. 기억나는 대로 편하게 말해요.',
-            icon: AppIcons.speak,
-          ),
-          const SizedBox(height: 18),
-          Expanded(
-            child: compact
-                ? ListView(
-                    children: <Widget>[
-                      reference,
-                      const SizedBox(height: 14),
-                      SizedBox(height: 420, child: recorder),
-                    ],
-                  )
-                : Row(
+    return Column(
+      children: <Widget>[
+        Expanded(
+          child: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              final double contentWidth =
+                  constraints.maxWidth - metrics.screenPadding * 2;
+              final double guide = _GuideBubble.heightOf(context, metrics);
+              final double chipRow =
+                  metrics.lineHeight(context, AppTypography.kidLabel) +
+                  AppSpacing.xs * 2;
+              final double lineHeight = metrics.lineHeight(
+                context,
+                AppTypography.kidTranscript,
+              );
+              final double bubbleChrome = KidSpeechBubble.chromeOf(
+                _bubblePadding,
+              );
+
+              // 세로 예산 역산 — 안내·낱말·가름 여백을 먼저 빼고,
+              // 장면 그림의 하한을 확보한 뒤 남은 높이를 줄 수로 바꿉니다.
+              final double free =
+                  constraints.maxHeight - guide - chipRow - AppSpacing.md * 3;
+              final int lines =
+                  ((free - _sceneMinHeight - bubbleChrome) / lineHeight)
+                      .floor()
+                      .clamp(_transcriptMinLines, _transcriptMaxLines);
+              final double bubbleHeight = lines * lineHeight + bubbleChrome;
+
+              // 그러고도 남는 높이는 장면 그림에 돌려줍니다. 단, 폭이 허락하는
+              // 크기를 넘기면 그림이 잘리므로 가로 기준으로도 한 번 깎습니다.
+              final double byWidth =
+                  (contentWidth - _arrowWidth * (cards.length - 1)) /
+                  cards.length *
+                  9 /
+                  16;
+              final double sceneHeight = math
+                  .min(free - bubbleHeight, byWidth)
+                  .clamp(_sceneMinHeight, _sceneMaxHeight);
+
+              return SingleChildScrollView(
+                padding: EdgeInsets.symmetric(
+                  horizontal: metrics.screenPadding,
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
-                      Expanded(flex: 9, child: reference),
-                      const SizedBox(width: 18),
-                      Expanded(flex: 11, child: recorder),
+                      _GuideBubble(metrics: metrics, message: message),
+                      const SizedBox(height: AppSpacing.md),
+                      _SceneStrip(
+                        cards: cards,
+                        height: sceneHeight,
+                        available: contentWidth,
+                        arrowWidth: _arrowWidth,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      _KeywordRow(metrics: metrics, keywords: keywords),
+                      const SizedBox(height: AppSpacing.md),
+                      _TranscriptBubble(
+                        metrics: metrics,
+                        text: hasSpoken ? transcript : null,
+                        height: bubbleHeight,
+                        padding: _bubblePadding,
+                      ),
                     ],
                   ),
+                ),
+              );
+            },
           ),
-        ],
-      ),
+        ),
+        _BottomBar(
+          metrics: metrics,
+          child: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              final Widget mic = _MicButton(
+                metrics: metrics,
+                listening: isListening,
+                onTap: isSaving ? null : onMic,
+              );
+              // 말하기 전에는 완료 버튼을 내보내지 않습니다. 한 화면에서
+              // 아이가 고를 것을 하나로 줄이면 다음 행동이 분명해집니다.
+              final Widget? finish = hasSpoken
+                  ? KidPrimaryButton(
+                      icon: AppIcons.done,
+                      label: isSaving
+                          ? RecapStrings.saving
+                          : RecapStrings.finish,
+                      labelStyle: metrics.text(AppTypography.kidButton),
+                      onPressed: isSaving ? null : onComplete,
+                    )
+                  : null;
+
+              // 마이크는 **늘 화면 한가운데**입니다. 완료 버튼이 나타났다고
+              // 마이크가 옆으로 밀리면, 아이 손이 기억한 자리가 어긋납니다.
+              // 양옆에 같은 폭의 칸을 두면 오른쪽이 비어도 중심이 안 움직입니다.
+              if (constraints.maxWidth >= AppSizes.mic + _finishSlot * 2) {
+                return Row(
+                  children: <Widget>[
+                    const Expanded(child: SizedBox.shrink()),
+                    mic,
+                    Expanded(
+                      child: finish == null
+                          ? const SizedBox.shrink()
+                          : Padding(
+                              padding: const EdgeInsets.only(
+                                left: AppSpacing.lg,
+                              ),
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: finish,
+                              ),
+                            ),
+                    ),
+                  ],
+                );
+              }
+              // 폰 세로처럼 옆에 둘 수 없는 폭에서만 아래로 내립니다.
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  mic,
+                  if (finish != null) ...<Widget>[
+                    const SizedBox(height: AppSpacing.md),
+                    finish,
+                  ],
+                ],
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
 
-/// 2단계 참고판 — 정답 순서대로 놓인 장면 그림과 핵심 낱말.
-class _StoryReference extends StatelessWidget {
-  const _StoryReference({required this.cards, required this.keywords});
+/// 정답 순서대로 놓인 장면 그림 줄. 번호는 그림 위 배지입니다.
+class _SceneStrip extends StatelessWidget {
+  const _SceneStrip({
+    required this.cards,
+    required this.height,
+    required this.available,
+    required this.arrowWidth,
+  });
 
   final List<RecapSceneCard> cards;
+  final double height;
+  final double available;
+  final double arrowWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final double thumbWidth = height * 16 / 9;
+    final double content =
+        thumbWidth * cards.length + arrowWidth * (cards.length - 1);
+    // 다 들어가면 가운데로 모으고, 넘치면 가로로 스크롤합니다.
+    final double sidePad = math.max(0, (available - content) / 2);
+
+    return SizedBox(
+      height: height,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.symmetric(horizontal: sidePad),
+        itemCount: cards.length,
+        separatorBuilder: (BuildContext context, int index) => SizedBox(
+          width: arrowWidth,
+          child: const Center(
+            child: Icon(
+              AppIcons.next,
+              size: AppSizes.iconInline,
+              color: AppColors.ink300,
+            ),
+          ),
+        ),
+        itemBuilder: (BuildContext context, int index) {
+          final RecapSceneCard card = cards[index];
+          return Semantics(
+            label: RecapStrings.sceneOrder(index + 1, card.title),
+            child: SizedBox(
+              width: thumbWidth,
+              child: Stack(
+                children: <Widget>[
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(AppRadius.lg),
+                        boxShadow: AppShadows.soft,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppSpacing.xs),
+                        child: _SceneImage(
+                          card: card,
+                          fallbackLabel: '${index + 1}',
+                          radius: AppRadius.md,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: AppSpacing.sm,
+                    top: AppSpacing.sm,
+                    child: _OrderBadge(order: index + 1),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// 꼭 써 볼 낱말.
+///
+/// 칩을 노란색으로 칠하지 않습니다. 노랑은 별가루(보상) 전용이라, 낱말에
+/// 쓰면 아이가 낱말을 보상으로 오해합니다. (`docs/DESIGN_SYSTEM.md` 3장)
+class _KeywordRow extends StatelessWidget {
+  const _KeywordRow({required this.metrics, required this.keywords});
+
+  final ScreenMetrics metrics;
   final List<String> keywords;
-
-  static const double _thumbWidth = 138;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: const Color(0xFFD4E5E1), width: 2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Row(
-            children: <Widget>[
-              Icon(Icons.auto_stories_rounded, color: Color(0xFF347F69)),
-              SizedBox(width: 8),
-              Text(
-                '이야기 순서',
-                style: TextStyle(
-                  color: Color(0xFF294662),
-                  fontWeight: FontWeight.w900,
-                  fontSize: 18,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            height: _thumbWidth * 9 / 16 + 28,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: cards.length,
-              separatorBuilder: (BuildContext context, int index) =>
-                  const Center(
-                    child: Icon(
-                      Icons.arrow_forward_rounded,
-                      color: Color(0xFF80A295),
-                    ),
-                  ),
-              itemBuilder: (BuildContext context, int index) {
-                final RecapSceneCard card = cards[index];
-                return Semantics(
-                  label: '${index + 1}번째 장면, ${card.title}',
-                  child: SizedBox(
-                    width: _thumbWidth,
-                    child: Column(
-                      children: <Widget>[
-                        SizedBox(
-                          height: _thumbWidth * 9 / 16,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(18),
-                              border: Border.all(
-                                color: const Color(0xFFD4E4E1),
-                                width: 2,
-                              ),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(3),
-                              child: _SceneImage(
-                                card: card,
-                                fallbackLabel: '${index + 1}',
-                                radius: 15,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          '${index + 1}',
-                          style: const TextStyle(
-                            color: Color(0xFF456579),
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            '꼭 써 볼 낱말',
-            style: TextStyle(
-              color: Color(0xFF294662),
-              fontWeight: FontWeight.w900,
-              fontSize: 17,
-            ),
-          ),
-          const SizedBox(height: 9),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            // 개수를 자르지 않습니다. Wrap 이 알아서 줄바꿈하고,
-            // take(n)으로 잘라 두면 낱말이 늘었을 때 말없이 사라집니다.
-            children: keywords
-                .map(
-                  (String word) => Chip(
-                    avatar: const Icon(
-                      Icons.star_rounded,
-                      color: Color(0xFFE6A828),
-                      size: 19,
-                    ),
-                    label: Text(word),
-                    backgroundColor: const Color(0xFFFFF4CE),
-                    side: const BorderSide(color: Color(0xFFFFD56A)),
-                    labelStyle: const TextStyle(
-                      color: Color(0xFF6C5114),
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16,
-                    ),
-                  ),
-                )
-                .toList(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RetellRecorder extends StatelessWidget {
-  const _RetellRecorder({
-    required this.isListening,
-    required this.seconds,
-    required this.isSaving,
-    required this.transcript,
-    required this.onMic,
-    required this.onComplete,
-  });
-
-  final bool isListening;
-  final int seconds;
-  final bool isSaving;
-  final String? transcript;
-  final VoidCallback onMic;
-  final VoidCallback onComplete;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: const Color(0xFF173B57),
-        borderRadius: BorderRadius.circular(26),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(
-            color: Color(0x44233F55),
-            blurRadius: 24,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              Icon(
-                isListening ? AppIcons.speaking : AppIcons.speak,
-                color: const Color(0xFF7DE1C3),
-              ),
-              const SizedBox(width: 9),
-              Text(
-                isListening ? '잘 듣고 있어요 · $seconds초' : '말하기 준비가 되었어요',
-                style: const TextStyle(
-                  color: Color(0xFF9BE7D2),
-                  fontWeight: FontWeight.w900,
-                  fontSize: 17,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 15),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: transcript == null
-                  ? const Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: <Widget>[
-                        Icon(
-                          Icons.format_quote_rounded,
-                          color: Color(0xFF8DB2C4),
-                          size: 50,
-                        ),
-                        SizedBox(height: 10),
-                        Text(
-                          '말한 내용이 여기에 글자로 보여요',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Color(0xFF547187),
-                            fontSize: 19,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    )
-                  : SingleChildScrollView(
-                      child: Text(
-                        transcript!,
-                        style: const TextStyle(
-                          color: Color(0xFF20384E),
-                          fontSize: 21,
-                          height: 1.65,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: <Widget>[
-              SizedBox(
-                width: 82,
-                height: 82,
-                child: IconButton.filled(
-                  tooltip: isListening ? '말하기 멈추기' : '다시 말하기',
-                  onPressed: onMic,
-                  icon: Icon(
-                    isListening ? Icons.stop_rounded : AppIcons.speak,
-                    size: 38,
-                  ),
-                  style: IconButton.styleFrom(
-                    backgroundColor: isListening
-                        ? const Color(0xFFFFD56A)
-                        : const Color(0xFF7DE1C3),
-                    foregroundColor: const Color(0xFF173B57),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: SizedBox(
-                  height: 64,
-                  child: FilledButton.icon(
-                    onPressed: transcript == null || isSaving
-                        ? null
-                        : onComplete,
-                    icon: isSaving
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(strokeWidth: 3),
-                          )
-                        : const Icon(Icons.check_circle_rounded),
-                    label: Text(isSaving ? '저장하고 있어요' : '이야기 다 했어요'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFFFFD56A),
-                      foregroundColor: const Color(0xFF173B57),
-                      disabledBackgroundColor: const Color(0xFF718597),
-                      textStyle: const TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w900,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InstructionHeader extends StatelessWidget {
-  const _InstructionHeader({
-    required this.eyebrow,
-    required this.title,
-    required this.description,
-    required this.icon,
-  });
-
-  final String eyebrow;
-  final String title;
-  final String description;
-  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Container(
-          width: 58,
-          height: 58,
-          decoration: const BoxDecoration(
-            color: Color(0xFFDDF2EA),
-            shape: BoxShape.circle,
+        Padding(
+          padding: const EdgeInsets.only(top: AppSpacing.xs),
+          child: Text(
+            RecapStrings.keywords,
+            style: metrics
+                .text(AppTypography.kidLabel)
+                .copyWith(color: AppColors.ink500),
           ),
-          child: Icon(icon, color: const Color(0xFF347F69), size: 31),
         ),
-        const SizedBox(width: 14),
+        const SizedBox(width: AppSpacing.md),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            // 개수를 자르지 않습니다. take(n) 으로 잘라 두면 낱말이 늘었을 때
+            // 말없이 사라집니다.
             children: <Widget>[
-              Text(
-                eyebrow,
-                style: const TextStyle(
-                  color: Color(0xFF43866F),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
+              for (final String word in keywords)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.xs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.brandBlueSurface,
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                  ),
+                  child: Text(
+                    word,
+                    style: metrics.text(AppTypography.kidLabel),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Color(0xFF1E3A52),
-                  fontSize: 25,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                description,
-                style: const TextStyle(
-                  color: Color(0xFF587287),
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
             ],
           ),
         ),
@@ -1482,81 +1490,111 @@ class _InstructionHeader extends StatelessWidget {
   }
 }
 
-class _CompletionStep extends StatelessWidget {
-  const _CompletionStep({required this.onDone, super.key});
+/// 아이가 말한 내용. **아이 발화라 말풍선입니다** — 오른쪽, 아이 면 색.
+class _TranscriptBubble extends StatelessWidget {
+  const _TranscriptBubble({
+    required this.metrics,
+    required this.text,
+    required this.height,
+    required this.padding,
+  });
 
-  final VoidCallback onDone;
+  final ScreenMetrics metrics;
+
+  /// `null` 이면 아직 말하기 전입니다.
+  final String? text;
+  final double height;
+  final EdgeInsets padding;
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 560),
-        margin: const EdgeInsets.all(24),
-        padding: const EdgeInsets.all(36),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(32),
-          boxShadow: const <BoxShadow>[
-            BoxShadow(color: Color(0x33305766), blurRadius: 30),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Container(
-              width: 100,
-              height: 100,
-              decoration: const BoxDecoration(
-                color: Color(0xFFFFF1BD),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.auto_awesome_rounded,
-                color: Color(0xFFE0A21F),
-                size: 54,
-              ),
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              '이야기를 멋지게 다시 들려줬어요!',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Color(0xFF1E3A52),
-                fontSize: 28,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              '장면 순서와 말한 내용을 안전하게 저장했어요.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Color(0xFF587287),
-                fontSize: 17,
-                height: 1.5,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 26),
-            SizedBox(
-              width: double.infinity,
-              height: 64,
-              child: FilledButton.icon(
-                onPressed: onDone,
-                icon: const Icon(Icons.home_rounded),
-                label: const Text('활동 마치기'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF347F69),
-                  textStyle: const TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.w900,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+    final String? spoken = text;
+    return KidSpeechBubble(
+      speaker: KidSpeaker.child,
+      padding: padding,
+      height: height,
+      child: Semantics(
+        liveRegion: true,
+        child: spoken == null
+            ? Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  RecapStrings.transcriptEmpty,
+                  style: metrics
+                      .text(AppTypography.kidTranscript)
+                      .copyWith(color: AppColors.ink500),
+                ),
+              )
+            : SingleChildScrollView(
+                child: Text(
+                  spoken,
+                  style: metrics.text(AppTypography.kidTranscript),
                 ),
               ),
+      ),
+    );
+  }
+}
+
+/// 마이크. 화면에서 가장 큰 조작 요소이고 늘 하단에 있습니다.
+///
+/// 아이콘만 두지 않습니다 — 초1~3은 아이콘 관습을 아직 모릅니다.
+/// 듣는 중은 아이콘·글자·발광이 **동시에** 바뀌어서, 색을 구분하기 어려운
+/// 아이도 상태를 압니다.
+class _MicButton extends StatelessWidget {
+  const _MicButton({
+    required this.metrics,
+    required this.listening,
+    required this.onTap,
+  });
+
+  final ScreenMetrics metrics;
+  final bool listening;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final String label = listening
+        ? RecapStrings.stopSpeaking
+        : RecapStrings.speak;
+    return PressScale(
+      onTap: onTap,
+      borderRadius: AppRadius.pill,
+      semanticLabel: label,
+      child: AnimatedContainer(
+        duration: respect(context, AppDurations.quick),
+        width: AppSizes.mic,
+        height: AppSizes.mic,
+        decoration: BoxDecoration(
+          color: AppColors.brandBlueDeep,
+          shape: BoxShape.circle,
+          // 발광은 그림자라 레이아웃을 밀지 않습니다. 링을 위젯으로 두면
+          // 듣는 중일 때만 하단 조작 줄이 커집니다.
+          boxShadow: listening
+              ? <BoxShadow>[
+                  ...AppShadows.lift,
+                  const BoxShadow(
+                    color: AppColors.brandMint,
+                    blurRadius: 16,
+                    spreadRadius: 8,
+                  ),
+                ]
+              : AppShadows.lift,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            Icon(
+              listening ? AppIcons.speaking : AppIcons.speak,
+              size: AppSizes.iconChild,
+              color: AppColors.surface,
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              label,
+              style: metrics
+                  .text(AppTypography.kidLabel)
+                  .copyWith(color: AppColors.surface),
             ),
           ],
         ),

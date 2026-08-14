@@ -117,6 +117,57 @@ abstract final class StoryDetailStrings {
   static const String goToList = '이야기 고르러 가기';
 }
 
+/// 말하기 후 활동(`/play/:sessionId/recap`) 전용 문구.
+///
+/// 이 화면은 **아이 화면**입니다. 캐릭터가 말을 걸고, 버튼은 한 단어입니다.
+/// 틀린 순서를 "틀렸다"고 부르지 않습니다 — 순서 오답은 실패가 아닙니다. (PRD §6)
+abstract final class RecapStrings {
+  // ── 상단 바 ──
+  static const String stepArrange = '순서 맞추기';
+  static const String stepRetell = '다시 말하기';
+
+  /// 스크린리더용. "2단계 중 1단계"
+  static String stepOf(int current, int total) => '$total단계 중 $current단계';
+
+  // ── 1단계 순서 맞추기 ──
+  /// 캐릭터가 하는 말. 한 화면에 한 가지만 시킵니다.
+  static const String arrangeGuide = '아래 그림을 이야기 순서대로 놓아 볼래?';
+
+  /// 순서가 다를 때. 다시 해보자는 말이지 오답 통보가 아닙니다.
+  static const String arrangeRetry = '거의 다 왔어! 처음에 무슨 일이 있었는지 볼까?';
+
+  /// 자리를 다 채웠을 때. 다음 행동(확인)을 가리킵니다.
+  static const String arrangeReady = '다 놓았네! 이 순서가 맞는지 볼까?';
+
+  static const String check = '확인';
+
+  static String slotEmpty(int order) => '$order번째 자리, 비어 있어요';
+  static String slotFilled(int order, String title) => '$order번째 자리, $title';
+
+  // ── 2단계 다시 말하기 ──
+  static const String retellGuide = '그림을 보면서 이야기를 들려줄래?';
+  static const String retellListening = '듣고 있어. 천천히 말해도 괜찮아.';
+  static const String retellSpoken = '잘했어! 다 말했으면 알려 줘.';
+
+  /// 낱말 칩 앞의 라벨. 별가루가 아니므로 노란색을 쓰지 않습니다.
+  static const String keywords = '써 볼 낱말';
+
+  static const String speak = '말하기';
+  static const String stopSpeaking = '멈추기';
+
+  /// 아직 말하기 전의 말풍선 안내.
+  static const String transcriptEmpty = '여기에 네 이야기가 글자로 보여';
+
+  static const String finish = '다 했어';
+  static const String saving = '저장 중';
+
+  static String sceneOrder(int order, String title) => '$order번째 장면, $title';
+
+  // ── 완료 ──
+  static const String completed = '이야기를 멋지게 들려줬어!';
+  static const String completedAction = '마치기';
+}
+
 /// 단어장(`/words`) 전용 문구.
 abstract final class WordStrings {
   static const String title = '내 단어장';
