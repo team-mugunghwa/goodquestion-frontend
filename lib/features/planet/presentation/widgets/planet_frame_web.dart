@@ -105,14 +105,26 @@ class _PlanetFrameState extends State<PlanetFrame> {
       RegExp(r'/api/?$'),
       '',
     );
-    return Uri(
-      path: '/planet_app/index.html',
-      queryParameters: <String, String>{
-        'api': apiOrigin,
-        't': widget.token,
-        'c': widget.childId,
-      },
-    ).toString();
+    // 벗겨지지 않으면(예: `/api/v1` 로 끝남) 행성이 404 를 받고 캐시/독립
+    // 모드로 조용히 굳어 원인을 찾기 어렵습니다. 개발 중에 바로 알립니다.
+    assert(
+      apiOrigin != AppConfig.apiBaseUrl,
+      'API_BASE_URL 은 `.../api` 로 끝나야 행성이 백엔드 origin 을 얻습니다: '
+      '${AppConfig.apiBaseUrl}',
+    );
+    // 행성 자산이 전부 상대 경로인 것과 같은 이유로, 본체가 하위경로에
+    // 배포되어도 깨지지 않게 현재 주소 기준으로 풉니다. `/planet` 라우트
+    // 기준이므로 마지막 세그먼트가 planet_app 으로 바뀝니다.
+    return Uri.base
+        .resolve('planet_app/index.html')
+        .replace(
+          queryParameters: <String, String>{
+            'api': apiOrigin,
+            't': widget.token,
+            'c': widget.childId,
+          },
+        )
+        .toString();
   }
 
   void _onMessage(JSObject event) {
