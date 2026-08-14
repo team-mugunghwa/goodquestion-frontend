@@ -1144,16 +1144,19 @@ class _DialogueCanvas extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
+        // 제작 캐릭터는 정면 전신이고 표정이 전부다. 말풍선이 얼굴을 가리면 이 화면의 의미가
+        // 없어지므로 인물은 왼쪽에 세우고 말풍선은 오른쪽으로 몰아 둔다.
+        final bool hasStage = character != null;
+        final double stageWidth = constraints.maxWidth * (compact ? .56 : .40);
+
         return Stack(
           clipBehavior: Clip.none,
           children: <Widget>[
-            if (character != null)
+            if (hasStage)
               Positioned(
-                // 제작 캐릭터는 정면 전신이라 화면 가운데를 쓴다. 좌우 말풍선이 인물을 가리지
-                // 않게 폭을 넉넉히 잡고 아래로 붙인다.
-                left: compact ? 0 : constraints.maxWidth * .18,
-                right: compact ? 0 : constraints.maxWidth * .18,
-                top: compact ? 60 : 10,
+                left: compact ? -constraints.maxWidth * .06 : 8,
+                width: stageWidth,
+                top: compact ? 120 : 4,
                 bottom: 0,
                 child: DialogueCharacterStage(
                   scene: character!.scene,
@@ -1178,7 +1181,9 @@ class _DialogueCanvas extends StatelessWidget {
                 ),
               ),
             Positioned(
-              left: compact ? 10 : constraints.maxWidth * .23,
+              left: compact
+                  ? 10
+                  : (hasStage ? stageWidth + 24 : constraints.maxWidth * .23),
               right: compact ? 10 : 20,
               top: compact ? 18 : 44,
               child: _QuestionBubble(
@@ -1187,7 +1192,8 @@ class _DialogueCanvas extends StatelessWidget {
                 compact: compact,
               ),
             ),
-            if (!compact)
+            // 이름 배지는 인물 발밑에 겹치고, 말풍선이 이미 "○○의 질문"으로 화자를 밝힌다.
+            if (!compact && !hasStage)
               Positioned(
                 left: 20,
                 bottom: 22,
