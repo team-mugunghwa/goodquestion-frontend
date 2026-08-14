@@ -14,23 +14,23 @@ abstract interface class MissionVoiceRecorder {
 }
 
 class DeviceMissionVoiceRecorder implements MissionVoiceRecorder {
-  DeviceMissionVoiceRecorder({AudioRecorder? recorder})
-    : _recorder = recorder ?? AudioRecorder();
+  DeviceMissionVoiceRecorder();
 
   static const int _sampleRate = 16000;
   static const int _channels = 1;
 
-  final AudioRecorder _recorder;
+  AudioRecorder? _recorder;
+  AudioRecorder get _deviceRecorder => _recorder ??= AudioRecorder();
   BytesBuilder? _audioBytes;
   StreamSubscription<Uint8List>? _subscription;
   Completer<void>? _streamDone;
 
   @override
   Future<bool> start() async {
-    if (!await _recorder.hasPermission()) return false;
+    if (!await _deviceRecorder.hasPermission()) return false;
     _audioBytes = BytesBuilder(copy: false);
     _streamDone = Completer<void>();
-    final Stream<Uint8List> stream = await _recorder.startStream(
+    final Stream<Uint8List> stream = await _deviceRecorder.startStream(
       const RecordConfig(
         encoder: AudioEncoder.pcm16bits,
         sampleRate: _sampleRate,
@@ -51,7 +51,7 @@ class DeviceMissionVoiceRecorder implements MissionVoiceRecorder {
 
   @override
   Future<Uint8List?> stop() async {
-    await _recorder.stop();
+    await _deviceRecorder.stop();
     try {
       await _streamDone?.future.timeout(const Duration(seconds: 1));
     } on TimeoutException {
@@ -66,7 +66,7 @@ class DeviceMissionVoiceRecorder implements MissionVoiceRecorder {
 
   @override
   Future<void> cancel() async {
-    await _recorder.cancel();
+    await _deviceRecorder.cancel();
     await _subscription?.cancel();
     _clearStream();
   }
@@ -74,7 +74,8 @@ class DeviceMissionVoiceRecorder implements MissionVoiceRecorder {
   @override
   Future<void> dispose() async {
     await _subscription?.cancel();
-    await _recorder.dispose();
+    await _recorder?.dispose();
+    _recorder = null;
   }
 
   void _clearStream() {
