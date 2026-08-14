@@ -9,5 +9,6 @@ class GetStoryDetailUseCase {
 
   final StoryRepository _repository;
 
-  Future<StoryDetail?> call(int storyId) => _repository.getStoryDetail(storyId);
+  Future<StoryDetail?> call(String storyId) =>
+      _repository.getStoryDetail(storyId);
 }

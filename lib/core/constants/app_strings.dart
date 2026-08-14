@@ -54,6 +54,10 @@ abstract final class HomeStrings {
   // ── 섹션2 이어하기 / 새 이야기 ──
   static const String resume = '이어서 말하기';
 
+  /// 이어하기 카드 썸네일 위의 상태 뱃지. 버튼(행동)과 달리 "지금 여기"를
+  /// 알려 주는 표식이라 문구를 다르게 둡니다.
+  static const String resumeBadge = '이어보던 이야기';
+
   /// "3번째 장면까지 했어요" — 마지막으로 **완료한** 장면 번호입니다.
   static String sceneProgress(int lastCompletedScene) =>
       '$lastCompletedScene번째 장면까지 했어요';
@@ -61,6 +65,9 @@ abstract final class HomeStrings {
   /// 진행 중인 이야기가 없을 때 섹션2를 대신하는 카드.
   static const String startTitle = '새 이야기를 골라볼까?';
   static const String startAction = '이야기 고르기';
+
+  /// 새 이야기 카드 표지 위의 표식.
+  static const String startBadge = '새 이야기';
 
   // ── 섹션3 추천 ──
   static const String recommendedTitle = '새로운 이야기';

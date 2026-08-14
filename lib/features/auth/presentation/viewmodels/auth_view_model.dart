@@ -29,6 +29,9 @@ class AuthViewModel extends BaseViewModel {
     bool startAtChildProfile = false,
   }) : _step = startAtChildProfile ? AuthStep.childProfile : AuthStep.signIn,
        _enteredAtChildProfile = startAtChildProfile,
+       // named 파라미터라 초기화 형식(this._loadCurrentChildName)으로 못 바꿉니다
+       // — Dart 는 밑줄로 시작하는 named 인자를 허용하지 않습니다.
+       // ignore: prefer_initializing_formals
        _loadCurrentChildName = loadCurrentChildName;
 
   final GetAuthOptionsUseCase _getOptions;

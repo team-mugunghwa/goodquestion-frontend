@@ -29,6 +29,7 @@ class StoryCard extends StatelessWidget {
     required this.onTap,
     this.horizontal = false,
     this.titleMaxLines = 2,
+    this.coverAspectRatio,
   });
 
   final String title;
@@ -43,14 +44,24 @@ class StoryCard extends StatelessWidget {
 
   final int titleMaxLines;
 
+  /// 표지 비율을 강제로 정합니다. `null` 이면 배치에 맞는 기본값을 씁니다
+  /// (가로=정사각 / 세로=16:9). 이야기 목록은 [StoryThumbnail.portrait] 를
+  /// 넘겨 그림책 세로 표지로 씁니다. 홈 카드는 넘기지 않아 16:9 를 유지합니다.
+  final double? coverAspectRatio;
+
   @override
   Widget build(BuildContext context) {
     final Widget thumbnail = StoryThumbnail(
       image: image,
       fallbackIcon: AppIcons.stories,
+      // 표지 이미지가 없으면 주제별 코드 표지로 채웁니다.
+      topicTag: topicLabel,
+      title: title,
       // 가로 배치에서 16:9 를 쓰면 이미지가 납작해져서 제목 옆에 붙은
       // 장식처럼 보입니다. 정사각이 글자 블록 높이와 맞습니다.
-      aspectRatio: horizontal ? StoryThumbnail.square : StoryThumbnail.wide,
+      aspectRatio:
+          coverAspectRatio ??
+          (horizontal ? StoryThumbnail.square : StoryThumbnail.wide),
     );
 
     final Widget body = Padding(
