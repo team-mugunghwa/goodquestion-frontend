@@ -10,6 +10,8 @@
  *   - 빈 문자열은 "서버 없음"(독립 모드)이라는 뜻이다.
  */
 window.__PLANET__ = (function () {
+  var DEFAULT_API = 'https://goodquestion-backend-production.up.railway.app';
+
   // 본체(플러터 웹)가 iframe 주소에 ?api=<백엔드 origin>을 실어 준다.
   // 그래야 본체가 --dart-define=API_BASE_URL 로 어느 백엔드를 보든 행성도
   // 같은 백엔드를 본다. 행성만 따로 열었을 때는 배포 백엔드(Railway)로 붙는다.
@@ -19,8 +21,17 @@ window.__PLANET__ = (function () {
   } catch (e) {
     /* URL 파싱이 안 되는 환경이면 기본값을 쓴다 */
   }
+
+  // 허용 목록 검증. 행성은 sessionStorage에 남은 토큰을 Authorization 헤더로
+  // ${api}/api/... 에 싣기 때문에, 아무 주소나 받으면 악성 링크
+  // (?api=https://evil.example)로 항해시키는 것만으로 부모 JWT가 그쪽으로
+  // 전송된다. 새 백엔드 주소가 생기면 이 목록에 추가할 것.
+  var allowed =
+    api === DEFAULT_API ||
+    /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(api || '');
+
   return {
-    apiBaseUrl: api || 'https://goodquestion-backend-production.up.railway.app',
+    apiBaseUrl: allowed ? api : DEFAULT_API,
 
     /*
      * 시연용 무한 별가루. true면 **서버에 붙지 않는다.**
