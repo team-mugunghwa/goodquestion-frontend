@@ -107,15 +107,25 @@ class StoryDetailResponseDto {
   /// 재생 화면 진행바가 "전체 몇 장면 중 몇 번째"를 그리는 데 씁니다 -
   /// 세션 API 는 총 장면 수를 안 내려줍니다. → `AppRoutes.playOf`
   final int sceneCount;
+
+  /// 아이가 맡을 역할 **이름 하나**. (`stories.child_role`, varchar 50)
   final String childRole;
+
+  /// 도입과 상황이 **합쳐진** 한 덩어리. (`stories.intro`)
   final String intro;
 
-  /// **서버 `StoryDetailResponse` 는 역할 설명·상황문·도입 음성을 담지
-  /// 않습니다.** 기존 [StoryDetail] 은 더미 시절 필드라 그보다 촘촘합니다.
-  /// - `situationText` 는 근사치로 `story.summary` 를 재사용합니다.
-  /// - `role.description` 은 서버에 대응 필드가 없어 빈 문자열입니다 —
-  ///   화면에 빈 줄로 보일 수 있어 기획 확인이 필요합니다.
+  /// 상세 화면이 쓰는 건 이게 전부입니다.
+  ///
+  /// 기획(`MVP_요건.md`)의 요건은 "도입 · 상황 · 아이 역할" 한 줄이고,
+  /// DB 설계(`데이터베이스_설계.md` §3.1)가 그걸 `intro`(도입+상황) ·
+  /// `child_role` · `summary`(3인칭 소개) 세 필드로 받았습니다. **역할
+  /// 설명문이나 별도 상황문 같은 필드는 서버에도 기획에도 없습니다** —
+  /// 없는 걸 빈 문자열로 만들어 넘기지 마세요. 화면에 빈 줄로 보입니다.
+  ///
+  /// - `childRole`·`intro` 는 **빈 문자열로 옵니다**(시드 미완). 화면이
+  ///   해당 섹션을 통째로 안 그리는 것으로 대응합니다.
   /// - `introAudio` 는 서버가 안 내려줘 `null` 입니다(TTS 는 아직 501).
+  ///   TTS 가 붙을 자리라 엔티티 필드는 남겨 둡니다.
   StoryDetail toEntity() => StoryDetail(
     storyId: story.id,
     title: story.title,
@@ -124,8 +134,8 @@ class StoryDetailResponseDto {
     difficulty: story.difficulty,
     topics: story.topics,
     sceneCount: sceneCount,
+    summary: story.summary,
     introText: intro,
-    situationText: story.summary,
-    role: StoryRole(name: childRole, description: ''),
+    role: StoryRole(name: childRole),
   );
 }
