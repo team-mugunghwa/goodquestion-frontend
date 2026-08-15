@@ -102,6 +102,16 @@ class _PlayPageState extends State<PlayPage> {
   /// 곧바로 풀어 주려고 들고 있습니다. → [_waitForSpeech] · [_waitForNarration]
   Completer<void>? _speechWait;
   Completer<void>? _narrationWait;
+
+  /// 사전 렌더 음성으로 읽는 중인지. 일시정지 처리가 갈립니다 - 문장마다
+  /// 합성하는 경로는 그 문장을 다시 시작하면 되지만, 사전 렌더는 장면 하나가
+  /// 통짜 오디오라 자막만 멈췄다 이어야 합니다.
+  bool _preRenderedNarration = false;
+
+  /// 지금 기다리는 자막 구간의 시작 시각과 길이. 일시정지에서 남은 시간을
+  /// 계산해 두었다가 재개할 때 그만큼만 다시 기다립니다.
+  DateTime? _narrationWaitStartedAt;
+  Duration? _narrationWaitDuration;
   String? _lastChildText;
   bool _lastSttLowConfidence = false;
 
@@ -423,6 +433,18 @@ class _PlayPageState extends State<PlayPage> {
         });
         return;
       }
+      // 벤더 계열 실패는 발화 제출에서도 화면을 갈아엎지 않습니다. 아이 말은
+      // 이미 확인 화면을 거친 것이라, 듣기 상태로 돌려 다시 보내게 합니다.
+      final String? voiceHint = _voiceRetryHint(error);
+      if (voiceHint != null) {
+        setState(() {
+          _submittingUtterance = false;
+          _transcribingVoice = false;
+          _phase = _DialoguePhase.listening;
+          _sttHint = voiceHint;
+        });
+        return;
+      }
       setState(() {
         _submittingUtterance = false;
         _transcribingVoice = false;
@@ -498,6 +520,13 @@ class _PlayPageState extends State<PlayPage> {
       switch (error.code) {
         case 'STT_EMPTY_TEXT':
           return '잘 못 들었어요. 다시 말해 볼까?';
+        case 'AUDIO_TOO_LARGE':
+          return '말이 조금 길었어요. 짧게 말해 볼까?';
+        case 'AI_RATE_LIMITED':
+        case 'AI_UPSTREAM_ERROR':
+        case 'AI_UNAVAILABLE':
+          // 서버 원문("서버 오류가 발생했습니다")은 아이가 읽을 말이 아닙니다.
+          return '지금은 잘 안 들려요. 잠시 뒤에 다시 해볼까?';
         case 'MISSION_NOT_EXPOSED':
           return '미션을 다시 확인하고 있어요.';
         case 'SESSION_NOT_IN_PROGRESS':
@@ -603,8 +632,9 @@ class _PlayPageState extends State<PlayPage> {
       // 무음이거나 인식 실패 - 흔히 겪는 상황이라 화면을 통째로 에러로
       // 바꾸지 않고 마이크 옆에 짧게 안내한 뒤 바로 다시 녹음할 수 있게
       // 둡니다. → `docs/이야기_전개_가이드.md` 3.4, 6장
-      if (error is ServerFailure && error.code == 'STT_EMPTY_TEXT') {
-        _recordFailedSttAttempt('잘 못 들었어요. 다시 말해 볼까?');
+      final String? voiceHint = _voiceRetryHint(error);
+      if (voiceHint != null) {
+        _recordFailedSttAttempt(voiceHint);
         return;
       }
       if (!mounted) return;
@@ -621,6 +651,26 @@ class _PlayPageState extends State<PlayPage> {
       // 안 됨)도 같은 종류의 문제라 같은 방식으로 안내합니다.
       _recordFailedSttAttempt('목소리를 잘 듣지 못했어요. 다시 말해 주세요.');
     }
+  }
+
+  /// 마이크 옆 안내로 처리할 실패인지 판별하고, 맞으면 아이가 읽을 문구를
+  /// 돌려줍니다. 화면 전체를 에러로 바꾸지 않는 것이 요점입니다 - 아이는
+  /// 대화 중이고, 이 부류는 다시 말하거나 잠시 뒤 하면 풀립니다.
+  ///
+  /// 안내가 갈리는 이유: `AUDIO_TOO_LARGE`는 **같은 녹음을 다시 보내면 또
+  /// 실패**하므로 "짧게"라고 해야 하고, 벤더 계열은 그대로 다시 하면 되는
+  /// 부류라 기다리라고 해야 합니다. 둘을 같은 문구로 묶으면 아이가 계속
+  /// 막히거나 그냥 포기합니다. → 명세 1장 에러 표
+  String? _voiceRetryHint(Failure error) {
+    if (error is! ServerFailure) return null;
+    return switch (error.code) {
+      'STT_EMPTY_TEXT' => '잘 못 들었어요. 다시 말해 볼까?',
+      'AUDIO_TOO_LARGE' => '말이 조금 길었어요. 짧게 말해 볼까?',
+      'AI_RATE_LIMITED' ||
+      'AI_UPSTREAM_ERROR' ||
+      'AI_UNAVAILABLE' => '지금은 잘 안 들려요. 잠시 뒤에 다시 말해 볼까?',
+      _ => null,
+    };
   }
 
   /// STT 가 텍스트를 못 만들어 다시 녹음해야 할 때 공통으로 부릅니다.
@@ -745,7 +795,52 @@ class _PlayPageState extends State<PlayPage> {
     );
     if (_storyPaused || _advancingScene) return;
     final int token = ++_speechToken;
+    final PlayScene? scene = _snapshot?.currentScene;
+    // 사전 렌더 음성이 있으면 장면 전체를 한 번에 틀고 실측 타이밍으로 자막을
+    // 넘깁니다. 문장마다 합성을 부르던 기존 경로는 음성이 없을 때만 씁니다.
+    if (scene != null && scene.hasTimedNarration && _narrationIndex == 0) {
+      _preRenderedNarration = true;
+      unawaited(_playPreRenderedNarration(token, scene));
+      return;
+    }
+    _preRenderedNarration = false;
     unawaited(_playCurrentNarration(token));
+  }
+
+  /// 사전 렌더된 장면 음성 재생. 오디오는 한 번만 틀고, 자막은 문장별 실측
+  /// 구간(`narrationTimings`)에 맞춰 넘깁니다.
+  ///
+  /// 글자수 비례 추정으로 넘기면 소리와 자막이 어긋납니다 - 장면 1은 음성이
+  /// 20초인데 추정값은 8.4초라 화면이 먼저 끝나 버립니다.
+  Future<void> _playPreRenderedNarration(int token, PlayScene scene) async {
+    final String url = scene.narrationAudioUrl!;
+    final String resolved = url.startsWith('/')
+        ? Uri.parse(AppConfig.apiBaseUrl).resolve(url).toString()
+        : url;
+    // 자막 진행과 오디오 재생을 나란히 돌립니다. playUrl 은 재생이 끝나야
+    // 반환하므로 기다렸다가 자막을 시작하면 화면이 통째로 늦습니다.
+    final Future<void> playback = _audioPlayer.playUrl(resolved).catchError((
+      Object error,
+    ) {
+      debugPrint('[narration] 사전 렌더 재생 실패: $error');
+    });
+
+    for (int index = 0; index < scene.narrationTimings.length; index++) {
+      if (!mounted || token != _speechToken || _storyPaused) return;
+      if (_narrationIndex != index) setState(() => _narrationIndex = index);
+      final PlayNarrationTiming timing = scene.narrationTimings[index];
+      final double seconds = (timing.end - timing.start).clamp(0.1, 60.0);
+      await _waitForNarration(Duration(milliseconds: (seconds * 1000).round()));
+      if (!mounted || token != _speechToken || _storyPaused) return;
+    }
+
+    await playback;
+    if (!mounted || token != _speechToken || _storyPaused) return;
+    // 마지막 문장까지 보여 준 뒤 장면을 닫습니다. 기존 경로와 같은 여백입니다.
+    setState(() => _narrationIndex = scene.narrationSentences.length);
+    _storyTimer = Timer(const Duration(milliseconds: 700), () {
+      unawaited(_completeStoryScene());
+    });
   }
 
   Future<void> _playCurrentNarration(int token) async {
@@ -876,6 +971,8 @@ class _PlayPageState extends State<PlayPage> {
   Future<void> _waitForNarration(Duration duration) {
     final Completer<void> completer = Completer<void>();
     _narrationWait = completer;
+    _narrationWaitStartedAt = DateTime.now();
+    _narrationWaitDuration = duration;
     _storyTimer?.cancel();
     _storyTimer = Timer(duration, _releaseNarrationWait);
     return completer.future;
@@ -884,7 +981,20 @@ class _PlayPageState extends State<PlayPage> {
   void _releaseNarrationWait() {
     final Completer<void>? pending = _narrationWait;
     _narrationWait = null;
+    _narrationWaitStartedAt = null;
+    _narrationWaitDuration = null;
     if (pending != null && !pending.isCompleted) pending.complete();
+  }
+
+  /// 일시정지 시점에 이 자막 구간이 얼마나 남았는지. 재개할 때 그만큼만
+  /// 다시 기다려야 소리와 자막이 계속 맞습니다.
+  Duration _remainingNarrationWait() {
+    final DateTime? startedAt = _narrationWaitStartedAt;
+    final Duration? total = _narrationWaitDuration;
+    if (startedAt == null || total == null) return Duration.zero;
+    final Duration elapsed = DateTime.now().difference(startedAt);
+    final Duration remaining = total - elapsed;
+    return remaining.isNegative ? Duration.zero : remaining;
   }
 
   /// 전개 장면의 일시정지. **멈춘 지점을 그대로 둡니다** - 다시 재생하면
@@ -893,6 +1003,16 @@ class _PlayPageState extends State<PlayPage> {
   void _toggleStoryPause() {
     _storyTimer?.cancel();
     if (!_storyPaused) {
+      // 사전 렌더 경로는 자막 대기를 풀지 않고 남은 시간만 재어 둡니다.
+      // 풀어 버리면 루프가 끝나 버려서, 재개할 때 오디오만 이어지고 자막이
+      // 멈춥니다. 토큰도 올리지 않아 루프가 그대로 매달려 있게 둡니다.
+      if (_preRenderedNarration && _narrationWait != null) {
+        _narrationWaitDuration = _remainingNarrationWait();
+        _narrationWaitStartedAt = null;
+        unawaited(_audioPlayer.pause());
+        setState(() => _storyPaused = true);
+        return;
+      }
       // 멈추는 쪽입니다. **[_speechToken] 을 올리지 않습니다** - 올리면
       // 재생을 기다리던 루프가 스스로 빠져나가 이어 들을 대상이 사라집니다.
       // 소리는 stop() 이 아니라 pause() 로 멈춥니다(stop 은 위치를 0으로
@@ -908,6 +1028,16 @@ class _PlayPageState extends State<PlayPage> {
       return;
     }
     setState(() => _storyPaused = false);
+    // 사전 렌더 경로는 매달려 있던 자막 대기를 남은 시간만큼 다시 걸고
+    // 오디오를 이어 갑니다. 루프는 그대로 살아 있습니다.
+    if (_preRenderedNarration && _narrationWait != null) {
+      final Duration remaining = _narrationWaitDuration ?? Duration.zero;
+      _narrationWaitStartedAt = DateTime.now();
+      _narrationWaitDuration = remaining;
+      _storyTimer = Timer(remaining, _releaseNarrationWait);
+      unawaited(_audioPlayer.resume());
+      return;
+    }
     // 멈춰 둔 오디오가 남아 있으면 그 지점부터, 없으면(무음 타이머·합성
     // 대기 중에 멈춘 경우) 그 문장을 처음부터 다시 시작합니다.
     if (_audioPlayer.canResume) {
@@ -1238,6 +1368,7 @@ class _PlayPageState extends State<PlayPage> {
           onReplay: () {
             _storyTimer?.cancel();
             _speechToken++;
+            _preRenderedNarration = false;
             _releaseNarrationWait();
             unawaited(_audioPlayer.stop());
             setState(() => _narrationIndex = 0);

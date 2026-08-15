@@ -184,6 +184,20 @@ class PlayTurnResult {
   bool get hasSceneTransition => sceneTransition != null;
 }
 
+/// 내레이션 음성에서 문장 하나가 차지하는 구간(초). [index]는
+/// [PlayScene.narrationSentences]의 순서와 같습니다.
+class PlayNarrationTiming {
+  const PlayNarrationTiming({
+    required this.index,
+    required this.start,
+    required this.end,
+  });
+
+  final int index;
+  final double start;
+  final double end;
+}
+
 class PlayScene {
   const PlayScene({
     required this.sceneId,
@@ -193,6 +207,8 @@ class PlayScene {
     this.imageUrl,
     this.characterName,
     this.maxTurns,
+    this.narrationAudioUrl,
+    this.narrationTimings = const <PlayNarrationTiming>[],
   });
 
   final String sceneId;
@@ -202,6 +218,23 @@ class PlayScene {
   final String? imageUrl;
   final String? characterName;
   final int? maxTurns;
+
+  /// 사전 렌더된 내레이션 음성. null이면 음성 없이 글자수 타이머로 넘깁니다.
+  final String? narrationAudioUrl;
+
+  /// 문장별 실측 구간. [narrationAudioUrl]이 있을 때만 값이 있습니다.
+  ///
+  /// 이게 없으면 글자수 비례로 추정할 수밖에 없는데, 그러면 소리와 자막이
+  /// 어긋납니다 - 장면 1은 음성이 20초인데 추정값은 8.4초입니다.
+  final List<PlayNarrationTiming> narrationTimings;
+
+  /// 실측 타이밍으로 재생 가능한 상태인지. 음성만 있고 타이밍이 비면
+  /// 문장을 언제 넘길지 알 수 없으므로 기존 타이머 경로를 씁니다.
+  bool get hasTimedNarration =>
+      narrationAudioUrl != null &&
+      narrationAudioUrl!.isNotEmpty &&
+      narrationTimings.length == narrationSentences.length &&
+      narrationSentences.isNotEmpty;
 }
 
 class PlaySessionSnapshot {
