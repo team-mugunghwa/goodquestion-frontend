@@ -104,7 +104,8 @@ class StoryDetailResponseDto {
 
   final StoryCardResponseDto story;
 
-  /// 엔티티가 아직 안 쓰지만(장면 진행은 세션 쪽 값), 보존해 둡니다.
+  /// 재생 화면 진행바가 "전체 몇 장면 중 몇 번째"를 그리는 데 씁니다 -
+  /// 세션 API 는 총 장면 수를 안 내려줍니다. → `AppRoutes.playOf`
   final int sceneCount;
   final String childRole;
   final String intro;
@@ -122,6 +123,7 @@ class StoryDetailResponseDto {
     estimatedMinutes: story.estimatedMinutes,
     difficulty: story.difficulty,
     topics: story.topics,
+    sceneCount: sceneCount,
     introText: intro,
     situationText: story.summary,
     role: StoryRole(name: childRole, description: ''),

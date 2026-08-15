@@ -27,6 +27,7 @@ import '../widgets/mission_overlay.dart';
 class PlayPage extends StatefulWidget {
   const PlayPage({
     required this.sessionId,
+    this.totalScenes,
     this.backgroundAsset,
     this.characterAsset,
     this.characterName = '이야기 친구',
@@ -38,6 +39,17 @@ class PlayPage extends StatefulWidget {
   });
 
   final String sessionId;
+
+  /// 이 이야기의 전체 장면 수. 상단 진행바가 "몇 번째 장면인지"를 그리는 데
+  /// 씁니다.
+  ///
+  /// **세션 API 가 안 내려줍니다** - `SessionResumeResponse`·`SceneAdvanceResponse`
+  /// 어디에도 총 장면 수가 없고, 홈의 `inProgressSession.totalScenes` 와 이야기
+  /// 상세의 `sceneCount` 에만 있습니다. 그래서 화면을 여는 쪽(홈 이어하기 ·
+  /// 이야기 상세 시작하기)이 값을 실어 보냅니다. 주소창으로 바로 들어오는
+  /// 등 값이 없으면 `null` 이고, 진행바는 눈금 없이 빈 막대로 둡니다.
+  /// → `docs/API.md` 3.6
+  final int? totalScenes;
   final String? backgroundAsset;
   final String? characterAsset;
   final String characterName;
@@ -1098,6 +1110,7 @@ class _PlayPageState extends State<PlayPage> {
           isPaused: _storyPaused,
           isAdvancing: _advancingScene,
           soundOn: _soundOn,
+          totalScenes: widget.totalScenes,
           onExit: _confirmExit,
           onPause: _toggleStoryPause,
           // "다시 듣기"는 지금처럼 장면 처음부터입니다. 이어 재생은
@@ -1140,6 +1153,8 @@ class _PlayPageState extends State<PlayPage> {
                     _StoryControls(
                       isPaused: _phase == _DialoguePhase.paused,
                       soundOn: _soundOn,
+                      sceneOrder: dialogueScene?.sceneOrder,
+                      totalScenes: widget.totalScenes,
                       onExit: _confirmExit,
                       onPause: _togglePause,
                       onReplay: _playQuestion,
@@ -1218,6 +1233,7 @@ class _StorySceneView extends StatelessWidget {
     required this.isPaused,
     required this.isAdvancing,
     required this.soundOn,
+    required this.totalScenes,
     required this.onExit,
     required this.onPause,
     required this.onReplay,
@@ -1229,6 +1245,7 @@ class _StorySceneView extends StatelessWidget {
   final bool isPaused;
   final bool isAdvancing;
   final bool soundOn;
+  final int? totalScenes;
   final VoidCallback onExit;
   final VoidCallback onPause;
   final VoidCallback onReplay;
@@ -1260,6 +1277,8 @@ class _StorySceneView extends StatelessWidget {
                 _StoryControls(
                   isPaused: isPaused,
                   soundOn: soundOn,
+                  sceneOrder: scene.sceneOrder,
+                  totalScenes: totalScenes,
                   onExit: onExit,
                   onPause: onPause,
                   onReplay: onReplay,
@@ -1400,6 +1419,8 @@ class _StoryControls extends StatelessWidget {
   const _StoryControls({
     required this.isPaused,
     required this.soundOn,
+    required this.sceneOrder,
+    required this.totalScenes,
     required this.onExit,
     required this.onPause,
     required this.onReplay,
@@ -1408,10 +1429,27 @@ class _StoryControls extends StatelessWidget {
 
   final bool isPaused;
   final bool soundOn;
+
+  /// 지금 몇 번째 장면인지(서버 `currentScene.sceneOrder`). 없으면 `null`.
+  final int? sceneOrder;
+
+  /// 이 이야기의 전체 장면 수. 진입 경로가 알려 주지 않았으면 `null` 이고,
+  /// 그때는 눈금 없는 막대만 그립니다 - 틀린 비율을 그리는 것보다 낫습니다.
+  final int? totalScenes;
+
   final VoidCallback onExit;
   final VoidCallback onPause;
   final VoidCallback onReplay;
   final VoidCallback onSound;
+
+  /// 문장이 아니라 **장면** 진행률입니다. 문장이 넘어가는 것과 무관하고,
+  /// 일시정지와도 무관합니다.
+  double? get _progress {
+    final int? order = sceneOrder;
+    final int? total = totalScenes;
+    if (order == null || total == null || total <= 0) return null;
+    return (order / total).clamp(0.0, 1.0);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1420,19 +1458,26 @@ class _StoryControls extends StatelessWidget {
         _ControlButton(label: '나가기', icon: AppIcons.close, onPressed: onExit),
         const SizedBox(width: 12),
         Expanded(
-          child: Container(
-            height: 8,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: .32),
-              borderRadius: BorderRadius.circular(99),
-            ),
-            alignment: Alignment.centerLeft,
-            child: FractionallySizedBox(
-              widthFactor: .42,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFD56A),
-                  borderRadius: BorderRadius.circular(99),
+          child: Semantics(
+            label: totalScenes == null
+                ? '이야기 진행'
+                : '전체 $totalScenes 장면 중 ${sceneOrder ?? 0}번째',
+            child: Container(
+              height: 8,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: .32),
+                borderRadius: BorderRadius.circular(99),
+              ),
+              alignment: Alignment.centerLeft,
+              child: AnimatedFractionallySizedBox(
+                duration: const Duration(milliseconds: 450),
+                curve: Curves.easeOutCubic,
+                widthFactor: _progress ?? 0,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFD56A),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
                 ),
               ),
             ),
