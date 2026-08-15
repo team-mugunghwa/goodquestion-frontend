@@ -67,9 +67,12 @@ class DialogueCharacterStateMachine {
 
     // 이번 턴에 새로 들어온 요소. accumulated가 있으면 그것이 기준이고(서버가 후처리로 걸러낸
     // 최종 누적이다), 없으면 detectedElements로 대신한다.
-    final Set<String> accumulated = progress?.accumulatedElements.toSet() ?? <String>{};
+    final Set<String> accumulated =
+        progress?.accumulatedElements.toSet() ?? <String>{};
     final Set<String> fresh = accumulated.isEmpty
-        ? (analysis?.detectedElements.toSet() ?? <String>{}).difference(_seenElements)
+        ? (analysis?.detectedElements.toSet() ?? <String>{}).difference(
+            _seenElements,
+          )
         : accumulated.difference(_seenElements);
     _seenElements = _seenElements.union(accumulated).union(fresh);
 
@@ -78,7 +81,10 @@ class DialogueCharacterStateMachine {
       final String? via = scene.closingVia;
       final bool viaIsMeaningful =
           via != null && via != scene.closingState && via != _current;
-      return DialogueStateTransition(scene.closingState, via: viaIsMeaningful ? via : null);
+      return DialogueStateTransition(
+        scene.closingState,
+        via: viaIsMeaningful ? via : null,
+      );
     }
 
     // 2. 놀림·주제 이탈·불명확. confusedState가 없는 장면(대화4)은 표정을 바꾸지 않는다.
