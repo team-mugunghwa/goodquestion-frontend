@@ -94,8 +94,8 @@ const StoryDetail _detail = StoryDetail(
   difficulty: '쉬움',
   topics: <String>['가족'],
   introText: '옛날 어느 마을에…',
-  situationText: '오늘은 말해 줄 참이에요.',
-  role: StoryRole(name: '며느리의 친구', description: '고민을 들어주게 될 거야.'),
+  summary: '방귀를 참던 며느리가 마음을 털어놓는 이야기.',
+  role: StoryRole(name: '며느리의 친구'),
 );
 
 void main() {
