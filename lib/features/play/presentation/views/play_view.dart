@@ -78,6 +78,18 @@ class _PlayPageState extends State<PlayPage> {
   List<String> _characterSentences = const <String>[];
   int _characterSentenceIndex = 0;
   int _speechToken = 0;
+
+  /// 캐릭터 대사 루프가 아직 살아 있는지. 일시정지를 풀 때 이 값이 true 면
+  /// 루프가 스스로 이어 읽으므로 대사를 다시 틀어 주지 않습니다.
+  bool _speaking = false;
+
+  /// 일시정지 동안 대사 루프를 붙잡아 두는 문. → [_awaitResume]
+  Completer<void>? _pauseGate;
+
+  /// 지금 기다리고 있는 "무음으로 읽는 시간". 일시정지·다음 대사에서
+  /// 곧바로 풀어 주려고 들고 있습니다. → [_waitForSpeech] · [_waitForNarration]
+  Completer<void>? _speechWait;
+  Completer<void>? _narrationWait;
   String? _lastChildText;
   bool _lastSttLowConfidence = false;
 
@@ -178,6 +190,11 @@ class _PlayPageState extends State<PlayPage> {
     _questionTimer?.cancel();
     _listeningTimer?.cancel();
     _storyTimer?.cancel();
+    // 화면을 떠나면 기다리던 발화 루프들도 풀어 줍니다 - 안 풀면 취소된
+    // 타이머·닫힌 문 앞에서 영영 매달린 채로 남습니다.
+    _releaseSpeechWait();
+    _releaseNarrationWait();
+    _openPauseGate();
     unawaited(_voiceRecorder.dispose());
     unawaited(_audioPlayer.dispose());
     super.dispose();
@@ -715,12 +732,10 @@ class _PlayPageState extends State<PlayPage> {
       final int milliseconds = (1400 + sentence.length * 65)
           .clamp(2400, 7500)
           .toInt();
-      debugPrint('[narration] falling back to silent timer (${milliseconds}ms)');
-      final Completer<void> completer = Completer<void>();
-      _storyTimer = Timer(Duration(milliseconds: milliseconds), () {
-        if (!completer.isCompleted) completer.complete();
-      });
-      await completer.future;
+      debugPrint(
+        '[narration] falling back to silent timer (${milliseconds}ms)',
+      );
+      await _waitForNarration(Duration(milliseconds: milliseconds));
     }
     if (!mounted || token != _speechToken) {
       debugPrint(
@@ -771,11 +786,33 @@ class _PlayPageState extends State<PlayPage> {
     }
   }
 
+  /// 무음으로 한 문장을 읽는 시간만큼 기다립니다. 일시정지가 걸리면
+  /// [_releaseNarrationWait] 가 이 기다림을 곧바로 풀어 줍니다 - 안 풀어 주면
+  /// 타이머만 취소되고 내레이션 루프는 영영 깨어나지 못합니다.
+  Future<void> _waitForNarration(Duration duration) {
+    final Completer<void> completer = Completer<void>();
+    _narrationWait = completer;
+    _storyTimer?.cancel();
+    _storyTimer = Timer(duration, _releaseNarrationWait);
+    return completer.future;
+  }
+
+  void _releaseNarrationWait() {
+    final Completer<void>? pending = _narrationWait;
+    _narrationWait = null;
+    if (pending != null && !pending.isCompleted) pending.complete();
+  }
+
+  /// 전개 장면의 일시정지. **멈춘 문장은 그대로 둡니다** - 다시 재생하면
+  /// [_narrationIndex] 가 가리키는 그 문장부터 이어집니다(장면 처음이 아닙니다).
+  /// 장면을 처음부터 다시 읽는 것은 "다시 듣기" 버튼의 몫입니다.
   void _toggleStoryPause() {
     _storyTimer?.cancel();
     if (!_storyPaused) {
-      // 멈추는 쪽입니다 - 재생 중이던 내레이션도 즉시 끊습니다.
+      // 멈추는 쪽입니다 - 재생 중이던 내레이션도 즉시 끊고, 무음으로 읽는
+      // 중이었다면 그 기다림도 풀어 그 문장 루프가 조용히 끝나게 합니다.
       _speechToken++;
+      _releaseNarrationWait();
       unawaited(_audioPlayer.stop());
     }
     setState(() => _storyPaused = !_storyPaused);
@@ -808,6 +845,12 @@ class _PlayPageState extends State<PlayPage> {
     );
   }
 
+  /// 대사 한 덩어리를 문장 단위로 들려줍니다.
+  ///
+  /// 일시정지가 걸리면 루프를 **버리지 않고 문장 앞에서 재웁니다**
+  /// ([_awaitResume]). 다시 재생하면 멈춘 그 문장부터 이어집니다 - 예전처럼
+  /// 대사를 처음부터 다시 읽지 않습니다. 대신 문장 중간에 멈췄다면 그 문장은
+  /// 처음부터 다시 읽습니다(오디오는 중간부터 이어 붙일 수 없습니다).
   Future<void> _playCharacterMessage(
     String text, {
     String? audioUrl,
@@ -816,6 +859,8 @@ class _PlayPageState extends State<PlayPage> {
     final int token = ++_speechToken;
     _questionTimer?.cancel();
     _listeningTimer?.cancel();
+    _releaseSpeechWait();
+    _openPauseGate();
     await _audioPlayer.stop();
     final List<String> sentences = _splitSentences(text);
     if (!mounted || sentences.isEmpty) {
@@ -829,7 +874,22 @@ class _PlayPageState extends State<PlayPage> {
       _listeningSeconds = 0;
     });
 
+    _speaking = true;
+    try {
+      await _speakSentences(sentences, token: token, audioUrl: audioUrl);
+    } finally {
+      if (token == _speechToken) _speaking = false;
+    }
+    if (mounted && token == _speechToken) onComplete?.call();
+  }
+
+  Future<void> _speakSentences(
+    List<String> sentences, {
+    required int token,
+    String? audioUrl,
+  }) async {
     for (int index = 0; index < sentences.length; index++) {
+      await _awaitResume(token);
       if (!mounted || token != _speechToken) return;
       setState(() => _characterSentenceIndex = index);
       bool played = false;
@@ -868,17 +928,45 @@ class _PlayPageState extends State<PlayPage> {
             : (1200 + sentences[index].length * 55).clamp(1800, 5200).toInt();
         await _waitForSpeech(Duration(milliseconds: milliseconds));
       }
+      if (!mounted || token != _speechToken) return;
+      if (_phase == _DialoguePhase.paused) {
+        // 이 문장을 읽는 도중에 멈췄습니다. 다시 재생하면 같은 문장을
+        // 처음부터 들려줍니다 - 반쯤 들은 문장을 건너뛰면 말이 끊깁니다.
+        index--;
+      }
     }
-    if (mounted && token == _speechToken) onComplete?.call();
   }
 
+  /// 일시정지 중이면 여기서 잡혀 있다가 "계속 듣기"에 깨어납니다.
+  /// 발화 루프를 버리지 않고 재우는 것이 이 화면의 이어 재생 방식입니다.
+  Future<void> _awaitResume(int token) async {
+    while (mounted &&
+        token == _speechToken &&
+        _phase == _DialoguePhase.paused) {
+      await (_pauseGate ??= Completer<void>()).future;
+    }
+  }
+
+  void _openPauseGate() {
+    final Completer<void>? gate = _pauseGate;
+    _pauseGate = null;
+    if (gate != null && !gate.isCompleted) gate.complete();
+  }
+
+  /// 음성 없이 문장을 읽는 시간. [_releaseSpeechWait] 로 중간에 깨울 수
+  /// 있습니다 - 타이머만 취소하면 발화 루프가 영영 깨어나지 못합니다.
   Future<void> _waitForSpeech(Duration duration) {
     final Completer<void> completer = Completer<void>();
+    _speechWait = completer;
     _questionTimer?.cancel();
-    _questionTimer = Timer(duration, () {
-      if (!completer.isCompleted) completer.complete();
-    });
+    _questionTimer = Timer(duration, _releaseSpeechWait);
     return completer.future;
+  }
+
+  void _releaseSpeechWait() {
+    final Completer<void>? pending = _speechWait;
+    _speechWait = null;
+    if (pending != null && !pending.isCompleted) pending.complete();
   }
 
   List<String> _splitSentences(String text) {
@@ -908,11 +996,19 @@ class _PlayPageState extends State<PlayPage> {
     });
   }
 
+  /// 대화 장면의 일시정지.
+  ///
+  /// 멈출 때 대사 루프를 **죽이지 않습니다**. 소리만 끊고 루프를 문 앞에
+  /// 세워 뒀다가([_awaitResume]), 다시 재생하면 멈춘 문장부터 이어 읽게
+  /// 합니다 - 예전에는 [_playQuestion] 으로 대사를 처음부터 다시 틀어서
+  /// 듣던 자리를 잃었습니다.
   void _togglePause() {
     if (_phase == _DialoguePhase.paused) {
       setState(() => _phase = _phaseBeforePause);
+      _openPauseGate();
       if (_phase == _DialoguePhase.characterSpeaking) {
-        _playQuestion();
+        // 루프가 이미 끝난 뒤에 멈춘 경우에만 다시 들려줍니다.
+        if (!_speaking) unawaited(_playQuestion());
       } else {
         _startListening();
       }
@@ -920,11 +1016,13 @@ class _PlayPageState extends State<PlayPage> {
     }
 
     _phaseBeforePause = _phase;
-    _speechToken++;
     _questionTimer?.cancel();
     _listeningTimer?.cancel();
     if (_recordingVoice) unawaited(_voiceRecorder.cancel());
     unawaited(_audioPlayer.stop());
+    // 무음으로 읽는 중이었다면 그 기다림을 깨워, 루프가 이 문장에서
+    // 멈춰 서 있게 합니다(깨우지 않으면 타이머만 죽고 영영 안 깨어납니다).
+    _releaseSpeechWait();
     setState(() {
       _recordingVoice = false;
       _transcribingVoice = false;
@@ -995,9 +1093,12 @@ class _PlayPageState extends State<PlayPage> {
           soundOn: _soundOn,
           onExit: _confirmExit,
           onPause: _toggleStoryPause,
+          // "다시 듣기"는 지금처럼 장면 처음부터입니다. 이어 재생은
+          // 일시정지 버튼의 몫이라 둘을 섞지 않습니다.
           onReplay: () {
             _storyTimer?.cancel();
             _speechToken++;
+            _releaseNarrationWait();
             unawaited(_audioPlayer.stop());
             setState(() => _narrationIndex = 0);
             _scheduleCurrentNarration();
