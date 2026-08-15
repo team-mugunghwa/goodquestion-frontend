@@ -130,6 +130,14 @@ class DeviceStoryAudioPlayer implements StoryAudioPlayer {
   /// 소리 없이 조용히 실패합니다 - base64 를 직접 디코드해 [BytesSource]로
   /// 재생합니다. 나중에 서버가 진짜 URL을 내려줘도 이 분기가 그대로 처리합니다.
   Source _sourceFor(String url) {
+    // 선택지 문장·재시도 안내는 서버가 아니라 앱에 들어 있는 mp3 입니다
+    // (`assets/audio/choices/`). audioplayers 의 [AssetSource] 는 `assets/`
+    // 접두어를 **뺀** 경로를 받아 안에서 다시 붙이므로, 그대로 넘기면
+    // `assets/assets/...` 를 찾다가 조용히 실패합니다.
+    const String assetPrefix = 'assets/';
+    if (url.startsWith(assetPrefix)) {
+      return AssetSource(url.substring(assetPrefix.length));
+    }
     final UriData? data = Uri.parse(url).data;
     if (data != null) {
       return BytesSource(data.contentAsBytes(), mimeType: data.mimeType);

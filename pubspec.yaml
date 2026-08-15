@@ -97,6 +97,12 @@ flutter:
     - assets/images/recap/banggui/
     - assets/icons/
 
+    # STT 로 못 알아들었을 때 쓰는 캐릭터 목소리(mp3 40개, 1.1MB).
+    # 재시도 안내 · 선택지 안내 · 선택지 문장. manifest.json 이 문장 원본이고,
+    # 코드가 읽는 것은 그걸 옮겨 둔 Dart 상수 테이블입니다(런타임 파싱 안 함).
+    # → docs/이야기_전개_가이드.md 3.4
+    - assets/audio/choices/
+
     # 화면별 더미 JSON. 서버가 나오면 화면 코드가 아니라 이 폴더가 사라집니다.
     # → docs/DECISIONS.md 015
     - assets/dummy/

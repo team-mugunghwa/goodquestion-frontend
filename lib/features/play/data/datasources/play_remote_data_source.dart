@@ -127,9 +127,13 @@ class PlayRemoteDataSource {
     String? idempotencyKey,
   }) => _client.post<PlayTurnResult>(
     '/sessions/$sessionId/utterances',
+    // `sttRawText` · `sttConfidence` 는 STT 를 탄 발화에만 있습니다. 없을 때
+    // `text` 로 메워 두면(예전 동작) 선택지로 고른 문장까지 "STT 원문이 있는
+    // 발화"로 보여서, 보호자 리포트의 저신뢰 발화 판단이 오염됩니다.
+    // 값이 없으면 비운 채로 보냅니다. → `docs/이야기_전개_가이드.md` 3.4
     body: <String, Object?>{
       'text': text,
-      'sttRawText': sttRawText ?? text,
+      'sttRawText': sttRawText,
       'sttConfidence': sttConfidence,
       'sttRetryCount': sttRetryCount,
       'missionId': missionId,
