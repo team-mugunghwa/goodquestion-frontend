@@ -487,6 +487,11 @@ class _PlayPageState extends State<PlayPage> {
         _listeningTimer = Timer.periodic(const Duration(seconds: 1), (_) {
           if (mounted && _recordingVoice) {
             setState(() => _listeningSeconds++);
+            // 업로드 한도에 닿기 전에 여기까지 말한 것을 보낸다. 상한을 넘겨
+            // 두면 통째로 413이 나서 아이가 말한 전부를 잃는다.
+            if (_listeningSeconds >= maxRecordingSeconds) {
+              unawaited(_toggleVoiceAnswer());
+            }
           }
         });
       } on Object {
