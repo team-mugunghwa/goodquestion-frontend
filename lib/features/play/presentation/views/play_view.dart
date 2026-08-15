@@ -819,20 +819,18 @@ class _PlayPageState extends State<PlayPage> {
         : url;
     // 자막 진행과 오디오 재생을 나란히 돌립니다. playUrl 은 재생이 끝나야
     // 반환하므로 기다렸다가 자막을 시작하면 화면이 통째로 늦습니다.
-    final Future<void> playback = _audioPlayer
-        .playUrl(resolved)
-        .catchError((Object error) {
-          debugPrint('[narration] 사전 렌더 재생 실패: $error');
-        });
+    final Future<void> playback = _audioPlayer.playUrl(resolved).catchError((
+      Object error,
+    ) {
+      debugPrint('[narration] 사전 렌더 재생 실패: $error');
+    });
 
     for (int index = 0; index < scene.narrationTimings.length; index++) {
       if (!mounted || token != _speechToken || _storyPaused) return;
       if (_narrationIndex != index) setState(() => _narrationIndex = index);
       final PlayNarrationTiming timing = scene.narrationTimings[index];
       final double seconds = (timing.end - timing.start).clamp(0.1, 60.0);
-      await _waitForNarration(
-        Duration(milliseconds: (seconds * 1000).round()),
-      );
+      await _waitForNarration(Duration(milliseconds: (seconds * 1000).round()));
       if (!mounted || token != _speechToken || _storyPaused) return;
     }
 
