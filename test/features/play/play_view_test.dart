@@ -120,16 +120,72 @@ void main() {
     expect(find.text('잘 못 들었어요. 다시 말해 볼까?'), findsOneWidget);
     expect(find.byTooltip('나가기'), findsOneWidget); // 대화 화면 그대로
 
-    // 다시 녹음합니다 - 이번에는 성공합니다.
+    // 다시 녹음합니다 - 이번에는 성공하고, 확인 화면을 거쳐 제출합니다.
     await tester.tap(find.byTooltip('눌러서 말하기'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('맞아요'));
     await tester.pumpAndSettle();
 
     expect(
       repository.lastSttRetryCount,
       1,
       reason: '무음으로 한 번 다시 말했으니 재시도 횟수 1이 실려 가야 합니다',
+    );
+  });
+
+  testWidgets('변환 결과는 아이가 맞다고 확인하기 전까지 제출되지 않는다', (WidgetTester tester) async {
+    final _AutoStopSpyRepository repository = _AutoStopSpyRepository();
+    await pumpPlay(tester, repository: repository);
+
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
+
+    // 확인 화면이 뜨고, 아직 아무것도 제출되지 않았습니다.
+    expect(find.text('이렇게 들었어요'), findsOneWidget);
+    expect(find.text('오래오래 말한 내 생각이에요'), findsOneWidget);
+    expect(find.text('맞아요'), findsOneWidget);
+    expect(find.text('다시 말할래요'), findsOneWidget);
+    expect(repository.submittedTexts, isEmpty);
+
+    await tester.tap(find.text('맞아요'));
+    await tester.pumpAndSettle();
+
+    expect(repository.submittedTexts, <String>['오래오래 말한 내 생각이에요']);
+  });
+
+  testWidgets('저신뢰면 확인 화면이 맞을까요로 묻고, 다시 말하면 재시도 횟수가 오른다', (
+    WidgetTester tester,
+  ) async {
+    final _AutoStopSpyRepository repository = _AutoStopSpyRepository(
+      lowConfidence: true,
+    );
+    await pumpPlay(tester, repository: repository);
+
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
+
+    // 저신뢰는 단정하지 않고 물어봅니다.
+    expect(find.text('이렇게 들었는데, 맞을까요?'), findsOneWidget);
+    expect(find.text('잘 못 알아들었을 수도 있어요.'), findsOneWidget);
+
+    // 다시 말하면 앞의 결과는 버려지고 곧바로 재녹음됩니다.
+    await tester.tap(find.text('다시 말할래요'));
+    await tester.pumpAndSettle();
+    expect(repository.submittedTexts, isEmpty);
+    expect(find.byTooltip('말하기 완료'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('맞아요'));
+    await tester.pumpAndSettle();
+
+    expect(repository.submittedTexts, hasLength(1));
+    expect(
+      repository.lastSttRetryCount,
+      1,
+      reason: '다시 말할래요 한 번이 재시도 횟수로 실려 가야 합니다',
     );
   });
 
@@ -148,6 +204,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repository.transcribeCalls, 1, reason: '상한에서 자동으로 멈추고 변환을 요청해야 합니다');
+
+    // 자동으로 멈춰도 제출은 아이의 확인을 기다립니다.
+    expect(repository.submittedTexts, isEmpty);
+    await tester.tap(find.text('맞아요'));
+    await tester.pumpAndSettle();
     expect(repository.submittedTexts, isNotEmpty);
   });
 
@@ -404,10 +465,15 @@ class _SttRetrySpyRepository implements PlayRepository {
   Future<void> stop(String sessionId) async {}
 }
 
-/// 녹음 상한 자동 종료 검증용. 변환 호출 수와 제출된 텍스트를 기록합니다.
+/// 음성 흐름(상한 자동 종료, 확인 단계) 검증용.
+/// 변환 호출 수, 제출된 텍스트, 마지막 재시도 횟수를 기록합니다.
 class _AutoStopSpyRepository implements PlayRepository {
+  _AutoStopSpyRepository({this.lowConfidence = false});
+
+  final bool lowConfidence;
   int transcribeCalls = 0;
   final List<String> submittedTexts = <String>[];
+  int? lastSttRetryCount;
 
   @override
   Future<PlaySessionSnapshot> resume(String sessionId) async =>
@@ -442,10 +508,10 @@ class _AutoStopSpyRepository implements PlayRepository {
   @override
   Future<PlayTranscription> transcribeAudio(Uint8List wavBytes) async {
     transcribeCalls++;
-    return const PlayTranscription(
+    return PlayTranscription(
       text: '오래오래 말한 내 생각이에요',
-      confidence: .9,
-      lowConfidence: false,
+      confidence: lowConfidence ? .41 : .9,
+      lowConfidence: lowConfidence,
     );
   }
 
@@ -466,6 +532,7 @@ class _AutoStopSpyRepository implements PlayRepository {
     String? idempotencyKey,
   }) async {
     submittedTexts.add(text);
+    lastSttRetryCount = sttRetryCount;
     return const PlayTurnResult(
       characterText: null,
       characterAudioUrl: null,
