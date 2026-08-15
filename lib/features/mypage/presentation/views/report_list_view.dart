@@ -118,7 +118,7 @@ class ReportListView extends StatelessWidget {
   ) async {
     await vm.markAsRead(report.sessionId);
     if (!context.mounted) return;
-    unawaited(context.push(AppRoutes.reportDetailOf('${report.sessionId}')));
+    unawaited(context.push(AppRoutes.reportDetailOf(report.sessionId)));
   }
 }
 

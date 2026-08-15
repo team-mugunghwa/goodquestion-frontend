@@ -104,37 +104,34 @@ void main() {
     expect(repository.stoppedSessionId, 'preview-session');
   });
 
-  testWidgets(
-    '무음(STT_EMPTY_TEXT)이면 화면을 안 바꾸고 마이크 옆에 안내만 하고, '
-    '다시 말하면 재시도 횟수를 실어 보낸다',
-    (WidgetTester tester) async {
-      final _SttRetrySpyRepository repository = _SttRetrySpyRepository();
-      await pumpPlay(tester, repository: repository);
+  testWidgets('무음(STT_EMPTY_TEXT)이면 화면을 안 바꾸고 마이크 옆에 안내만 하고, '
+      '다시 말하면 재시도 횟수를 실어 보낸다', (WidgetTester tester) async {
+    final _SttRetrySpyRepository repository = _SttRetrySpyRepository();
+    await pumpPlay(tester, repository: repository);
 
-      // 듣기 화면에 들어오면 마이크가 자동으로 녹음을 시작합니다.
-      expect(find.byTooltip('말하기 완료'), findsOneWidget);
+    // 듣기 화면에 들어오면 마이크가 자동으로 녹음을 시작합니다.
+    expect(find.byTooltip('말하기 완료'), findsOneWidget);
 
-      // 첫 녹음은 무음으로 실패합니다.
-      await tester.tap(find.byTooltip('말하기 완료'));
-      await tester.pumpAndSettle();
+    // 첫 녹음은 무음으로 실패합니다.
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
 
-      // 화면이 에러 화면으로 안 바뀌고, 마이크 옆에만 안내가 붙습니다.
-      expect(find.text('잘 못 들었어요. 다시 말해 볼까?'), findsOneWidget);
-      expect(find.byTooltip('나가기'), findsOneWidget); // 대화 화면 그대로
+    // 화면이 에러 화면으로 안 바뀌고, 마이크 옆에만 안내가 붙습니다.
+    expect(find.text('잘 못 들었어요. 다시 말해 볼까?'), findsOneWidget);
+    expect(find.byTooltip('나가기'), findsOneWidget); // 대화 화면 그대로
 
-      // 다시 녹음합니다 - 이번에는 성공합니다.
-      await tester.tap(find.byTooltip('눌러서 말하기'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('말하기 완료'));
-      await tester.pumpAndSettle();
+    // 다시 녹음합니다 - 이번에는 성공합니다.
+    await tester.tap(find.byTooltip('눌러서 말하기'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
 
-      expect(
-        repository.lastSttRetryCount,
-        1,
-        reason: '무음으로 한 번 다시 말했으니 재시도 횟수 1이 실려 가야 합니다',
-      );
-    },
-  );
+    expect(
+      repository.lastSttRetryCount,
+      1,
+      reason: '무음으로 한 번 다시 말했으니 재시도 횟수 1이 실려 가야 합니다',
+    );
+  });
 
   testWidgets('STORY(전개) 장면은 문장마다 내레이션 음성을 실제로 요청한다', (
     WidgetTester tester,

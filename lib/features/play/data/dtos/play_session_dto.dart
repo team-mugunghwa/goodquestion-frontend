@@ -72,11 +72,12 @@ class PlaySessionDto {
     return PlayAnalysis(
       childIntent: value['childIntent'] as String?,
       mainPoint: value['mainPoint'] as String?,
-      detectedElements: (value['detectedElements'] as List<dynamic>? ?? const <dynamic>[])
-          .whereType<Map<String, dynamic>>()
-          .map((item) => item['type'] as String?)
-          .whereType<String>()
-          .toList(growable: false),
+      detectedElements:
+          (value['detectedElements'] as List<dynamic>? ?? const <dynamic>[])
+              .whereType<Map<String, dynamic>>()
+              .map((item) => item['type'] as String?)
+              .whereType<String>()
+              .toList(growable: false),
       utteranceValidity: value['utteranceValidity'] as String?,
     );
   }

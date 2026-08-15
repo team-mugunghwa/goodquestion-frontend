@@ -47,7 +47,7 @@ class ReportDetailPage extends StatelessWidget {
     return ChangeNotifierProvider<ReportDetailViewModel>(
       create: (_) => ReportDetailViewModel(
         getIt<GetReportDetailUseCase>(),
-        sessionId: int.tryParse(sessionId) ?? 0,
+        sessionId: sessionId,
       )..load(),
       child: const ReportDetailView(),
     );

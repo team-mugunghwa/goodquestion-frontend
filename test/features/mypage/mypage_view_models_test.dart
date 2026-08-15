@@ -35,7 +35,7 @@ class _Stub
   AppSettings? settings;
   final Object? error;
 
-  final List<int> markedAsRead = <int>[];
+  final List<String> markedAsRead = <String>[];
   final List<String> createdChildNames = <String>[];
   final List<int> createdChildAges = <int>[];
   @override
@@ -84,13 +84,14 @@ class _Stub
   }
 
   @override
-  Future<ReportDetail?> getReportDetail(int sessionId) async {
+  Future<ReportDetail?> getReportDetail(String sessionId) async {
     if (error != null) throw error!;
     return detail;
   }
 
   @override
-  Future<void> markAsRead(int sessionId) async => markedAsRead.add(sessionId);
+  Future<void> markAsRead(String sessionId) async =>
+      markedAsRead.add(sessionId);
 
   @override
   Future<AppSettings> getSettings() async {
@@ -144,7 +145,7 @@ ReportList _list() => const ReportList(
   newCount: 1,
   reports: <ReportSummary>[
     ReportSummary(
-      sessionId: 104,
+      sessionId: '104',
       storyTitle: '방귀 뀌는 며느리',
       completedAt: null,
       isNew: true,
@@ -152,7 +153,7 @@ ReportList _list() => const ReportList(
       highlightUtterance: '며느리가 참으면 배가 아프니까',
     ),
     ReportSummary(
-      sessionId: 103,
+      sessionId: '103',
       storyTitle: '해와 달이 된 오누이',
       completedAt: null,
       isNew: false,
@@ -163,7 +164,7 @@ ReportList _list() => const ReportList(
 );
 
 const ReportDetail _detail = ReportDetail(
-  sessionId: 104,
+  sessionId: '104',
   childName: '하늘이',
   storyTitle: '방귀 뀌는 며느리',
   summary: '자기 생각을 이유와 함께 말하는 힘이 돋보인 세션이었어요.',
@@ -306,9 +307,9 @@ void main() {
       );
       await vm.load();
 
-      await vm.markAsRead(104);
+      await vm.markAsRead('104');
 
-      expect(stub.markedAsRead, <int>[104]);
+      expect(stub.markedAsRead, <String>['104']);
       expect(vm.reports.first.isNew, isFalse);
       expect(vm.list?.newCount, 0);
       // 총 개수는 줄지 않습니다 — 읽었다고 리포트가 사라지진 않습니다.
@@ -339,7 +340,7 @@ void main() {
     test('리포트가 있으면 pending 이 아니다', () async {
       final vm = ReportDetailViewModel(
         GetReportDetailUseCase(_Stub(detail: _detail)),
-        sessionId: 104,
+        sessionId: '104',
       );
 
       await vm.load();
@@ -351,7 +352,7 @@ void main() {
     test('아직 리포트가 없으면 error 가 아니라 pending 이다', () async {
       final vm = ReportDetailViewModel(
         GetReportDetailUseCase(_Stub()),
-        sessionId: 999,
+        sessionId: '999',
       );
 
       await vm.load();
