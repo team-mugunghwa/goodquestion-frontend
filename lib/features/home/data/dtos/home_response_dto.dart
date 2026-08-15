@@ -63,6 +63,7 @@ class SessionSummaryResponseDto {
   /// 그 하나 앞입니다. 음수·초과를 막아 진행률이 0~1 밖으로 안 나가게 합니다.
   InProgressSession toEntity() => InProgressSession(
     sessionId: sessionId,
+    storyId: storyId,
     storyTitle: storyTitle,
     storyImage: storyImageUrl,
     lastCompletedScene: (currentSceneOrder - 1).clamp(0, totalScenes),
