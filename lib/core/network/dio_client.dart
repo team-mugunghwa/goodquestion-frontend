@@ -94,8 +94,17 @@ class DioClient {
   Future<T> post<T>(
     String path, {
     Object? body,
+    Map<String, dynamic>? headers,
     required T Function(Object? data) parse,
-  }) => _request(path, () => _dio.post<dynamic>(path, data: body), parse);
+  }) => _request(
+    path,
+    () => _dio.post<dynamic>(
+      path,
+      data: body,
+      options: headers != null ? Options(headers: headers) : null,
+    ),
+    parse,
+  );
 
   Future<T> patch<T>(
     String path, {
