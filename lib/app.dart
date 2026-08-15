@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import 'core/di/injector.dart';
+import 'core/push/push_service.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 
@@ -11,8 +15,34 @@ import 'core/theme/app_theme.dart';
 ///
 /// 화면 전환은 `MaterialApp.router` + go_router 가 담당합니다. 라우트는
 /// `core/router/app_router.dart` 에만 등록하세요. → `docs/DECISIONS.md` 013
-class GoodQuestionApp extends StatelessWidget {
+class GoodQuestionApp extends StatefulWidget {
   const GoodQuestionApp({super.key});
+
+  @override
+  State<GoodQuestionApp> createState() => _GoodQuestionAppState();
+}
+
+class _GoodQuestionAppState extends State<GoodQuestionApp> {
+  StreamSubscription<String>? _pushTapSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    // 알림을 눌러 앱이 열렸을 때 그 화면으로 보냅니다. 경로는 관리자 콘솔이
+    // 알림에 실어 보낸 값입니다(예: /support/{inquiryId}).
+    //
+    // 여기서 받는 이유: 라우터는 앱 수명 내내 하나이고, 화면 안에서 구독하면
+    // 그 화면이 떠 있을 때만 알림이 동작합니다.
+    _pushTapSubscription = getIt<PushService>().notificationTaps.listen(
+      appRouter.push<void>,
+    );
+  }
+
+  @override
+  void dispose() {
+    _pushTapSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
