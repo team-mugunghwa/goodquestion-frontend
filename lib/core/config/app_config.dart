@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
 /// 빌드 시점에 주입되는 설정값.
@@ -79,4 +80,42 @@ abstract final class AppConfig {
     if (kIsWeb) return Uri.base.resolve('auth.html').toString();
     return 'goodquestion://oauth';
   }
+
+  // ─────────────────────────────────────────────────────────
+  // 푸시(FCM)
+  //
+  // google-services.json 대신 --dart-define 으로 받습니다. 웹 배포가 주 경로인데
+  // 웹에는 그 파일 방식이 없고, 값이 빌드마다 갈리는 것도 아니라 설정 파일을
+  // 하나 더 늘릴 이유가 없습니다. 값이 비면 푸시 자체를 켜지 않습니다.
+  // → lib/core/push/push_service.dart
+  // ─────────────────────────────────────────────────────────
+
+  static const String _firebaseApiKey = String.fromEnvironment('FIREBASE_API_KEY');
+  static const String _firebaseAppId = String.fromEnvironment('FIREBASE_APP_ID');
+  static const String _firebaseProjectId = String.fromEnvironment(
+    'FIREBASE_PROJECT_ID',
+  );
+  static const String _firebaseSenderId = String.fromEnvironment(
+    'FIREBASE_MESSAGING_SENDER_ID',
+  );
+
+  /// 웹에서 토큰을 받으려면 필요합니다(Firebase 콘솔 > 클라우드 메시징 > 웹 푸시 인증서).
+  static const String firebaseVapidKey = String.fromEnvironment(
+    'FIREBASE_VAPID_KEY',
+  );
+
+  /// 넷 중 하나라도 비면 푸시를 켜지 않습니다. 반쯤 채워진 설정으로 초기화하면
+  /// 실패 지점이 앱 기동 한복판이 됩니다.
+  static bool get hasFirebaseOptions =>
+      _firebaseApiKey.isNotEmpty &&
+      _firebaseAppId.isNotEmpty &&
+      _firebaseProjectId.isNotEmpty &&
+      _firebaseSenderId.isNotEmpty;
+
+  static FirebaseOptions get firebaseOptions => const FirebaseOptions(
+    apiKey: _firebaseApiKey,
+    appId: _firebaseAppId,
+    projectId: _firebaseProjectId,
+    messagingSenderId: _firebaseSenderId,
+  );
 }
