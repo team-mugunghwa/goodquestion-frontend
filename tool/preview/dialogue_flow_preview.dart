@@ -118,6 +118,7 @@ class _FlowRepository implements PlayRepository {
     String? sttRawText,
     double? sttConfidence,
     int sttRetryCount = 0,
+    String? idempotencyKey,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 300));
     _turn++;
@@ -178,6 +179,9 @@ class _FlowRepository implements PlayRepository {
 
   /// 마지막 장면이 닫히면 세션이 후속 활동으로 넘어간다. PlayPage 가 recap 으로 라우팅한다.
   bool _postActivity = false;
+
+  @override
+  Future<void> stop(String sessionId) async {}
 
   @override
   Future<PlayMission?> currentMission(String sessionId) async => null;

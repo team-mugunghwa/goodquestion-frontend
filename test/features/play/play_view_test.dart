@@ -2,28 +2,35 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:goodquestion/core/error/failure.dart';
+import 'package:goodquestion/features/play/domain/entities/play_session.dart';
+import 'package:goodquestion/features/play/domain/repositories/play_repository.dart';
 import 'package:goodquestion/features/play/presentation/views/play_view.dart';
 import 'package:goodquestion/features/play/presentation/voice/mission_voice_recorder.dart';
 import 'package:goodquestion/features/play/presentation/voice/story_audio_player.dart';
 
 void main() {
-  Future<void> pumpPlay(WidgetTester tester) async {
+  Future<void> pumpPlay(WidgetTester tester, {PlayRepository? repository}) async {
     tester.view.physicalSize = const Size(1280, 720);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
         home: PlayPage(
           sessionId: 'preview-session',
           characterName: '토리',
           question: '친구가 속상해할 때는 어떻게 하면 좋을까?',
-          voiceRecorder: _FakeVoiceRecorder(),
-          audioPlayer: _FakeAudioPlayer(),
+          repository: repository,
+          voiceRecorder: const _FakeVoiceRecorder(),
+          audioPlayer: const _FakeAudioPlayer(),
         ),
       ),
     );
+    // repository 가 있으면 resume() 이 끝날 때까지 한 프레임 더 필요합니다.
+    // 데모 모드(테스트 대부분)는 동기 경로라 pump() 로 충분합니다.
+    if (repository != null) await tester.pumpAndSettle();
   }
 
   testWidgets('좌측 캐릭터와 머리 우측의 한 문장 질문을 보여준다', (WidgetTester tester) async {
@@ -66,14 +73,62 @@ void main() {
     expect(find.text('이야기를 잠시 멈췄어요'), findsNothing);
   });
 
-  testWidgets('나가기는 실수 방지를 위해 확인한다', (WidgetTester tester) async {
+  testWidgets('나가기는 실수 방지를 위해 확인하고, 되돌릴 수 없다고 알려준다', (
+    WidgetTester tester,
+  ) async {
     await pumpPlay(tester);
 
     await tester.tap(find.byTooltip('나가기'));
     await tester.pumpAndSettle();
-    expect(find.text('이야기를 나갈까요?'), findsOneWidget);
-    expect(find.text('지금까지 들은 곳은 저장해 둘게요.'), findsOneWidget);
+    expect(find.text('이야기를 그만할까요?'), findsOneWidget);
+    // stop 은 되돌릴 수 없습니다 - "저장해 둘게요" 처럼 다시 들을 수 있는
+    // 것으로 오해하게 하면 안 됩니다.
+    expect(find.text('그만하면 다시 이어서 들을 수 없어요. 처음부터 다시 시작해야 해요.'), findsOneWidget);
   });
+
+  testWidgets('그만하기를 확정하면 서버에도 stop 을 알린다', (WidgetTester tester) async {
+    final _StopSpyRepository repository = _StopSpyRepository();
+    await pumpPlay(tester, repository: repository);
+
+    await tester.tap(find.byTooltip('나가기'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('그만하기'));
+    await tester.pumpAndSettle();
+
+    expect(repository.stoppedSessionId, 'preview-session');
+  });
+
+  testWidgets(
+    '무음(STT_EMPTY_TEXT)이면 화면을 안 바꾸고 마이크 옆에 안내만 하고, '
+    '다시 말하면 재시도 횟수를 실어 보낸다',
+    (WidgetTester tester) async {
+      final _SttRetrySpyRepository repository = _SttRetrySpyRepository();
+      await pumpPlay(tester, repository: repository);
+
+      // 듣기 화면에 들어오면 마이크가 자동으로 녹음을 시작합니다.
+      expect(find.byTooltip('말하기 완료'), findsOneWidget);
+
+      // 첫 녹음은 무음으로 실패합니다.
+      await tester.tap(find.byTooltip('말하기 완료'));
+      await tester.pumpAndSettle();
+
+      // 화면이 에러 화면으로 안 바뀌고, 마이크 옆에만 안내가 붙습니다.
+      expect(find.text('잘 못 들었어요. 다시 말해 볼까?'), findsOneWidget);
+      expect(find.byTooltip('나가기'), findsOneWidget); // 대화 화면 그대로
+
+      // 다시 녹음합니다 - 이번에는 성공합니다.
+      await tester.tap(find.byTooltip('눌러서 말하기'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('말하기 완료'));
+      await tester.pumpAndSettle();
+
+      expect(
+        repository.lastSttRetryCount,
+        1,
+        reason: '무음으로 한 번 다시 말했으니 재시도 횟수 1이 실려 가야 합니다',
+      );
+    },
+  );
 
   testWidgets('1280x720 범용 대화 템플릿 골든', (WidgetTester tester) async {
     await pumpPlay(tester);
@@ -113,4 +168,150 @@ class _FakeAudioPlayer implements StoryAudioPlayer {
 
   @override
   Future<void> stop() async {}
+}
+
+/// "그만하기"가 실제로 `POST /sessions/{id}/stop`(→ [stop])을 부르는지만
+/// 확인하는 최소 가짜입니다. 그 외 메서드는 대화 화면이 뜨는 데 필요한
+/// 만큼만 값을 돌려줍니다.
+class _StopSpyRepository implements PlayRepository {
+  String? stoppedSessionId;
+
+  @override
+  Future<PlaySessionSnapshot> resume(String sessionId) async =>
+      const PlaySessionSnapshot(
+        phase: PlayPhase.dialogue,
+        currentScene: PlayScene(
+          sceneId: 'scene-1',
+          sceneOrder: 1,
+          sceneType: PlaySceneType.dialogue,
+          narrationSentences: <String>[],
+          characterName: '토리',
+          maxTurns: 4,
+        ),
+        openingText: '이럴 때는 어떻게 하면 좋을까?',
+      );
+
+  @override
+  Future<PlaySessionSnapshot> completeStoryScene(String sessionId) =>
+      resume(sessionId);
+
+  @override
+  Future<PlayOpeningMessage> openCurrentScene(String sessionId) async =>
+      const PlayOpeningMessage(
+        text: '이럴 때는 어떻게 하면 좋을까?',
+        audioUrl: null,
+        alreadyOpened: true,
+      );
+
+  @override
+  Future<PlayMission?> currentMission(String sessionId) async => null;
+
+  @override
+  Future<PlayTranscription> transcribeAudio(Uint8List wavBytes) async =>
+      const PlayTranscription(text: '', confidence: null, lowConfidence: false);
+
+  @override
+  Future<PlaySpeechAudio> synthesizeSpeech({
+    required String text,
+    required String characterName,
+  }) async => const PlaySpeechAudio(audioUrl: 'stub://audio');
+
+  @override
+  Future<PlayTurnResult> submitUtterance(
+    String sessionId, {
+    required String text,
+    String? missionId,
+    String? sttRawText,
+    double? sttConfidence,
+    int sttRetryCount = 0,
+    String? idempotencyKey,
+  }) async => const PlayTurnResult(
+    characterText: null,
+    characterAudioUrl: null,
+    mission: null,
+    sceneTransition: null,
+  );
+
+  @override
+  Future<void> stop(String sessionId) async {
+    stoppedSessionId = sessionId;
+  }
+}
+
+/// 첫 녹음은 422 `STT_EMPTY_TEXT`로 실패시키고, 그다음부터는 성공시킵니다.
+/// 결국 제출되는 `sttRetryCount`를 [lastSttRetryCount]에 기록합니다.
+class _SttRetrySpyRepository implements PlayRepository {
+  int _transcribeCalls = 0;
+  int? lastSttRetryCount;
+
+  @override
+  Future<PlaySessionSnapshot> resume(String sessionId) async =>
+      const PlaySessionSnapshot(
+        phase: PlayPhase.dialogue,
+        currentScene: PlayScene(
+          sceneId: 'scene-1',
+          sceneOrder: 1,
+          sceneType: PlaySceneType.dialogue,
+          narrationSentences: <String>[],
+          characterName: '토리',
+          maxTurns: 4,
+        ),
+        openingText: '이럴 때는 어떻게 하면 좋을까?',
+      );
+
+  @override
+  Future<PlaySessionSnapshot> completeStoryScene(String sessionId) =>
+      resume(sessionId);
+
+  @override
+  Future<PlayOpeningMessage> openCurrentScene(String sessionId) async =>
+      const PlayOpeningMessage(
+        text: '이럴 때는 어떻게 하면 좋을까?',
+        audioUrl: null,
+        alreadyOpened: true,
+      );
+
+  @override
+  Future<PlayMission?> currentMission(String sessionId) async => null;
+
+  @override
+  Future<PlayTranscription> transcribeAudio(Uint8List wavBytes) async {
+    _transcribeCalls++;
+    if (_transcribeCalls == 1) {
+      throw const ServerFailure(message: '무음이거나 인식 실패', code: 'STT_EMPTY_TEXT');
+    }
+    return const PlayTranscription(
+      text: '나는 이렇게 생각해요',
+      confidence: .9,
+      lowConfidence: false,
+    );
+  }
+
+  @override
+  Future<PlaySpeechAudio> synthesizeSpeech({
+    required String text,
+    required String characterName,
+  }) async => const PlaySpeechAudio(audioUrl: 'stub://audio');
+
+  @override
+  Future<PlayTurnResult> submitUtterance(
+    String sessionId, {
+    required String text,
+    String? missionId,
+    String? sttRawText,
+    double? sttConfidence,
+    int sttRetryCount = 0,
+    String? idempotencyKey,
+  }) async {
+    lastSttRetryCount = sttRetryCount;
+    return const PlayTurnResult(
+      characterText: null,
+      characterAudioUrl: null,
+      mission: null,
+      sceneTransition: null,
+    );
+  }
+
+  @override
+  Future<void> stop(String sessionId) async {}
 }
