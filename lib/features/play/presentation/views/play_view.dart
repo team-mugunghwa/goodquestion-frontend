@@ -1635,6 +1635,13 @@ class _DialogueCanvas extends StatelessWidget {
                 characterName: characterName,
                 question: question,
                 compact: compact,
+                // 아이 말풍선(아래)과 서로 밀어내지 않도록 위아래로 나눠
+                // 씁니다. 좁은 폭에서 대사가 길어져도 잘리는 대신 이 안에서
+                // 굴러갑니다.
+                maxHeight:
+                    constraints.maxHeight -
+                    (compact ? 18 : 44) -
+                    (compact ? 160 : 190),
               ),
             ),
             // 이름 배지는 인물 발밑에 겹치고, 말풍선이 이미 "○○의 질문"으로 화자를 밝힌다.
@@ -1661,6 +1668,7 @@ class _DialogueCanvas extends StatelessWidget {
                 lowConfidence: lastSttLowConfidence,
                 sttHint: sttHint,
                 compact: compact,
+                maxHeight: constraints.maxHeight * (compact ? .42 : .5),
               ),
             ),
           ],
@@ -1696,12 +1704,30 @@ class _CharacterNameBadge extends StatelessWidget {
   }
 }
 
+/// 캐릭터 대사 말풍선.
+///
+/// **대사는 어떤 폭에서도 잘리지 않습니다.** 아이가 글을 다 못 읽는 채로
+/// 대답해야 하는 상황을 만들면 이 화면이 성립하지 않습니다. 그래서 문장이
+/// 길면 (1) 글자를 한 단계씩 줄이고, (2) 그래도 넘치면 말풍선 안에서
+/// 스크롤합니다 - 말줄임표로 끊지 않습니다.
 class _QuestionBubble extends StatelessWidget {
   const _QuestionBubble({
     required this.characterName,
     required this.question,
     required this.compact,
+    required this.maxHeight,
   });
+
+  /// 말풍선이 차지해도 되는 최대 높이. 아이 말풍선을 밀어내지 않도록
+  /// [_DialogueCanvas] 가 화면 높이에서 계산해 넘깁니다.
+  final double maxHeight;
+
+  /// 길이에 따라 한 단계씩 줄어드는 글자 크기. 자르는 대신 줄입니다.
+  double get _fontSize {
+    final int length = question.characters.length;
+    if (compact) return length > 90 ? 21 : (length > 55 ? 24 : 27);
+    return length > 90 ? 27 : (length > 55 ? 30 : 34);
+  }
 
   final String characterName;
   final String question;
@@ -1728,7 +1754,10 @@ class _QuestionBubble extends StatelessWidget {
           ),
         ),
         Container(
-          constraints: BoxConstraints(minHeight: compact ? 138 : 176),
+          constraints: BoxConstraints(
+            minHeight: compact ? 138 : 176,
+            maxHeight: max(maxHeight, compact ? 138.0 : 176.0),
+          ),
           padding: EdgeInsets.symmetric(
             horizontal: compact ? 22 : 34,
             vertical: compact ? 19 : 25,
@@ -1748,6 +1777,9 @@ class _QuestionBubble extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
+            // 최대 높이가 생겼으니 min 이어야 합니다 - 기본값(max)이면 대사가
+            // 짧아도 말풍선이 허용 높이까지 늘어납니다.
+            mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               Row(
                 children: <Widget>[
@@ -1768,19 +1800,22 @@ class _QuestionBubble extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 14),
-              Semantics(
-                liveRegion: true,
-                label: question,
-                child: Text(
-                  question,
-                  maxLines: compact ? 3 : 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: const Color(0xFF172A3E),
-                    fontSize: compact ? 27 : 34,
-                    height: 1.35,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -.5,
+              // 자르지 않습니다 - 줄이고, 그래도 넘치면 말풍선 안에서 굴립니다.
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Semantics(
+                    liveRegion: true,
+                    label: question,
+                    child: Text(
+                      question,
+                      style: TextStyle(
+                        color: const Color(0xFF172A3E),
+                        fontSize: _fontSize,
+                        height: 1.35,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -.5,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1803,8 +1838,13 @@ class _ChildVoiceBubble extends StatelessWidget {
     required this.lastChildText,
     required this.lowConfidence,
     required this.compact,
+    required this.maxHeight,
     this.sttHint,
   });
+
+  /// 말풍선이 차지해도 되는 최대 높이. 아이가 길게 말했어도 잘라내지 않고
+  /// 이 안에서 굴립니다. → [_QuestionBubble]
+  final double maxHeight;
 
   final _DialoguePhase phase;
   final int seconds;
@@ -1842,7 +1882,10 @@ class _ChildVoiceBubble extends StatelessWidget {
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
-      constraints: BoxConstraints(minHeight: compact ? 128 : 154),
+      constraints: BoxConstraints(
+        minHeight: compact ? 128 : 154,
+        maxHeight: max(maxHeight, compact ? 128.0 : 154.0),
+      ),
       padding: EdgeInsets.all(compact ? 15 : 20),
       decoration: BoxDecoration(
         color: const Color(0xF2123252),
@@ -1885,15 +1928,19 @@ class _ChildVoiceBubble extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 9),
-                  Text(
-                    body,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: compact ? 20 : 23,
-                      height: 1.35,
-                      fontWeight: FontWeight.w900,
+                  // 아이가 한 말도 자르지 않습니다 - 자기가 한 말이 반쯤
+                  // 잘려 보이면 다시 말해야 하는지 알 수 없습니다.
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Text(
+                        body,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: compact ? 20 : 23,
+                          height: 1.35,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
                     ),
                   ),
                   if (sttHint != null) ...<Widget>[

@@ -20,7 +20,7 @@ void main() {
     String question = '친구가 속상해할 때는 어떻게 하면 좋을까?',
     Size size = const Size(1280, 720),
   }) async {
-    tester.view.physicalSize = const Size(1280, 720);
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -442,6 +442,23 @@ void main() {
           find.byType(AnimatedFractionallySizedBox),
         );
     expect(bar.widthFactor, 0, reason: '모르는 값을 아는 척 그리는 것보다 비워 두는 편이 낫습니다');
+  });
+
+  testWidgets('좁은 폭에서도 캐릭터 대사는 잘리지 않는다', (WidgetTester tester) async {
+    const String longQuestion =
+        '친구가 갑자기 화를 내면서 네가 아끼는 물건을 던져 버렸을 때, '
+        '너는 그 친구에게 어떤 말을 해 주고 싶은지 천천히 생각해서 이야기해 줄래?';
+    await pumpPlay(tester, question: longQuestion, size: const Size(420, 720));
+
+    final Text bubbleText = tester.widget<Text>(find.text(longQuestion));
+    expect(
+      bubbleText.overflow,
+      isNot(TextOverflow.ellipsis),
+      reason: '대사를 말줄임표로 끊으면 아이는 읽지 못한 채로 대답해야 합니다',
+    );
+    expect(bubbleText.maxLines, isNull);
+    // 잘리는 대신 글자가 한 단계 줄어듭니다.
+    expect(bubbleText.style?.fontSize, lessThan(27));
   });
 
   testWidgets('1280x720 범용 대화 템플릿 골든', (WidgetTester tester) async {
