@@ -21,7 +21,6 @@ import '../widgets/home_backdrop.dart';
 import '../widgets/home_sheets.dart';
 import '../widgets/home_skeleton.dart';
 import '../widgets/home_top_bar.dart';
-import '../widgets/planet_widget.dart';
 import '../widgets/recommended_stories_section.dart';
 import '../widgets/start_story_card.dart';
 
@@ -34,10 +33,9 @@ import '../widgets/start_story_card.dart';
 ///
 /// | 섹션 | 내용 |
 /// |---|---|
-/// | 1 | 상단 바 — 아이 프로필 · 별가루 잔액 |
+/// | 1 | 상단 바 — 아이 프로필 · 별가루 잔액 · 내 행성 입구 |
 /// | 2 | 이어하기 카드 (없으면 "새 이야기 시작" 카드) |
 /// | 3 | 추천 이야기 2~3개 (고정 큐레이션) |
-/// | 4 | 내 행성 위젯 — 이어하기·추천보다 **작게** |
 /// | 5 | 하단 내비 (고정) |
 ///
 /// 바탕은 `AppCanvas.day`. 이 앱은 낮(홈·이야기)에서 시작해 밤(완료·행성)에서
@@ -86,6 +84,7 @@ class HomeView extends StatelessWidget {
                         stardustBalance: summary?.planet.stardustBalance,
                         isLoading: summary == null && !vm.state.isError,
                         onProfileTap: () => _openChildSwitch(context, metrics),
+                        onPlanetTap: () => context.go(AppRoutes.planet),
                       ),
                       Expanded(
                         child: AnimatedSwitcher(
@@ -212,12 +211,6 @@ class _HomeContent extends StatelessWidget {
               () => context.push(AppRoutes.storyDetailOf(story.storyId)),
             ),
             onMoreTap: () => context.go(AppRoutes.stories),
-          ),
-          SizedBox(height: metrics.sectionGap),
-          PlanetWidget(
-            planet: summary.planet,
-            metrics: metrics,
-            onTap: () => context.go(AppRoutes.planet),
           ),
         ],
       ),

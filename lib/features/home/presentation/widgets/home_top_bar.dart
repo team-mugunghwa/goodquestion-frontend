@@ -21,6 +21,7 @@ class HomeTopBar extends StatelessWidget {
     super.key,
     required this.metrics,
     required this.onProfileTap,
+    this.onPlanetTap,
     this.child,
     this.stardustBalance,
     this.isLoading = false,
@@ -30,6 +31,10 @@ class HomeTopBar extends StatelessWidget {
 
   /// 아이 프로필 전환 모달(모달 6)을 엽니다.
   final VoidCallback onProfileTap;
+
+  /// 내 행성으로 이동. 별가루가 쓰이는 곳이 행성 꾸미기뿐이라 잔액 바로 옆에
+  /// 입구를 둡니다(2026-08-16 합의) — "모은 것"과 "쓰는 곳"이 한 시선에 잡힙니다.
+  final VoidCallback? onPlanetTap;
 
   /// 아직 아이 프로필이 없으면 `null`.
   final ChildProfile? child;
@@ -72,7 +77,51 @@ class HomeTopBar extends StatelessWidget {
           // 잔액을 모르는 채 0 을 보여 주면 아이가 별가루를 잃었다고 읽습니다.
           else if (balance != null)
             StardustChip.day(count: balance),
+          if (!isLoading && onPlanetTap != null) ...<Widget>[
+            const SizedBox(width: AppSpacing.sm),
+            _PlanetEntry(onTap: onPlanetTap!),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+/// 별가루 칩 옆의 내 행성 입구. 칩과 같은 알약 꼴이지만 면은 흰색입니다 —
+/// 노란색은 별가루 칩 하나를 위해 아껴 둡니다(`docs/DESIGN_SYSTEM.md` 3장).
+class _PlanetEntry extends StatelessWidget {
+  const _PlanetEntry({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return PressScale(
+      onTap: onTap,
+      borderRadius: AppRadius.pill,
+      semanticLabel: HomeStrings.planetTitle,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          boxShadow: AppShadows.soft,
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(
+              AppIcons.planet,
+              size: AppSizes.iconInline,
+              color: AppColors.ink900,
+            ),
+            SizedBox(width: AppSpacing.xs),
+            Text(HomeStrings.planetTitle, style: AppTypography.kidLabel),
+          ],
+        ),
       ),
     );
   }
