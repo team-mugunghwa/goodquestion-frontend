@@ -645,24 +645,53 @@ class _PlayPageState extends State<PlayPage> {
     }
   }
 
+  /// STORY(전개) 장면의 내레이션. 문장마다 `/api/tts`(characterName 없이 ->
+  /// 내레이션 보이스)를 불러 실제로 들려줍니다. 합성이나 재생이 안 되면
+  /// (소리 꺼짐, repository 없음, 네트워크 실패) 이전처럼 글자 길이로 어림한
+  /// 시간만큼 기다렸다가 다음 문장으로 넘어갑니다 - 화면이 죽지 않습니다.
+  /// → `docs/이야기_전개_가이드.md` 3.2
   void _scheduleCurrentNarration() {
+    if (_storyPaused || _advancingScene) return;
+    final int token = ++_speechToken;
+    unawaited(_playCurrentNarration(token));
+  }
+
+  Future<void> _playCurrentNarration(int token) async {
     final List<String> sentences =
         _snapshot?.currentScene?.narrationSentences ?? const <String>[];
-    if (_storyPaused || _advancingScene) return;
     if (_narrationIndex >= sentences.length) {
       _storyTimer = Timer(const Duration(milliseconds: 700), () {
         unawaited(_completeStoryScene());
       });
       return;
     }
-    final int milliseconds = (1400 + sentences[_narrationIndex].length * 65)
-        .clamp(2400, 7500)
-        .toInt();
-    _storyTimer = Timer(Duration(milliseconds: milliseconds), () {
-      if (!mounted || _storyPaused) return;
-      setState(() => _narrationIndex++);
-      _scheduleCurrentNarration();
-    });
+    final String sentence = sentences[_narrationIndex];
+    bool played = false;
+    if (_soundOn && widget.repository != null) {
+      try {
+        final PlaySpeechAudio audio = await widget.repository!
+            .synthesizeSpeech(text: sentence);
+        if (!mounted || token != _speechToken) return;
+        await _audioPlayer.playUrl(audio.audioUrl);
+        played = true;
+      } on Object {
+        played = false;
+      }
+    }
+    if (!mounted || token != _speechToken) return;
+    if (!played) {
+      final int milliseconds = (1400 + sentence.length * 65)
+          .clamp(2400, 7500)
+          .toInt();
+      final Completer<void> completer = Completer<void>();
+      _storyTimer = Timer(Duration(milliseconds: milliseconds), () {
+        if (!completer.isCompleted) completer.complete();
+      });
+      await completer.future;
+    }
+    if (!mounted || token != _speechToken) return;
+    setState(() => _narrationIndex++);
+    _scheduleCurrentNarration();
   }
 
   Future<void> _completeStoryScene() async {
@@ -693,6 +722,11 @@ class _PlayPageState extends State<PlayPage> {
 
   void _toggleStoryPause() {
     _storyTimer?.cancel();
+    if (!_storyPaused) {
+      // 멈추는 쪽입니다 - 재생 중이던 내레이션도 즉시 끊습니다.
+      _speechToken++;
+      unawaited(_audioPlayer.stop());
+    }
     setState(() => _storyPaused = !_storyPaused);
     if (!_storyPaused) _scheduleCurrentNarration();
   }
@@ -899,6 +933,8 @@ class _PlayPageState extends State<PlayPage> {
           onPause: _toggleStoryPause,
           onReplay: () {
             _storyTimer?.cancel();
+            _speechToken++;
+            unawaited(_audioPlayer.stop());
             setState(() => _narrationIndex = 0);
             _scheduleCurrentNarration();
           },
