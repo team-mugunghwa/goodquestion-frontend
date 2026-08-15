@@ -688,9 +688,14 @@ class _PlayPageState extends State<PlayPage> {
           );
           return;
         }
-        await _audioPlayer.playUrl(audio.audioUrl);
-        debugPrint('[narration] playUrl finished');
-        played = true;
+        // 합성을 기다리는 사이에 소리를 껐을 수 있습니다 - 그러면 아예 틀지
+        // 않습니다. 재생 도중에 껐다면 문장을 끝까지 들려주지 못한 것이니
+        // 아래 무음 타이머로 읽을 시간을 줍니다.
+        if (_soundOn) {
+          await _audioPlayer.playUrl(audio.audioUrl);
+          debugPrint('[narration] playUrl finished');
+        }
+        played = _soundOn;
       } on Object catch (error, stack) {
         debugPrint('[narration] tts/play FAILED: $error\n$stack');
         played = false;
@@ -777,6 +782,17 @@ class _PlayPageState extends State<PlayPage> {
     if (!_storyPaused) _scheduleCurrentNarration();
   }
 
+  /// 소리 끄기/켜기. 아이콘만 바꾸면 "껐는데 계속 들린다"가 됩니다 - 지금
+  /// 나오고 있는 문장도 그 자리에서 끊어야 합니다. 이야기 자체는 멈추지
+  /// 않습니다(그건 일시정지 버튼의 몫입니다). 끊긴 문장은 [_playCurrentNarration]
+  /// /[_playCharacterMessage] 의 무음 타이머가 읽을 시간만큼 잡아 주고,
+  /// 다시 켜면 다음 문장부터 목소리가 돌아옵니다.
+  void _toggleSound() {
+    final bool soundOn = !_soundOn;
+    setState(() => _soundOn = soundOn);
+    if (!soundOn) unawaited(_audioPlayer.stop());
+  }
+
   Future<void> _playQuestion() async {
     if (_recordingVoice) {
       await _voiceRecorder.cancel();
@@ -833,12 +849,14 @@ class _PlayPageState extends State<PlayPage> {
                       _snapshot?.currentScene?.characterName ??
                       widget.characterName,
                 )).audioUrl;
-          if (source.isNotEmpty) {
+          // 내레이션과 같은 규칙입니다 - 합성을 기다리는 사이에 소리를 껐으면
+          // 틀지 않고, 재생 중에 껐으면 못 들려준 것으로 쳐서 읽을 시간을 줍니다.
+          if (source.isNotEmpty && _soundOn) {
             final String resolvedSource = source.startsWith('/')
                 ? Uri.parse(AppConfig.apiBaseUrl).resolve(source).toString()
                 : source;
             await _audioPlayer.playUrl(resolvedSource);
-            played = true;
+            played = _soundOn;
           }
         } on Object {
           played = false;
@@ -984,7 +1002,7 @@ class _PlayPageState extends State<PlayPage> {
             setState(() => _narrationIndex = 0);
             _scheduleCurrentNarration();
           },
-          onSound: () => setState(() => _soundOn = !_soundOn),
+          onSound: _toggleSound,
         );
       }
     }
@@ -1017,7 +1035,7 @@ class _PlayPageState extends State<PlayPage> {
                       onExit: _confirmExit,
                       onPause: _togglePause,
                       onReplay: _playQuestion,
-                      onSound: () => setState(() => _soundOn = !_soundOn),
+                      onSound: _toggleSound,
                     ),
                     Expanded(
                       child: _DialogueCanvas(
