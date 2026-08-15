@@ -150,11 +150,7 @@ void main() {
     await tester.pump(const Duration(seconds: maxRecordingSeconds));
     await tester.pumpAndSettle();
 
-    expect(
-      repository.transcribeCalls,
-      1,
-      reason: '상한에서 자동으로 멈추고 변환을 요청해야 합니다',
-    );
+    expect(repository.transcribeCalls, 1, reason: '상한에서 자동으로 멈추고 변환을 요청해야 합니다');
     expect(repository.submittedTexts, isNotEmpty);
   });
 
