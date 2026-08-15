@@ -119,6 +119,12 @@ class _PlayPageState extends State<PlayPage> {
   /// 화면 전체를 에러로 바꾸지 않고 마이크 옆에 짧게 띄웁니다 - 아이가 자주
   /// 겪을 수 있는 흔한 상황이라 화면이 통째로 바뀌면 매번 놀랍니다.
   String? _sttHint;
+
+  /// 저신뢰 인식 결과를 제출하기 전에 잡아 두는 자리. 서버가 이 순간을 위해
+  /// lowConfidence를 내려준다 - 여기 있는 동안 화면은 "맞아요 / 다시 말할래요"
+  /// 를 보여주고, 6초 무반응이면 그대로 제출한다(비차단 - 시험이 아니다).
+  PlayTranscription? _pendingTranscription;
+  Timer? _confirmTimer;
   String? _retainedStoryImageUrl;
 
   /// 지금 화면이 붙잡고 있는 장면. 장면이 바뀌는 순간을 [_activateSnapshot]
@@ -218,6 +224,7 @@ class _PlayPageState extends State<PlayPage> {
     _questionTimer?.cancel();
     _listeningTimer?.cancel();
     _storyTimer?.cancel();
+    _confirmTimer?.cancel();
     // 화면을 떠나면 기다리던 발화 루프들도 풀어 줍니다 - 안 풀면 취소된
     // 타이머·닫힌 문 앞에서 영영 매달린 채로 남습니다.
     _releaseSpeechWait();
@@ -585,6 +592,7 @@ class _PlayPageState extends State<PlayPage> {
 
   Future<void> _toggleVoiceAnswer() async {
     if (!_isListening || _transcribingVoice || _submittingUtterance) return;
+    if (_pendingTranscription != null) return; // 확인 단계 중 - 버튼으로만 진행
     if (!_recordingVoice) {
       try {
         final bool allowed = await _voiceRecorder.start();
@@ -601,6 +609,11 @@ class _PlayPageState extends State<PlayPage> {
         _listeningTimer = Timer.periodic(const Duration(seconds: 1), (_) {
           if (mounted && _recordingVoice) {
             setState(() => _listeningSeconds++);
+            // 업로드 한도(10MB, 웹 48kHz 기준 109초) 전에 끊는다. 미션
+            // 화면에는 있던 컷이 대화 화면에만 빠져 있었다.
+            if (_listeningSeconds >= maxRecordingSeconds) {
+              unawaited(_toggleVoiceAnswer());
+            }
           }
         });
       } on Object {
@@ -620,9 +633,21 @@ class _PlayPageState extends State<PlayPage> {
       final PlayTranscription transcription = await widget.repository!
           .transcribeAudio(audio);
       if (!mounted) return;
+      if (transcription.lowConfidence) {
+        // 서버가 "잘못 들었을 수 있다"고 표시한 결과다. 바로 제출하지 않고
+        // 아이에게 보여 준다 - 재발화 한 번이 오인식을 정인식으로 바꾸는
+        // 가장 값싼 개입이다. 무반응이면 지금까지처럼 그대로 제출한다.
+        setState(() {
+          _transcribingVoice = false;
+          _pendingTranscription = transcription;
+        });
+        _confirmTimer?.cancel();
+        _confirmTimer = Timer(const Duration(seconds: 6), _confirmPending);
+        return;
+      }
       await _submitDialogue(
         transcription.text,
-        sttRawText: transcription.text,
+        sttRawText: transcription.rawText,
         sttConfidence: transcription.confidence,
         lowConfidence: transcription.lowConfidence,
       );
@@ -669,6 +694,35 @@ class _PlayPageState extends State<PlayPage> {
       'AI_UNAVAILABLE' => '지금은 잘 안 들려요. 잠시 뒤에 다시 말해 볼까?',
       _ => null,
     };
+  }
+
+  /// 저신뢰 확인 단계에서 "맞아요"(또는 6초 무반응). 잡아 둔 결과를 그대로 제출한다.
+  void _confirmPending() {
+    final PlayTranscription? pending = _pendingTranscription;
+    _confirmTimer?.cancel();
+    _confirmTimer = null;
+    if (!mounted || pending == null) return;
+    setState(() => _pendingTranscription = null);
+    unawaited(
+      _submitDialogue(
+        pending.text,
+        sttRawText: pending.rawText,
+        sttConfidence: pending.confidence,
+        lowConfidence: pending.lowConfidence,
+      ),
+    );
+  }
+
+  /// 저신뢰 확인 단계에서 "다시 말할래요". 재시도 횟수를 세고 곧바로 재녹음한다.
+  void _retryPending() {
+    _confirmTimer?.cancel();
+    _confirmTimer = null;
+    if (!mounted || _pendingTranscription == null) return;
+    setState(() {
+      _pendingTranscription = null;
+      _sttRetryCount++;
+    });
+    unawaited(_toggleVoiceAnswer());
   }
 
   /// STT 가 텍스트를 못 만들어 다시 녹음해야 할 때 공통으로 부릅니다.
@@ -1470,6 +1524,9 @@ class _PlayPageState extends State<PlayPage> {
                         lastChildText: _lastChildText,
                         lastSttLowConfidence: _lastSttLowConfidence,
                         sttHint: _sttHint,
+                        pendingConfirmText: _pendingTranscription?.text,
+                        onConfirmPending: _confirmPending,
+                        onRetryPending: _retryPending,
                       ),
                     ),
                   ],
@@ -1854,6 +1911,9 @@ class _DialogueCanvas extends StatelessWidget {
     required this.lastChildText,
     required this.lastSttLowConfidence,
     this.sttHint,
+    this.pendingConfirmText,
+    this.onConfirmPending,
+    this.onRetryPending,
   });
 
   /// 제작한 표정 에셋이 있는 장면에서만 값이 있다. null이면 [characterAsset] 한 장으로 그린다.
@@ -1875,6 +1935,12 @@ class _DialogueCanvas extends StatelessWidget {
   /// 무음/인식 실패로 다시 말해야 할 때만 값이 있다. [lastSttLowConfidence]
   /// 와 달리 화면을 안 바꾸고 마이크 옆에만 짧게 띄운다.
   final String? sttHint;
+
+  /// 저신뢰 인식 결과를 제출하기 전에 아이가 확인하는 중이면 그 텍스트.
+  /// 값이 있으면 말풍선이 "맞아요 / 다시 말할래요" 버튼을 보여준다.
+  final String? pendingConfirmText;
+  final VoidCallback? onConfirmPending;
+  final VoidCallback? onRetryPending;
 
   @override
   Widget build(BuildContext context) {
@@ -1958,6 +2024,9 @@ class _DialogueCanvas extends StatelessWidget {
                 lastChildText: lastChildText,
                 lowConfidence: lastSttLowConfidence,
                 sttHint: sttHint,
+                pendingConfirmText: pendingConfirmText,
+                onConfirmPending: onConfirmPending,
+                onRetryPending: onRetryPending,
                 compact: compact,
                 maxHeight: constraints.maxHeight * (compact ? .42 : .5),
               ),
@@ -2131,6 +2200,9 @@ class _ChildVoiceBubble extends StatelessWidget {
     required this.compact,
     required this.maxHeight,
     this.sttHint,
+    this.pendingConfirmText,
+    this.onConfirmPending,
+    this.onRetryPending,
   });
 
   /// 말풍선이 차지해도 되는 최대 높이. 아이가 길게 말했어도 잘라내지 않고
@@ -2147,12 +2219,17 @@ class _ChildVoiceBubble extends StatelessWidget {
   final bool lowConfidence;
   final bool compact;
   final String? sttHint;
+  final String? pendingConfirmText;
+  final VoidCallback? onConfirmPending;
+  final VoidCallback? onRetryPending;
 
   bool get listening => phase == _DialoguePhase.listening;
 
   @override
   Widget build(BuildContext context) {
-    final String status = transcribing
+    final String status = pendingConfirmText != null
+        ? '이렇게 들었어요. 맞아요?'
+        : transcribing
         ? '목소리를 글로 바꾸고 있어요'
         : submitting
         ? '이야기 친구가 답을 준비하고 있어요'
@@ -2161,7 +2238,9 @@ class _ChildVoiceBubble extends StatelessWidget {
         : listening
         ? '이제 말할 차례예요'
         : '질문을 듣고 있어요';
-    final String body = lastChildText?.trim().isNotEmpty == true
+    final String body = pendingConfirmText != null
+        ? pendingConfirmText!
+        : lastChildText?.trim().isNotEmpty == true
         ? lastChildText!.trim()
         : recording
         ? '나는 이렇게 생각해요…'
@@ -2234,7 +2313,28 @@ class _ChildVoiceBubble extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (sttHint != null) ...<Widget>[
+                  if (pendingConfirmText != null) ...<Widget>[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: _ConfirmChoiceButton(
+                            label: '맞아요',
+                            emphasized: true,
+                            onTap: onConfirmPending,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _ConfirmChoiceButton(
+                            label: '다시 말할래요',
+                            emphasized: false,
+                            onTap: onRetryPending,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else if (sttHint != null) ...<Widget>[
                     const SizedBox(height: 6),
                     Text(
                       sttHint!,
@@ -2629,6 +2729,48 @@ class _ChildBubble extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 저신뢰 확인의 두 갈래. 초등 저학년 손가락 기준으로 크게(높이 48+),
+/// "맞아요"를 강조해 6초 무반응 자동 제출과 같은 방향이 기본이 되게 한다.
+class _ConfirmChoiceButton extends StatelessWidget {
+  const _ConfirmChoiceButton({
+    required this.label,
+    required this.emphasized,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool emphasized;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      child: Material(
+        color: emphasized ? const Color(0xFF8DE7CF) : const Color(0x33FFFFFF),
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            height: 48,
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: emphasized ? const Color(0xFF0D2A47) : Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
         ),
       ),
     );
