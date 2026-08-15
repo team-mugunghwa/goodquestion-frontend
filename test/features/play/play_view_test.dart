@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ void main() {
   Future<void> pumpPlay(
     WidgetTester tester, {
     PlayRepository? repository,
+    StoryAudioPlayer audioPlayer = const _FakeAudioPlayer(),
     bool settle = true,
   }) async {
     tester.view.physicalSize = const Size(1280, 720);
@@ -28,7 +30,7 @@ void main() {
           question: '친구가 속상해할 때는 어떻게 하면 좋을까?',
           repository: repository,
           voiceRecorder: const _FakeVoiceRecorder(),
-          audioPlayer: const _FakeAudioPlayer(),
+          audioPlayer: audioPlayer,
         ),
       ),
     );
@@ -203,6 +205,45 @@ void main() {
     );
   });
 
+  testWidgets('소리 끄기를 누르면 아이콘만이 아니라 나오던 소리도 실제로 멈춘다', (
+    WidgetTester tester,
+  ) async {
+    final _StoryNarrationSpyRepository repository =
+        _StoryNarrationSpyRepository();
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      settle: false,
+    );
+
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    expect(audioPlayer.playCount, 1, reason: '첫 문장이 재생 중이어야 합니다');
+
+    await tester.tap(find.byTooltip('소리 끄기'));
+    await tester.pump();
+
+    expect(
+      audioPlayer.stopCount,
+      greaterThan(0),
+      reason: '아이콘만 바꾸면 안 됩니다 - 나오고 있던 음성을 실제로 끊어야 합니다',
+    );
+    expect(find.byTooltip('소리 켜기'), findsOneWidget);
+
+    // 소리를 끈 뒤에도 이야기는 무음으로 계속 흐르고, 새로 재생하지는 않습니다.
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    await tester.pump(const Duration(seconds: 8));
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    expect(audioPlayer.playCount, 1, reason: '소리를 끈 뒤에는 다음 문장도 재생하지 않아야 합니다');
+  });
+
   testWidgets('1280x720 범용 대화 템플릿 골든', (WidgetTester tester) async {
     await pumpPlay(tester);
     await tester.pump();
@@ -228,6 +269,44 @@ class _FakeVoiceRecorder implements MissionVoiceRecorder {
 
   @override
   Future<Uint8List?> stop() async => Uint8List.fromList(<int>[1, 2, 3]);
+}
+
+/// 진짜 재생기처럼 [playUrl]이 "재생이 끝날 때까지" 안 끝나고, [stop]이 그
+/// 기다림을 풀어 줍니다. 소리 끄기가 실제로 소리를 끊는지 보려면 이 동작이
+/// 있어야 합니다 - 곧바로 끝나 버리는 가짜로는 아무것도 확인되지 않습니다.
+class _SpyAudioPlayer implements StoryAudioPlayer {
+  int playCount = 0;
+  int stopCount = 0;
+  Completer<void>? _playing;
+
+  @override
+  Future<void> playUrl(String url) {
+    playCount++;
+    final Completer<void> completer = Completer<void>();
+    _playing = completer;
+    return completer.future;
+  }
+
+  @override
+  Future<void> stop() async {
+    stopCount++;
+    _finish();
+  }
+
+  @override
+  Future<void> dispose() async {
+    await stop();
+  }
+
+  /// 문장이 끝까지 재생돼 저절로 끝난 상황. [stop] 과 달리 끊은 것이 아니라서
+  /// [stopCount] 를 올리지 않습니다.
+  void finishPlayback() => _finish();
+
+  void _finish() {
+    final Completer<void>? playing = _playing;
+    _playing = null;
+    if (playing != null && !playing.isCompleted) playing.complete();
+  }
 }
 
 class _FakeAudioPlayer implements StoryAudioPlayer {
