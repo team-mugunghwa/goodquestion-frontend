@@ -200,7 +200,7 @@ class _FlowRepository implements PlayRepository {
   @override
   Future<PlaySpeechAudio> synthesizeSpeech({
     required String text,
-    required String characterName,
+    String? characterName,
   }) async => throw UnimplementedError('프리뷰는 음성을 쓰지 않는다');
 }
 
