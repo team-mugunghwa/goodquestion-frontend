@@ -75,7 +75,20 @@ abstract final class AppRoutes {
 
   static String storyDetailOf(String storyId) => '/stories/$storyId';
 
-  static String playOf(String sessionId) => '/play/$sessionId';
+  /// 재생 화면 주소.
+  ///
+  /// [totalScenes] 는 상단 진행바가 "전체 몇 장면 중 몇 번째"를 그리는 데
+  /// 쓰는 값입니다. 세션 API 가 총 장면 수를 안 내려줘서(홈의
+  /// `inProgressSession.totalScenes` · 이야기 상세의 `sceneCount` 에만 있습니다)
+  /// 화면을 여는 쪽이 실어 보냅니다. `extra` 대신 쿼리 파라미터인 이유는
+  /// 새로고침·딥링크로 들어와도 값이 살아남기 때문입니다.
+  static String playOf(String sessionId, {int? totalScenes}) =>
+      totalScenes == null
+      ? '/play/$sessionId'
+      : '/play/$sessionId?$totalScenesParam=$totalScenes';
+
+  /// [playOf] 가 싣는 쿼리 파라미터 이름.
+  static const String totalScenesParam = 'totalScenes';
 
   static String playRecapOf(String sessionId) => '/play/$sessionId/recap';
 

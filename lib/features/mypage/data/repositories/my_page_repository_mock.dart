@@ -24,7 +24,7 @@ class MyPageRepositoryMock
   final Duration latency;
 
   /// 열람한 세션. 더미의 `isNew` 위에 덮어씁니다.
-  final Set<int> _readSessions = <int>{};
+  final Set<String> _readSessions = <String>{};
 
   /// 토글 결과. 메모리에만 남습니다 — 앱을 다시 켜면 더미 값으로 돌아갑니다.
   bool? _reportNotification;
@@ -69,7 +69,7 @@ class MyPageRepositoryMock
   });
 
   @override
-  Future<ReportDetail?> getReportDetail(int sessionId) => _guard(() async {
+  Future<ReportDetail?> getReportDetail(String sessionId) => _guard(() async {
     final ReportDetailDto? dto = await _localDataSource.fetchReportDetail(
       sessionId,
     );
@@ -77,7 +77,7 @@ class MyPageRepositoryMock
   });
 
   @override
-  Future<void> markAsRead(int sessionId) async {
+  Future<void> markAsRead(String sessionId) async {
     _readSessions.add(sessionId);
   }
 

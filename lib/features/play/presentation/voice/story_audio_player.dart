@@ -5,6 +5,23 @@ import 'package:audioplayers/audioplayers.dart';
 abstract interface class StoryAudioPlayer {
   Future<void> playUrl(String url);
 
+  /// 재생 위치를 그대로 둔 채 소리만 멈춥니다. [stop] 과 달리 [playUrl] 의
+  /// 기다림을 풀지 않습니다 - 풀어 버리면 부르는 쪽이 "이 문장 다 들었다"로
+  /// 보고 다음 문장으로 넘어가 버립니다.
+  Future<void> pause();
+
+  /// [pause] 로 멈춘 지점부터 이어 재생합니다.
+  Future<void> resume();
+
+  /// [resume] 으로 이어 들을 오디오가 남아 있는지. 없으면 부르는 쪽이 그
+  /// 문장을 처음부터 다시 틀어야 합니다.
+  bool get canResume;
+
+  /// 소리 끄기/켜기. 재생을 끊지 않고 **볼륨만 0으로 내립니다** - 오디오는
+  /// 그대로 흘러가서 문장도 평소 속도로 넘어가고, 다시 켜면 되감기 없이 그
+  /// 지점부터 들립니다. 다음 문장을 새로 틀 때도 이 상태가 유지됩니다.
+  Future<void> setMuted(bool muted);
+
   Future<void> stop();
 
   Future<void> dispose();
@@ -14,31 +31,150 @@ class DeviceStoryAudioPlayer implements StoryAudioPlayer {
   DeviceStoryAudioPlayer();
 
   AudioPlayer? _player;
-  AudioPlayer get _devicePlayer => _player ??= AudioPlayer();
+
+  /// 지금 재생 중인 [playUrl] 이 기다리고 있는 완료 신호. [stop] 이 이걸 직접
+  /// 완료시킵니다 - audioplayers 의 `stop()` 은 `onPlayerComplete` 를 쏘지
+  /// 않아서, 풀어 주지 않으면 소리를 끊어도 호출한 쪽이 45초 타임아웃까지
+  /// 매달려 있게 됩니다(= 소리 끄기를 눌러도 이야기가 멈춰 보입니다).
+  Completer<void>? _pending;
+
+  /// [_pending] 이 영영 안 풀리는 것을 막는 감시 타이머. 예전에는
+  /// `completer.future.timeout(45초)` 였는데, 그러면 일시정지로 멈춰 있어도
+  /// 시계가 계속 돌아 45초 뒤에 제멋대로 다음 문장으로 넘어갑니다 - 그래서
+  /// 타이머를 따로 들고 [pause] 때 멈췄다가 [resume] 때 다시 겁니다.
+  Timer? _watchdog;
+
+  /// [pause] 로 멈춰 있는 상태. [playUrl]·[stop]·[dispose] 가 모두 풉니다.
+  bool _paused = false;
+
+  /// 소리 끄기 상태. 재생기를 문장마다 새로 만들기 때문에([playUrl]) 여기에
+  /// 들고 있다가 새 재생기에도 그대로 물려 줍니다 - 안 그러면 다음 문장에서
+  /// 소리가 되살아납니다.
+  bool _muted = false;
+
+  static const Duration _watchdogTimeout = Duration(seconds: 45);
+
+  double get _volume => _muted ? 0 : 1;
 
   @override
+  bool get canResume => _paused && _player != null && _pending != null;
+
+  @override
+  Future<void> setMuted(bool muted) async {
+    if (_muted == muted) return;
+    _muted = muted;
+    // 재생은 그대로 둡니다 - 끊으면 재생 위치를 잃고, 다시 켤 때 문장을
+    // 처음부터 되감아야 합니다.
+    await _player?.setVolume(_volume);
+  }
+
+  /// 재생마다 [AudioPlayer]를 새로 만듭니다. 같은 인스턴스를 재사용하면
+  /// (`stop()` 후 `play()`) 두 번째 재생부터 `onPlayerComplete`가 아예 안
+  /// 오는 경우가 있습니다 - audioplayers 알려진 문제
+  /// (bluefireteam/audioplayers#1696, "It does not want to play again after
+  /// completed"). 첫 장면 내레이션만 들리고 다음 장면부터 조용해지는 증상과
+  /// 정확히 일치합니다.
+  @override
   Future<void> playUrl(String url) async {
-    await _devicePlayer.stop();
+    final AudioPlayer? previous = _player;
+    final AudioPlayer player = AudioPlayer();
+    _player = player;
+    _paused = false;
+    _releasePending();
+    if (previous != null) {
+      unawaited(previous.dispose());
+    }
     final Completer<void> completer = Completer<void>();
+    _pending = completer;
     late final StreamSubscription<void> subscription;
-    subscription = _devicePlayer.onPlayerComplete.listen((_) {
+    subscription = player.onPlayerComplete.listen((_) {
       if (!completer.isCompleted) completer.complete();
       unawaited(subscription.cancel());
     });
-    await _devicePlayer.play(UrlSource(url));
-    await completer.future.timeout(
-      const Duration(seconds: 45),
-      onTimeout: () => unawaited(subscription.cancel()),
-    );
+    try {
+      // 새 재생기에도 소리 끄기 상태를 물려 줍니다. 소스를 물리기 전에
+      // 볼륨을 잡아 두어야 첫 순간에 소리가 새지 않습니다.
+      await player.play(_sourceFor(url), volume: _volume);
+      _startWatchdog(completer);
+      await completer.future;
+    } finally {
+      _watchdog?.cancel();
+      _watchdog = null;
+      unawaited(subscription.cancel());
+      if (identical(_pending, completer)) _pending = null;
+    }
+  }
+
+  /// 재생이 끝났다는 신호가 영영 안 오는 경우(플랫폼이 `onPlayerComplete` 를
+  /// 안 쏘는 등)에 대비해 정해진 시간 뒤 기다림을 풀어 줍니다. 일시정지
+  /// 중에는 돌지 않습니다 - 멈춰 둔 사이에 시간이 차서 다음 문장으로 넘어가면
+  /// 안 됩니다.
+  void _startWatchdog(Completer<void> completer) {
+    _watchdog?.cancel();
+    _watchdog = Timer(_watchdogTimeout, () {
+      if (identical(_pending, completer)) _releasePending();
+    });
+  }
+
+  /// 재생을 기다리던 쪽을 "끝났다"로 풀어 줍니다. 소리를 끊었을 때 다음
+  /// 문장으로 곧바로 넘어갈 수 있게 하는 장치입니다.
+  void _releasePending() {
+    final Completer<void>? pending = _pending;
+    _pending = null;
+    if (pending != null && !pending.isCompleted) pending.complete();
+  }
+
+  /// `/api/tts`는 스토리지 없이 `data:audio/mp3;base64,...` 형태의 data URL로
+  /// 음성을 돌려줍니다(백엔드가 아직 스토리지를 정하지 않아서입니다).
+  /// `UrlSource`는 진짜 네트워크 URL만 받아들여서 data URL을 그대로 넘기면
+  /// 소리 없이 조용히 실패합니다 - base64 를 직접 디코드해 [BytesSource]로
+  /// 재생합니다. 나중에 서버가 진짜 URL을 내려줘도 이 분기가 그대로 처리합니다.
+  Source _sourceFor(String url) {
+    final UriData? data = Uri.parse(url).data;
+    if (data != null) {
+      return BytesSource(data.contentAsBytes(), mimeType: data.mimeType);
+    }
+    return UrlSource(url);
+  }
+
+  /// 소리를 그 자리에서 멈추되 [_pending] 은 그대로 둡니다 - 이 문장을 아직
+  /// 다 듣지 않았기 때문입니다. 풀어 버리면 [playUrl] 을 기다리던 쪽이 다음
+  /// 문장으로 넘어갑니다.
+  @override
+  Future<void> pause() async {
+    final AudioPlayer? player = _player;
+    if (player == null || _pending == null || _paused) return;
+    _paused = true;
+    _watchdog?.cancel();
+    _watchdog = null;
+    await player.pause();
+  }
+
+  @override
+  Future<void> resume() async {
+    final AudioPlayer? player = _player;
+    final Completer<void>? pending = _pending;
+    if (player == null || pending == null || !_paused) return;
+    _paused = false;
+    _startWatchdog(pending);
+    await player.resume();
   }
 
   @override
   Future<void> stop() async {
+    _paused = false;
+    _watchdog?.cancel();
+    _watchdog = null;
+    _releasePending();
     await _player?.stop();
   }
 
   @override
   Future<void> dispose() async {
+    _paused = false;
+    _watchdog?.cancel();
+    _watchdog = null;
+    _releasePending();
     await _player?.dispose();
     _player = null;
   }

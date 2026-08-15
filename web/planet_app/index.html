@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      상대 경로여야 한다. vite base가 './'인데 이것만 절대 경로면
+      게이트웨이 하위경로(/<slug>/) 아래에서 혼자 404가 난다.
+    -->
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+
+    <!--
+      user-scalable=no — 저학년이 아이템을 끌다가 두 손가락이 닿으면 화면이 확대돼
+      돌아오지 못한다. 3D 씬 자체에 확대 버튼이 있으므로 브라우저 줌은 막는다.
+      viewport-fit=cover — 노치 있는 태블릿에서 하단 버튼이 잘리지 않게.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#8fd3f4" />
+    <meta name="color-scheme" content="light" />
+    <!-- 웹뷰에서 주소창 색이 하늘색 배경과 이어지게 -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
+    <title>내 행성 · 굿퀘스천</title>
+    <script type="module" crossorigin src="./assets/index-DmBpDxQs.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CweSHlaq.css">
+  </head>
+  <body>
+    <!--
+      부팅 화면을 HTML에 박아 둔다. JS 번들과 3D 모델(44개·3.2MB)을 받는 동안
+      React는 아직 없다. 웹뷰에서 흰 화면은 "고장 났다"로 읽힌다.
+      React가 마운트되면 #boot을 지운다.
+    -->
+    <div id="boot">
+      <div class="boot__planet"></div>
+      <p class="boot__text">내 행성을 여는 중이에요</p>
+    </div>
+    <style>
+      #boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1.4rem;
+        background: linear-gradient(#bfe8ff, #eaf7ff 60%, #f6fbe9);
+        font-family: system-ui, -apple-system, sans-serif;
+        color: #4a6b52;
+        z-index: 999;
+      }
+      .boot__planet {
+        width: 74px;
+        height: 74px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 34% 30%, #a8e063, #6fae42 62%, #4f8a33);
+        box-shadow: 0 10px 26px rgba(79, 138, 51, 0.32);
+        animation: boot-bob 1.4s ease-in-out infinite;
+      }
+      .boot__text {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+      }
+      @keyframes boot-bob {
+        0%, 100% { transform: translateY(0) scale(1); }
+        50%      { transform: translateY(-10px) scale(1.04); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .boot__planet { animation: none; }
+      }
+    </style>
+
+    <div id="root"></div>
+    <!--
+      배포 설정. **모듈보다 먼저** 실행돼야 한다 — 번들이 뜨는 시점에 window.__PLANET__이
+      이미 있어야 하기 때문이다. type="module"이 아닌 이유도 그것이다(모듈은 defer라 늦다).
+      배포하는 쪽은 dist/planet-config.js 한 파일만 고치면 되고 재빌드가 필요 없다.
+    -->
+    <script src="./planet-config.js"></script>
+  </body>
+</html>

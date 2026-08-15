@@ -103,13 +103,18 @@ class AuthRepositoryImpl implements AuthRepository {
     required bool rememberMe,
   }) async {
     final Object? tokens = response['tokens'];
-    final String? token = tokens is Map<String, dynamic>
-        ? tokens['accessToken'] as String?
+    final Map<String, dynamic>? tokenMap = tokens is Map<String, dynamic>
+        ? tokens
         : null;
+    final String? token = tokenMap?['accessToken'] as String?;
     if (token == null || token.isEmpty) {
       throw const ParseException('로그인 토큰이 없습니다.');
     }
-    await _tokens.save(token, persistent: rememberMe);
+    await _tokens.save(
+      token,
+      tokenMap?['refreshToken'] as String?,
+      persistent: rememberMe,
+    );
   }
 
   Future<bool> _hasChild() async => (await _remote.children()).isNotEmpty;
@@ -131,5 +136,18 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<void> signOut() => _tokens.clear();
+  Future<void> signOut() async {
+    // 서버에 리프레시 토큰을 무효화해 둡니다 — 안 해도 로컬 로그아웃은
+    // 되지만, 빼놓은 토큰이 그대로 남아 있으면 유출 시 계속 재발급됩니다.
+    // 네트워크 실패로 이 호출이 막혀도 로그아웃 자체는 진행합니다.
+    final String? refreshToken = await _tokens.readRefresh();
+    if (refreshToken != null && refreshToken.isNotEmpty) {
+      try {
+        await _remote.logout(refreshToken);
+      } on AppException {
+        // 로컬 로그아웃은 아래에서 계속 진행합니다.
+      }
+    }
+    await _tokens.clear();
+  }
 }

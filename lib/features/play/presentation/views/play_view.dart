@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -26,6 +27,7 @@ import '../widgets/mission_overlay.dart';
 class PlayPage extends StatefulWidget {
   const PlayPage({
     required this.sessionId,
+    this.totalScenes,
     this.backgroundAsset,
     this.characterAsset,
     this.characterName = '이야기 친구',
@@ -37,6 +39,17 @@ class PlayPage extends StatefulWidget {
   });
 
   final String sessionId;
+
+  /// 이 이야기의 전체 장면 수. 상단 진행바가 "몇 번째 장면인지"를 그리는 데
+  /// 씁니다.
+  ///
+  /// **세션 API 가 안 내려줍니다** - `SessionResumeResponse`·`SceneAdvanceResponse`
+  /// 어디에도 총 장면 수가 없고, 홈의 `inProgressSession.totalScenes` 와 이야기
+  /// 상세의 `sceneCount` 에만 있습니다. 그래서 화면을 여는 쪽(홈 이어하기 ·
+  /// 이야기 상세 시작하기)이 값을 실어 보냅니다. 주소창으로 바로 들어오는
+  /// 등 값이 없으면 `null` 이고, 진행바는 눈금 없이 빈 막대로 둡니다.
+  /// → `docs/API.md` 3.6
+  final int? totalScenes;
   final String? backgroundAsset;
   final String? characterAsset;
   final String characterName;
@@ -77,12 +90,43 @@ class _PlayPageState extends State<PlayPage> {
   List<String> _characterSentences = const <String>[];
   int _characterSentenceIndex = 0;
   int _speechToken = 0;
+
+  /// 캐릭터 대사 루프가 아직 살아 있는지. 일시정지를 풀 때 이 값이 true 면
+  /// 루프가 스스로 이어 읽으므로 대사를 다시 틀어 주지 않습니다.
+  bool _speaking = false;
+
+  /// 일시정지 동안 대사 루프를 붙잡아 두는 문. → [_awaitResume]
+  Completer<void>? _pauseGate;
+
+  /// 지금 기다리고 있는 "무음으로 읽는 시간". 일시정지·다음 대사에서
+  /// 곧바로 풀어 주려고 들고 있습니다. → [_waitForSpeech] · [_waitForNarration]
+  Completer<void>? _speechWait;
+  Completer<void>? _narrationWait;
   String? _lastChildText;
   bool _lastSttLowConfidence = false;
+
+  /// 이번 발화를 몇 번 다시 녹음했는지. 무음/저신뢰로 다시 말했을 때마다
+  /// 늘어나고, 제출한 뒤/새 차례가 시작되면 0으로 돌아갑니다. 제출 시
+  /// `sttRetryCount` 로 그대로 실어 보냅니다. → `docs/이야기_전개_가이드.md` 3.4
+  int _sttRetryCount = 0;
+
+  /// 422 STT_EMPTY_TEXT(무음/인식 실패) 나 로컬 녹음 실패일 때만 씁니다.
+  /// 화면 전체를 에러로 바꾸지 않고 마이크 옆에 짧게 띄웁니다 - 아이가 자주
+  /// 겪을 수 있는 흔한 상황이라 화면이 통째로 바뀌면 매번 놀랍니다.
+  String? _sttHint;
   String? _retainedStoryImageUrl;
+
+  /// 지금 화면이 붙잡고 있는 장면. 장면이 바뀌는 순간을 [_activateSnapshot]
+  /// 이 알아채고 이전 장면의 아이 발화를 지우는 데 씁니다.
+  String? _activeSceneId;
   String? _resultImageUrl;
   DialogueCharacterManifest? _characterManifest;
   DialogueCharacterStateMachine? _character;
+
+  /// 지금 보내고 있는 발화의 Idempotency-Key. 응답을 받으면(성공이든 최종
+  /// 실패든) `null`로 되돌립니다 — 재시도 사이에는 같은 키를 유지하고,
+  /// 다음 발화는 새 키를 받게 하기 위해서입니다. → `docs/이야기_전개_가이드.md` 3.4
+  String? _pendingIdempotencyKey;
 
   bool get _isListening => _phase == _DialoguePhase.listening;
 
@@ -169,6 +213,11 @@ class _PlayPageState extends State<PlayPage> {
     _questionTimer?.cancel();
     _listeningTimer?.cancel();
     _storyTimer?.cancel();
+    // 화면을 떠나면 기다리던 발화 루프들도 풀어 줍니다 - 안 풀면 취소된
+    // 타이머·닫힌 문 앞에서 영영 매달린 채로 남습니다.
+    _releaseSpeechWait();
+    _releaseNarrationWait();
+    _openPauseGate();
     unawaited(_voiceRecorder.dispose());
     unawaited(_audioPlayer.dispose());
     super.dispose();
@@ -186,32 +235,81 @@ class _PlayPageState extends State<PlayPage> {
       final PlayMission? recoveredMission =
           snapshot.mission ??
           await widget.repository!.currentMission(widget.sessionId);
-      String? recoveredChildText;
-      for (final PlayMessage message in snapshot.messages) {
-        if (message.speaker == PlaySpeaker.child) {
-          recoveredChildText = message.text;
-        }
-      }
+      final PlayMessage? recoveredChild = await _lastChildMessageOfCurrentScene(
+        snapshot,
+      );
       if (!mounted) return;
       setState(() {
         _snapshot = snapshot;
         _mission = recoveredMission;
         _characterReply = null;
-        _lastChildText = recoveredChildText;
+        _lastChildText = recoveredChild?.text;
+        _lastSttLowConfidence = recoveredChild?.sttLowConfidence ?? false;
+        // 복원한 발화는 이 장면의 것입니다 - 이어서 부르는
+        // [_activateSnapshot] 이 "장면이 바뀌었다"로 보고 지우면 안 됩니다.
+        _activeSceneId = snapshot.currentScene?.sceneId;
         _loadingSession = false;
       });
       _activateSnapshot(snapshot);
     } on Failure catch (error) {
+      // resume 자체가 실패하면 다시 resume 을 부를 수 없습니다 - 여기서는
+      // 자동 복구를 시도하지 않고 메시지만 보여줍니다.
       if (!mounted) return;
       setState(() {
         _loadingSession = false;
-        _loadError = error.message;
+        _loadError = _describeFailure(error);
       });
+    }
+  }
+
+  /// 이어하기로 들어왔을 때 화면에 되살릴 **이 장면의** 마지막 아이 발화.
+  ///
+  /// `resume` 의 `messages` 를 쓰면 안 됩니다 - 세션 전체 기록이라 이전
+  /// 장면 발화까지 들어 있고, `MessageResponse` 에는 장면 식별자가 없어
+  /// 그 목록만으로는 어디서 장면이 갈렸는지 알 수 없습니다(`turnOrder` 도
+  /// 장면을 넘어 이어집니다). "마지막 캐릭터 메시지 바로 앞이면 이번 장면"
+  /// 같은 어림짐작은 마무리 반응이 함께 저장되는 턴에서 틀립니다. 그래서
+  /// 장면으로 걸러 주는 `sceneMessages` 를 부릅니다.
+  ///
+  /// 이건 복원용 곁들이라 실패해도 이어하기를 막지 않습니다 - 발화만 비운
+  /// 채로 대화를 이어 갑니다.
+  Future<PlayMessage?> _lastChildMessageOfCurrentScene(
+    PlaySessionSnapshot snapshot,
+  ) async {
+    final String? sceneId = snapshot.currentScene?.sceneId;
+    // 전개(STORY) 장면에는 아이 발화를 띄우는 자리가 없습니다.
+    if (sceneId == null || snapshot.phase != PlayPhase.dialogue) return null;
+    try {
+      final List<PlayMessage> messages = await widget.repository!.sceneMessages(
+        widget.sessionId,
+        sceneId: sceneId,
+      );
+      PlayMessage? last;
+      for (final PlayMessage message in messages) {
+        if (message.speaker == PlaySpeaker.child) last = message;
+      }
+      return last;
+    } on Object catch (error) {
+      debugPrint('[play] sceneMessages failed, skipping restore: $error');
+      return null;
     }
   }
 
   void _activateSnapshot(PlaySessionSnapshot snapshot) {
     _storyTimer?.cancel();
+    // 장면이 바뀌면 이전 장면에서 아이가 한 말은 지웁니다 - 새 캐릭터가
+    // 말을 거는데 아직 하지도 않은 대답이 떠 있으면 안 됩니다. 같은 장면을
+    // 다시 활성화하는 경우(이어하기 복원)에는 그대로 둡니다.
+    final String? sceneId = snapshot.currentScene?.sceneId;
+    if (sceneId != _activeSceneId) {
+      setState(() {
+        _activeSceneId = sceneId;
+        _lastChildText = null;
+        _lastSttLowConfidence = false;
+        _sttHint = null;
+        _sttRetryCount = 0;
+      });
+    }
     _bindCharacterScene();
     if (snapshot.phase == PlayPhase.postActivity) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -265,7 +363,8 @@ class _PlayPageState extends State<PlayPage> {
       );
     } on Failure catch (error) {
       if (!mounted) return;
-      setState(() => _loadError = error.message);
+      if (await _tryAutoRecover(error)) return;
+      setState(() => _loadError = _describeFailure(error));
     }
   }
 
@@ -297,15 +396,16 @@ class _PlayPageState extends State<PlayPage> {
       _submittingUtterance = true;
       _phase = _DialoguePhase.characterSpeaking;
       _loadError = null;
+      _sttHint = null;
       _lastChildText = normalized;
       _lastSttLowConfidence = lowConfidence;
     });
     try {
-      final PlayTurnResult result = await widget.repository!.submitUtterance(
-        widget.sessionId,
+      final PlayTurnResult result = await _submitUtteranceWithRetry(
         text: normalized,
         sttRawText: sttRawText,
         sttConfidence: sttConfidence,
+        sttRetryCount: _sttRetryCount,
       );
       if (!mounted) return;
       setState(() {
@@ -316,11 +416,135 @@ class _PlayPageState extends State<PlayPage> {
       await _presentTurnResult(result);
     } on Failure catch (error) {
       if (!mounted) return;
+      if (await _tryAutoRecover(error)) {
+        setState(() {
+          _submittingUtterance = false;
+          _transcribingVoice = false;
+        });
+        return;
+      }
       setState(() {
         _submittingUtterance = false;
         _transcribingVoice = false;
-        _loadError = error.message;
+        _loadError = _describeFailure(error);
       });
+    }
+  }
+
+  /// [_submitDialogue]와 [_submitMission]이 공유하는 발화 제출.
+  ///
+  /// Idempotency-Key 는 발화 하나당 하나입니다 - 최초 생성 후 재시도 사이에는
+  /// 그대로 유지하고, 응답을 받으면(성공이든 최종 실패든) 비워서 다음 발화가
+  /// 새 키를 받게 합니다. `REQUEST_IN_PROGRESS`(같은 키의 요청이 아직 처리
+  /// 중)만 같은 키로 재시도합니다 - 그 외 실패는 그대로 올립니다.
+  /// → `docs/이야기_전개_가이드.md` 3.4
+  Future<PlayTurnResult> _submitUtteranceWithRetry({
+    required String text,
+    String? missionId,
+    String? sttRawText,
+    double? sttConfidence,
+    int sttRetryCount = 0,
+  }) async {
+    final String key = _pendingIdempotencyKey ??= _newIdempotencyKey();
+    const int maxAttempts = 3;
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        final PlayTurnResult result = await widget.repository!.submitUtterance(
+          widget.sessionId,
+          text: text,
+          missionId: missionId,
+          sttRawText: sttRawText,
+          sttConfidence: sttConfidence,
+          sttRetryCount: sttRetryCount,
+          idempotencyKey: key,
+        );
+        _pendingIdempotencyKey = null;
+        return result;
+      } on ServerFailure catch (error) {
+        final bool canRetry =
+            error.code == 'REQUEST_IN_PROGRESS' && attempt < maxAttempts;
+        if (!canRetry) {
+          _pendingIdempotencyKey = null;
+          rethrow;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 1200));
+      } on Failure {
+        _pendingIdempotencyKey = null;
+        rethrow;
+      }
+    }
+    // maxAttempts 를 넘기면 위 루프의 rethrow 로 항상 빠져나가므로 여기는 오지 않습니다.
+    throw const UnknownFailure();
+  }
+
+  /// UUID v4 형태의 키. 별도 패키지 없이 `dart:math` 만으로 충분합니다 -
+  /// 서버는 문자열 유일성만 보면 되고 형식을 검증하지 않습니다.
+  String _newIdempotencyKey() {
+    final Random random = Random.secure();
+    final List<int> bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0F) | 0x40;
+    bytes[8] = (bytes[8] & 0x3F) | 0x80;
+    String hex(int start, int end) => bytes
+        .sublist(start, end)
+        .map((int b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
+    return '${hex(0, 4)}-${hex(4, 6)}-${hex(6, 8)}-${hex(8, 10)}-${hex(10, 16)}';
+  }
+
+  /// 서버 에러 코드를 아이가 이해할 수 있는 말로 바꿉니다. 매핑이 없으면
+  /// 서버 메시지를 그대로 씁니다. → `docs/이야기_전개_가이드.md` 6장
+  String _describeFailure(Failure error) {
+    if (error is ServerFailure) {
+      switch (error.code) {
+        case 'STT_EMPTY_TEXT':
+          return '잘 못 들었어요. 다시 말해 볼까?';
+        case 'MISSION_NOT_EXPOSED':
+          return '미션을 다시 확인하고 있어요.';
+        case 'SESSION_NOT_IN_PROGRESS':
+        case 'SCENE_NOT_STORY':
+        case 'SCENE_NOT_DIALOGUE':
+        case 'MAX_TURNS_EXCEEDED':
+        case 'CONCURRENT_TURN':
+          return '화면을 다시 불러오고 있어요.';
+      }
+    }
+    return error.message;
+  }
+
+  /// "화면 상태가 서버와 어긋난" 계열 코드는 [_loadSession]으로 phase 를
+  /// 다시 확인하면 저절로 맞는 화면으로 돌아옵니다 - 아이에게 에러를 보여줄
+  /// 필요 없이 조용히 복구합니다. `MISSION_NOT_EXPOSED`는 미션 오버레이
+  /// 상태만 다시 읽어옵니다. 복구했으면 true, 그 외 코드는 false(호출부가
+  /// 메시지를 보여줌). → `docs/이야기_전개_가이드.md` 6장
+  Future<bool> _tryAutoRecover(Failure error) async {
+    if (error is! ServerFailure) return false;
+    switch (error.code) {
+      case 'SESSION_NOT_IN_PROGRESS':
+      case 'SCENE_NOT_STORY':
+      case 'SCENE_NOT_DIALOGUE':
+      case 'MAX_TURNS_EXCEEDED':
+      case 'CONCURRENT_TURN':
+        await _loadSession();
+        return true;
+      case 'MISSION_NOT_EXPOSED':
+        await _refreshMission();
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  Future<void> _refreshMission() async {
+    final PlayRepository? repository = widget.repository;
+    if (repository == null) return;
+    try {
+      final PlayMission? mission = await repository.currentMission(
+        widget.sessionId,
+      );
+      if (!mounted) return;
+      setState(() => _mission = mission);
+    } on Failure {
+      // 미션 재확인 자체가 실패해도 대화 화면은 그대로 둡니다.
     }
   }
 
@@ -376,18 +600,39 @@ class _PlayPageState extends State<PlayPage> {
         lowConfidence: transcription.lowConfidence,
       );
     } on Failure catch (error) {
+      // 무음이거나 인식 실패 - 흔히 겪는 상황이라 화면을 통째로 에러로
+      // 바꾸지 않고 마이크 옆에 짧게 안내한 뒤 바로 다시 녹음할 수 있게
+      // 둡니다. → `docs/이야기_전개_가이드.md` 3.4, 6장
+      if (error is ServerFailure && error.code == 'STT_EMPTY_TEXT') {
+        _recordFailedSttAttempt('잘 못 들었어요. 다시 말해 볼까?');
+        return;
+      }
       if (!mounted) return;
+      if (await _tryAutoRecover(error)) {
+        setState(() => _transcribingVoice = false);
+        return;
+      }
       setState(() {
         _transcribingVoice = false;
-        _loadError = error.message;
+        _loadError = _describeFailure(error);
       });
     } on Object {
-      if (!mounted) return;
-      setState(() {
-        _transcribingVoice = false;
-        _loadError = '목소리를 잘 듣지 못했어요. 다시 말해 주세요.';
-      });
+      // 서버까지 가지도 못한 로컬 실패(녹음이 비었거나 업로드 자체가
+      // 안 됨)도 같은 종류의 문제라 같은 방식으로 안내합니다.
+      _recordFailedSttAttempt('목소리를 잘 듣지 못했어요. 다시 말해 주세요.');
     }
+  }
+
+  /// STT 가 텍스트를 못 만들어 다시 녹음해야 할 때 공통으로 부릅니다.
+  /// 화면은 그대로 두고 마이크 옆 안내만 바꾸며, 재시도 횟수를 세어 뒀다가
+  /// 이번 발화가 결국 제출될 때 `sttRetryCount` 로 함께 보냅니다.
+  void _recordFailedSttAttempt(String hint) {
+    if (!mounted) return;
+    setState(() {
+      _transcribingVoice = false;
+      _sttRetryCount++;
+      _sttHint = hint;
+    });
   }
 
   /// 턴 결과로 표정을 옮긴다. 캐릭터 대사를 재생하기 **전에** 부른다 - 아이 말에 대한 반응이
@@ -458,8 +703,7 @@ class _PlayPageState extends State<PlayPage> {
       _loadError = null;
     });
     try {
-      final PlayTurnResult result = await widget.repository!.submitUtterance(
-        widget.sessionId,
+      final PlayTurnResult result = await _submitUtteranceWithRetry(
         text: answer,
         missionId: mission.missionId,
       );
@@ -478,39 +722,133 @@ class _PlayPageState extends State<PlayPage> {
       await _presentTurnResult(result);
     } on Failure catch (error) {
       if (!mounted) return;
+      if (await _tryAutoRecover(error)) {
+        setState(() => _submittingMission = false);
+        return;
+      }
       setState(() {
         _submittingMission = false;
-        _loadError = error.message;
+        _loadError = _describeFailure(error);
       });
     }
   }
 
+  /// STORY(전개) 장면의 내레이션. 문장마다 `/api/tts`(characterName 없이 ->
+  /// 내레이션 보이스)를 불러 실제로 들려줍니다. 합성이나 재생이 안 되면
+  /// (소리 꺼짐, repository 없음, 네트워크 실패) 이전처럼 글자 길이로 어림한
+  /// 시간만큼 기다렸다가 다음 문장으로 넘어갑니다 - 화면이 죽지 않습니다.
+  /// → `docs/이야기_전개_가이드.md` 3.2
   void _scheduleCurrentNarration() {
+    debugPrint(
+      '[narration] schedule scene=${_snapshot?.currentScene?.sceneId} '
+      'index=$_narrationIndex paused=$_storyPaused advancing=$_advancingScene',
+    );
+    if (_storyPaused || _advancingScene) return;
+    final int token = ++_speechToken;
+    unawaited(_playCurrentNarration(token));
+  }
+
+  Future<void> _playCurrentNarration(int token) async {
     final List<String> sentences =
         _snapshot?.currentScene?.narrationSentences ?? const <String>[];
-    if (_storyPaused || _advancingScene) return;
+    debugPrint(
+      '[narration] play token=$token index=$_narrationIndex '
+      'total=${sentences.length} soundOn=$_soundOn',
+    );
     if (_narrationIndex >= sentences.length) {
+      debugPrint('[narration] scene done, will call story-complete in 700ms');
       _storyTimer = Timer(const Duration(milliseconds: 700), () {
         unawaited(_completeStoryScene());
       });
       return;
     }
-    final int milliseconds = (1400 + sentences[_narrationIndex].length * 65)
-        .clamp(2400, 7500)
-        .toInt();
-    _storyTimer = Timer(Duration(milliseconds: milliseconds), () {
-      if (!mounted || _storyPaused) return;
-      setState(() => _narrationIndex++);
-      _scheduleCurrentNarration();
-    });
+    final String sentence = sentences[_narrationIndex];
+    bool played = false;
+    // 소리를 꺼도 합성과 재생은 그대로 합니다 - 볼륨만 0입니다. 그래야 문장이
+    // 오디오 길이에 맞춰 넘어가고, 다시 켜는 순간 되감기 없이 바로 들립니다.
+    if (widget.repository != null) {
+      try {
+        final PlaySpeechAudio audio = await widget.repository!.synthesizeSpeech(
+          text: sentence,
+        );
+        debugPrint('[narration] tts ok, audioUrl len=${audio.audioUrl.length}');
+        if (!mounted || token != _speechToken) {
+          debugPrint(
+            '[narration] stale after tts (mounted=$mounted '
+            'token=$token current=$_speechToken), bailing',
+          );
+          return;
+        }
+        // 합성을 기다리는 사이에 일시정지를 눌렀을 수 있습니다. 일시정지는
+        // 토큰을 올리지 않으니(그래야 재생 중이던 문장을 이어 들을 수
+        // 있습니다) 여기서 직접 물러납니다 - 안 그러면 멈춘 뒤에 소리가
+        // 새로 나옵니다. 아직 튼 것이 없어 재개할 때 이 문장을 다시
+        // 시작합니다.
+        if (_storyPaused) {
+          debugPrint('[narration] paused during tts, bailing');
+          return;
+        }
+        await _audioPlayer.playUrl(audio.audioUrl);
+        debugPrint('[narration] playUrl finished');
+        played = true;
+      } on Object catch (error, stack) {
+        debugPrint('[narration] tts/play FAILED: $error\n$stack');
+        played = false;
+      }
+    } else {
+      debugPrint('[narration] skipped tts (no repository)');
+    }
+    if (!mounted || token != _speechToken) {
+      debugPrint(
+        '[narration] stale before fallback check (mounted=$mounted '
+        'token=$token current=$_speechToken), bailing',
+      );
+      return;
+    }
+    // 멈춰 있는 사이에 재생 대기가 풀려 여기까지 내려올 수 있습니다(예:
+    // 나가기·다시 듣기가 부르는 stop). 그대로 두면 일시정지 중인데도 무음
+    // 타이머가 돌아 다음 문장으로 넘어갑니다.
+    if (_storyPaused) {
+      debugPrint('[narration] paused after playback, bailing');
+      return;
+    }
+    if (!played) {
+      final int milliseconds = (1400 + sentence.length * 65)
+          .clamp(2400, 7500)
+          .toInt();
+      debugPrint(
+        '[narration] falling back to silent timer (${milliseconds}ms)',
+      );
+      await _waitForNarration(Duration(milliseconds: milliseconds));
+    }
+    if (!mounted || token != _speechToken) {
+      debugPrint(
+        '[narration] stale after wait (mounted=$mounted '
+        'token=$token current=$_speechToken), bailing',
+      );
+      return;
+    }
+    setState(() => _narrationIndex++);
+    _scheduleCurrentNarration();
   }
 
   Future<void> _completeStoryScene() async {
-    if (_advancingScene || widget.repository == null) return;
+    if (_advancingScene || widget.repository == null) {
+      debugPrint(
+        '[narration] completeStoryScene skipped '
+        '(advancing=$_advancingScene, repository=${widget.repository != null})',
+      );
+      return;
+    }
     setState(() => _advancingScene = true);
     try {
       final PlaySessionSnapshot snapshot = await widget.repository!
           .completeStoryScene(widget.sessionId);
+      debugPrint(
+        '[narration] story-complete ok -> phase=${snapshot.phase} '
+        'scene=${snapshot.currentScene?.sceneId} '
+        'sentences=${snapshot.currentScene?.narrationSentences.length}',
+      );
       if (!mounted) return;
       setState(() {
         _snapshot = snapshot;
@@ -519,18 +857,77 @@ class _PlayPageState extends State<PlayPage> {
       });
       _activateSnapshot(snapshot);
     } on Failure catch (error) {
+      debugPrint('[narration] story-complete FAILED: $error');
       if (!mounted) return;
+      if (await _tryAutoRecover(error)) {
+        setState(() => _advancingScene = false);
+        return;
+      }
       setState(() {
         _advancingScene = false;
-        _loadError = error.message;
+        _loadError = _describeFailure(error);
       });
     }
   }
 
+  /// 무음으로 한 문장을 읽는 시간만큼 기다립니다. 일시정지가 걸리면
+  /// [_releaseNarrationWait] 가 이 기다림을 곧바로 풀어 줍니다 - 안 풀어 주면
+  /// 타이머만 취소되고 내레이션 루프는 영영 깨어나지 못합니다.
+  Future<void> _waitForNarration(Duration duration) {
+    final Completer<void> completer = Completer<void>();
+    _narrationWait = completer;
+    _storyTimer?.cancel();
+    _storyTimer = Timer(duration, _releaseNarrationWait);
+    return completer.future;
+  }
+
+  void _releaseNarrationWait() {
+    final Completer<void>? pending = _narrationWait;
+    _narrationWait = null;
+    if (pending != null && !pending.isCompleted) pending.complete();
+  }
+
+  /// 전개 장면의 일시정지. **멈춘 지점을 그대로 둡니다** - 다시 재생하면
+  /// 문장 처음이 아니라 소리가 끊긴 바로 그 자리에서 이어집니다. 장면을
+  /// 처음부터 다시 읽는 것은 "다시 듣기" 버튼의 몫입니다.
   void _toggleStoryPause() {
     _storyTimer?.cancel();
-    setState(() => _storyPaused = !_storyPaused);
-    if (!_storyPaused) _scheduleCurrentNarration();
+    if (!_storyPaused) {
+      // 멈추는 쪽입니다. **[_speechToken] 을 올리지 않습니다** - 올리면
+      // 재생을 기다리던 루프가 스스로 빠져나가 이어 들을 대상이 사라집니다.
+      // 소리는 stop() 이 아니라 pause() 로 멈춥니다(stop 은 위치를 0으로
+      // 되돌립니다).
+      if (_narrationWait != null) {
+        // 무음 타이머로 읽던 중이라 되돌릴 재생 위치가 없습니다 - 이때만
+        // 예전처럼 그 문장 루프를 끝내고, 재개할 때 문장을 다시 시작합니다.
+        _speechToken++;
+        _releaseNarrationWait();
+      }
+      unawaited(_audioPlayer.pause());
+      setState(() => _storyPaused = true);
+      return;
+    }
+    setState(() => _storyPaused = false);
+    // 멈춰 둔 오디오가 남아 있으면 그 지점부터, 없으면(무음 타이머·합성
+    // 대기 중에 멈춘 경우) 그 문장을 처음부터 다시 시작합니다.
+    if (_audioPlayer.canResume) {
+      unawaited(_audioPlayer.resume());
+    } else {
+      _scheduleCurrentNarration();
+    }
+  }
+
+  /// 소리 끄기/켜기 - **음소거입니다. 재생을 끊지 않습니다.**
+  ///
+  /// 예전에는 끌 때 [StoryAudioPlayer.stop] 으로 끊고 켤 때 그 문장을 다시
+  /// 틀었는데, 지금 콘텐츠는 장면당 문장이 하나라 "이 문장 다시"가 곧
+  /// "장면 처음부터"여서 켤 때마다 이야기가 되감겼습니다. 볼륨만 0으로
+  /// 내리면 오디오가 그대로 흘러가 문장도 평소 속도로 넘어가고, 다시 켜면
+  /// 그 지점부터 들립니다. 이야기를 멈추는 것은 일시정지 버튼의 몫입니다.
+  void _toggleSound() {
+    final bool soundOn = !_soundOn;
+    setState(() => _soundOn = soundOn);
+    unawaited(_audioPlayer.setMuted(!soundOn));
   }
 
   Future<void> _playQuestion() async {
@@ -548,6 +945,12 @@ class _PlayPageState extends State<PlayPage> {
     );
   }
 
+  /// 대사 한 덩어리를 문장 단위로 들려줍니다.
+  ///
+  /// 일시정지가 걸리면 루프를 **버리지 않고 문장 앞에서 재웁니다**
+  /// ([_awaitResume]). 다시 재생하면 멈춘 그 문장부터 이어집니다 - 예전처럼
+  /// 대사를 처음부터 다시 읽지 않습니다. 대신 문장 중간에 멈췄다면 그 문장은
+  /// 처음부터 다시 읽습니다(오디오는 중간부터 이어 붙일 수 없습니다).
   Future<void> _playCharacterMessage(
     String text, {
     String? audioUrl,
@@ -556,6 +959,8 @@ class _PlayPageState extends State<PlayPage> {
     final int token = ++_speechToken;
     _questionTimer?.cancel();
     _listeningTimer?.cancel();
+    _releaseSpeechWait();
+    _openPauseGate();
     await _audioPlayer.stop();
     final List<String> sentences = _splitSentences(text);
     if (!mounted || sentences.isEmpty) {
@@ -569,11 +974,28 @@ class _PlayPageState extends State<PlayPage> {
       _listeningSeconds = 0;
     });
 
+    _speaking = true;
+    try {
+      await _speakSentences(sentences, token: token, audioUrl: audioUrl);
+    } finally {
+      if (token == _speechToken) _speaking = false;
+    }
+    if (mounted && token == _speechToken) onComplete?.call();
+  }
+
+  Future<void> _speakSentences(
+    List<String> sentences, {
+    required int token,
+    String? audioUrl,
+  }) async {
     for (int index = 0; index < sentences.length; index++) {
+      await _awaitResume(token);
       if (!mounted || token != _speechToken) return;
       setState(() => _characterSentenceIndex = index);
       bool played = false;
-      if (_soundOn && widget.repository != null) {
+      // 소리를 꺼도 합성과 재생은 그대로 합니다 - 볼륨만 0입니다(→
+      // [_toggleSound]). 그래야 대사가 오디오 길이에 맞춰 넘어갑니다.
+      if (widget.repository != null) {
         try {
           final String source = index == 0 && sentences.length == 1
               ? (audioUrl ??
@@ -589,7 +1011,9 @@ class _PlayPageState extends State<PlayPage> {
                       _snapshot?.currentScene?.characterName ??
                       widget.characterName,
                 )).audioUrl;
-          if (source.isNotEmpty) {
+          // 내레이션과 같은 규칙입니다 - 합성을 기다리는 사이에 일시정지를
+          // 눌렀으면 틀지 않습니다(멈춘 뒤에 소리가 새로 나오면 안 됩니다).
+          if (source.isNotEmpty && _phase != _DialoguePhase.paused) {
             final String resolvedSource = source.startsWith('/')
                 ? Uri.parse(AppConfig.apiBaseUrl).resolve(source).toString()
                 : source;
@@ -600,23 +1024,55 @@ class _PlayPageState extends State<PlayPage> {
           played = false;
         }
       }
-      if (!played) {
+      // 멈춰 있는 사이에 재생 대기가 풀려 못 들려준 문장으로 내려올 수
+      // 있습니다(예: 나가기가 부르는 stop). 그대로 두면 일시정지 중인데
+      // 무음 타이머가 돕니다 - 아래 index-- 로 표시해 두고 문 앞에서
+      // 기다립니다.
+      if (!played && _phase != _DialoguePhase.paused) {
         final int milliseconds = widget.repository == null
             ? 2000
             : (1200 + sentences[index].length * 55).clamp(1800, 5200).toInt();
         await _waitForSpeech(Duration(milliseconds: milliseconds));
       }
+      if (!mounted || token != _speechToken) return;
+      if (_phase == _DialoguePhase.paused) {
+        // 이 문장을 읽는 도중에 멈췄습니다. 다시 재생하면 같은 문장을
+        // 처음부터 들려줍니다 - 반쯤 들은 문장을 건너뛰면 말이 끊깁니다.
+        index--;
+      }
     }
-    if (mounted && token == _speechToken) onComplete?.call();
   }
 
+  /// 일시정지 중이면 여기서 잡혀 있다가 "계속 듣기"에 깨어납니다.
+  /// 발화 루프를 버리지 않고 재우는 것이 이 화면의 이어 재생 방식입니다.
+  Future<void> _awaitResume(int token) async {
+    while (mounted &&
+        token == _speechToken &&
+        _phase == _DialoguePhase.paused) {
+      await (_pauseGate ??= Completer<void>()).future;
+    }
+  }
+
+  void _openPauseGate() {
+    final Completer<void>? gate = _pauseGate;
+    _pauseGate = null;
+    if (gate != null && !gate.isCompleted) gate.complete();
+  }
+
+  /// 음성 없이 문장을 읽는 시간. [_releaseSpeechWait] 로 중간에 깨울 수
+  /// 있습니다 - 타이머만 취소하면 발화 루프가 영영 깨어나지 못합니다.
   Future<void> _waitForSpeech(Duration duration) {
     final Completer<void> completer = Completer<void>();
+    _speechWait = completer;
     _questionTimer?.cancel();
-    _questionTimer = Timer(duration, () {
-      if (!completer.isCompleted) completer.complete();
-    });
+    _questionTimer = Timer(duration, _releaseSpeechWait);
     return completer.future;
+  }
+
+  void _releaseSpeechWait() {
+    final Completer<void>? pending = _speechWait;
+    _speechWait = null;
+    if (pending != null && !pending.isCompleted) pending.complete();
   }
 
   List<String> _splitSentences(String text) {
@@ -628,6 +1084,11 @@ class _PlayPageState extends State<PlayPage> {
     return sentences.isEmpty ? <String>[text.trim()] : sentences;
   }
 
+  /// 캐릭터 대사가 끝나고 아이 차례가 되는 지점.
+  ///
+  /// 여기서 지난 턴의 발화를 지웁니다. 캐릭터가 그 말에 답하는 동안에는
+  /// 남겨 두는 게 맞지만(무엇에 대한 답인지 보여야 합니다), 새 차례가
+  /// 시작됐는데도 남아 있으면 아이가 이번에 한 말로 오해합니다.
   void _startListening() {
     if (!mounted || _phase == _DialoguePhase.paused) return;
     setState(() {
@@ -635,6 +1096,10 @@ class _PlayPageState extends State<PlayPage> {
       _listeningSeconds = 0;
       _recordingVoice = false;
       _transcribingVoice = false;
+      _sttRetryCount = 0;
+      _sttHint = null;
+      _lastChildText = null;
+      _lastSttLowConfidence = false;
     });
     _listeningTimer?.cancel();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -644,11 +1109,26 @@ class _PlayPageState extends State<PlayPage> {
     });
   }
 
+  /// 대화 장면의 일시정지.
+  ///
+  /// 멈출 때 대사 루프를 **죽이지 않습니다**. 소리는 [StoryAudioPlayer.pause]
+  /// 로 그 자리에 세워 두고([StoryAudioPlayer.stop] 은 재생 위치를 0으로
+  /// 되돌립니다), 무음으로 읽던 중이었다면 루프를 문 앞에 세워 뒀다가
+  /// ([_awaitResume]) 다시 재생할 때 그 문장부터 이어 읽게 합니다.
+  /// 전개 화면의 [_toggleStoryPause] 와 같은 방식입니다.
   void _togglePause() {
     if (_phase == _DialoguePhase.paused) {
       setState(() => _phase = _phaseBeforePause);
+      _openPauseGate();
       if (_phase == _DialoguePhase.characterSpeaking) {
-        _playQuestion();
+        // 멈춰 둔 오디오가 남아 있으면 그 지점부터 이어 갑니다. 루프는
+        // playUrl 안에서 그대로 기다리고 있어 다시 부를 것이 없습니다.
+        if (_audioPlayer.canResume) {
+          unawaited(_audioPlayer.resume());
+        } else if (!_speaking) {
+          // 루프가 이미 끝난 뒤에 멈춘 경우에만 다시 들려줍니다.
+          unawaited(_playQuestion());
+        }
       } else {
         _startListening();
       }
@@ -656,11 +1136,15 @@ class _PlayPageState extends State<PlayPage> {
     }
 
     _phaseBeforePause = _phase;
-    _speechToken++;
     _questionTimer?.cancel();
     _listeningTimer?.cancel();
     if (_recordingVoice) unawaited(_voiceRecorder.cancel());
-    unawaited(_audioPlayer.stop());
+    // **[_speechToken] 을 올리지 않습니다** - 올리면 재생을 기다리던 루프가
+    // 스스로 빠져나가 이어 들을 대상이 사라집니다.
+    unawaited(_audioPlayer.pause());
+    // 무음으로 읽는 중이었다면 그 기다림을 깨워, 루프가 이 문장에서
+    // 멈춰 서 있게 합니다(깨우지 않으면 타이머만 죽고 영영 안 깨어납니다).
+    _releaseSpeechWait();
     setState(() {
       _recordingVoice = false;
       _transcribingVoice = false;
@@ -668,12 +1152,22 @@ class _PlayPageState extends State<PlayPage> {
     });
   }
 
+  /// 나가기 — **듣던 자리를 남겨 둡니다.**
+  ///
+  /// 세션은 IN_PROGRESS 그대로라 홈 이어하기 카드로 다시 들어옵니다. 그래서
+  /// 서버에 아무것도 알리지 않습니다. `stop` 은 STOPPED 로 바꿔 이어하기
+  /// 목록에서 지워 버리는, 되돌릴 수 없는 호출이라 "그만두겠다"는 명시적
+  /// 행동에만 씁니다 - 화면을 벗어나는 것은 그런 행동이 아닙니다.
+  /// → `docs/이야기_전개_가이드.md` 3.8 · 8장
+  ///
+  /// 그래도 한 번 묻습니다. 잃는 것은 없지만 화면이 통째로 바뀌는 일이라,
+  /// 잘못 눌렀을 때 되돌릴 틈은 있어야 합니다.
   Future<void> _confirmExit() async {
     final bool? leave = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) => AlertDialog(
-        title: const Text('이야기를 나갈까요?'),
-        content: const Text('지금까지 들은 곳은 저장해 둘게요.'),
+        title: const Text('이야기에서 나갈까요?'),
+        content: const Text('여기까지 들은 곳을 기억해 둘게요. 홈에서 이어 들을 수 있어요.'),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -681,12 +1175,31 @@ class _PlayPageState extends State<PlayPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('이야기 나가기'),
+            child: const Text('나가기'),
           ),
         ],
       ),
     );
-    if (leave == true && mounted) await Navigator.of(context).maybePop();
+    if (leave != true || !mounted) return;
+    // 나가기로 마음을 정한 순간 소리부터 멈춥니다 - 화면이 바뀌는 동안에도
+    // 이야기가 계속 들리면 안 나가지는 것처럼 보입니다.
+    _stopSpeaking();
+    // **pop 이 아니라 go 입니다.** 이 화면은 홈 이어하기·이야기 상세에서
+    // `context.go` 로 들어와 되돌아갈 화면이 스택에 없습니다 - maybePop 은
+    // 조용히 아무 일도 안 하고, 아이는 나가기를 눌러도 그대로 남습니다.
+    context.go(AppRoutes.home);
+  }
+
+  /// 지금 나오고 있는 말과 예약된 다음 문장을 모두 끊습니다.
+  void _stopSpeaking() {
+    _speechToken++;
+    _questionTimer?.cancel();
+    _listeningTimer?.cancel();
+    _storyTimer?.cancel();
+    _releaseSpeechWait();
+    _releaseNarrationWait();
+    _openPauseGate();
+    unawaited(_audioPlayer.stop());
   }
 
   @override
@@ -717,14 +1230,20 @@ class _PlayPageState extends State<PlayPage> {
           isPaused: _storyPaused,
           isAdvancing: _advancingScene,
           soundOn: _soundOn,
+          totalScenes: widget.totalScenes,
           onExit: _confirmExit,
           onPause: _toggleStoryPause,
+          // "다시 듣기"는 지금처럼 장면 처음부터입니다. 이어 재생은
+          // 일시정지 버튼의 몫이라 둘을 섞지 않습니다.
           onReplay: () {
             _storyTimer?.cancel();
+            _speechToken++;
+            _releaseNarrationWait();
+            unawaited(_audioPlayer.stop());
             setState(() => _narrationIndex = 0);
             _scheduleCurrentNarration();
           },
-          onSound: () => setState(() => _soundOn = !_soundOn),
+          onSound: _toggleSound,
         );
       }
     }
@@ -754,10 +1273,12 @@ class _PlayPageState extends State<PlayPage> {
                     _StoryControls(
                       isPaused: _phase == _DialoguePhase.paused,
                       soundOn: _soundOn,
+                      sceneOrder: dialogueScene?.sceneOrder,
+                      totalScenes: widget.totalScenes,
                       onExit: _confirmExit,
                       onPause: _togglePause,
                       onReplay: _playQuestion,
-                      onSound: () => setState(() => _soundOn = !_soundOn),
+                      onSound: _toggleSound,
                     ),
                     Expanded(
                       child: _DialogueCanvas(
@@ -777,6 +1298,7 @@ class _PlayPageState extends State<PlayPage> {
                         submitting: _submittingUtterance,
                         lastChildText: _lastChildText,
                         lastSttLowConfidence: _lastSttLowConfidence,
+                        sttHint: _sttHint,
                       ),
                     ),
                   ],
@@ -831,6 +1353,7 @@ class _StorySceneView extends StatelessWidget {
     required this.isPaused,
     required this.isAdvancing,
     required this.soundOn,
+    required this.totalScenes,
     required this.onExit,
     required this.onPause,
     required this.onReplay,
@@ -842,6 +1365,7 @@ class _StorySceneView extends StatelessWidget {
   final bool isPaused;
   final bool isAdvancing;
   final bool soundOn;
+  final int? totalScenes;
   final VoidCallback onExit;
   final VoidCallback onPause;
   final VoidCallback onReplay;
@@ -873,6 +1397,8 @@ class _StorySceneView extends StatelessWidget {
                 _StoryControls(
                   isPaused: isPaused,
                   soundOn: soundOn,
+                  sceneOrder: scene.sceneOrder,
+                  totalScenes: totalScenes,
                   onExit: onExit,
                   onPause: onPause,
                   onReplay: onReplay,
@@ -1013,6 +1539,8 @@ class _StoryControls extends StatelessWidget {
   const _StoryControls({
     required this.isPaused,
     required this.soundOn,
+    required this.sceneOrder,
+    required this.totalScenes,
     required this.onExit,
     required this.onPause,
     required this.onReplay,
@@ -1021,10 +1549,27 @@ class _StoryControls extends StatelessWidget {
 
   final bool isPaused;
   final bool soundOn;
+
+  /// 지금 몇 번째 장면인지(서버 `currentScene.sceneOrder`). 없으면 `null`.
+  final int? sceneOrder;
+
+  /// 이 이야기의 전체 장면 수. 진입 경로가 알려 주지 않았으면 `null` 이고,
+  /// 그때는 눈금 없는 막대만 그립니다 - 틀린 비율을 그리는 것보다 낫습니다.
+  final int? totalScenes;
+
   final VoidCallback onExit;
   final VoidCallback onPause;
   final VoidCallback onReplay;
   final VoidCallback onSound;
+
+  /// 문장이 아니라 **장면** 진행률입니다. 문장이 넘어가는 것과 무관하고,
+  /// 일시정지와도 무관합니다.
+  double? get _progress {
+    final int? order = sceneOrder;
+    final int? total = totalScenes;
+    if (order == null || total == null || total <= 0) return null;
+    return (order / total).clamp(0.0, 1.0);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1033,19 +1578,26 @@ class _StoryControls extends StatelessWidget {
         _ControlButton(label: '나가기', icon: AppIcons.close, onPressed: onExit),
         const SizedBox(width: 12),
         Expanded(
-          child: Container(
-            height: 8,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: .32),
-              borderRadius: BorderRadius.circular(99),
-            ),
-            alignment: Alignment.centerLeft,
-            child: FractionallySizedBox(
-              widthFactor: .42,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFD56A),
-                  borderRadius: BorderRadius.circular(99),
+          child: Semantics(
+            label: totalScenes == null
+                ? '이야기 진행'
+                : '전체 $totalScenes 장면 중 ${sceneOrder ?? 0}번째',
+            child: Container(
+              height: 8,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: .32),
+                borderRadius: BorderRadius.circular(99),
+              ),
+              alignment: Alignment.centerLeft,
+              child: AnimatedFractionallySizedBox(
+                duration: const Duration(milliseconds: 450),
+                curve: Curves.easeOutCubic,
+                widthFactor: _progress ?? 0,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFD56A),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
                 ),
               ),
             ),
@@ -1130,6 +1682,7 @@ class _DialogueCanvas extends StatelessWidget {
     required this.submitting,
     required this.lastChildText,
     required this.lastSttLowConfidence,
+    this.sttHint,
   });
 
   /// 제작한 표정 에셋이 있는 장면에서만 값이 있다. null이면 [characterAsset] 한 장으로 그린다.
@@ -1147,6 +1700,10 @@ class _DialogueCanvas extends StatelessWidget {
   final bool submitting;
   final String? lastChildText;
   final bool lastSttLowConfidence;
+
+  /// 무음/인식 실패로 다시 말해야 할 때만 값이 있다. [lastSttLowConfidence]
+  /// 와 달리 화면을 안 바꾸고 마이크 옆에만 짧게 띄운다.
+  final String? sttHint;
 
   @override
   Widget build(BuildContext context) {
@@ -1198,6 +1755,13 @@ class _DialogueCanvas extends StatelessWidget {
                 characterName: characterName,
                 question: question,
                 compact: compact,
+                // 아이 말풍선(아래)과 서로 밀어내지 않도록 위아래로 나눠
+                // 씁니다. 좁은 폭에서 대사가 길어져도 잘리는 대신 이 안에서
+                // 굴러갑니다.
+                maxHeight:
+                    constraints.maxHeight -
+                    (compact ? 18 : 44) -
+                    (compact ? 160 : 190),
               ),
             ),
             // 이름 배지는 인물 발밑에 겹치고, 말풍선이 이미 "○○의 질문"으로 화자를 밝힌다.
@@ -1222,7 +1786,9 @@ class _DialogueCanvas extends StatelessWidget {
                 onMicTap: onMicTap,
                 lastChildText: lastChildText,
                 lowConfidence: lastSttLowConfidence,
+                sttHint: sttHint,
                 compact: compact,
+                maxHeight: constraints.maxHeight * (compact ? .42 : .5),
               ),
             ),
           ],
@@ -1258,12 +1824,30 @@ class _CharacterNameBadge extends StatelessWidget {
   }
 }
 
+/// 캐릭터 대사 말풍선.
+///
+/// **대사는 어떤 폭에서도 잘리지 않습니다.** 아이가 글을 다 못 읽는 채로
+/// 대답해야 하는 상황을 만들면 이 화면이 성립하지 않습니다. 그래서 문장이
+/// 길면 (1) 글자를 한 단계씩 줄이고, (2) 그래도 넘치면 말풍선 안에서
+/// 스크롤합니다 - 말줄임표로 끊지 않습니다.
 class _QuestionBubble extends StatelessWidget {
   const _QuestionBubble({
     required this.characterName,
     required this.question,
     required this.compact,
+    required this.maxHeight,
   });
+
+  /// 말풍선이 차지해도 되는 최대 높이. 아이 말풍선을 밀어내지 않도록
+  /// [_DialogueCanvas] 가 화면 높이에서 계산해 넘깁니다.
+  final double maxHeight;
+
+  /// 길이에 따라 한 단계씩 줄어드는 글자 크기. 자르는 대신 줄입니다.
+  double get _fontSize {
+    final int length = question.characters.length;
+    if (compact) return length > 90 ? 21 : (length > 55 ? 24 : 27);
+    return length > 90 ? 27 : (length > 55 ? 30 : 34);
+  }
 
   final String characterName;
   final String question;
@@ -1290,7 +1874,10 @@ class _QuestionBubble extends StatelessWidget {
           ),
         ),
         Container(
-          constraints: BoxConstraints(minHeight: compact ? 138 : 176),
+          constraints: BoxConstraints(
+            minHeight: compact ? 138 : 176,
+            maxHeight: max(maxHeight, compact ? 138.0 : 176.0),
+          ),
           padding: EdgeInsets.symmetric(
             horizontal: compact ? 22 : 34,
             vertical: compact ? 19 : 25,
@@ -1310,6 +1897,9 @@ class _QuestionBubble extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
+            // 최대 높이가 생겼으니 min 이어야 합니다 - 기본값(max)이면 대사가
+            // 짧아도 말풍선이 허용 높이까지 늘어납니다.
+            mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               Row(
                 children: <Widget>[
@@ -1330,19 +1920,22 @@ class _QuestionBubble extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 14),
-              Semantics(
-                liveRegion: true,
-                label: question,
-                child: Text(
-                  question,
-                  maxLines: compact ? 3 : 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: const Color(0xFF172A3E),
-                    fontSize: compact ? 27 : 34,
-                    height: 1.35,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -.5,
+              // 자르지 않습니다 - 줄이고, 그래도 넘치면 말풍선 안에서 굴립니다.
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Semantics(
+                    liveRegion: true,
+                    label: question,
+                    child: Text(
+                      question,
+                      style: TextStyle(
+                        color: const Color(0xFF172A3E),
+                        fontSize: _fontSize,
+                        height: 1.35,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -.5,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1365,7 +1958,13 @@ class _ChildVoiceBubble extends StatelessWidget {
     required this.lastChildText,
     required this.lowConfidence,
     required this.compact,
+    required this.maxHeight,
+    this.sttHint,
   });
+
+  /// 말풍선이 차지해도 되는 최대 높이. 아이가 길게 말했어도 잘라내지 않고
+  /// 이 안에서 굴립니다. → [_QuestionBubble]
+  final double maxHeight;
 
   final _DialoguePhase phase;
   final int seconds;
@@ -1376,6 +1975,7 @@ class _ChildVoiceBubble extends StatelessWidget {
   final String? lastChildText;
   final bool lowConfidence;
   final bool compact;
+  final String? sttHint;
 
   bool get listening => phase == _DialoguePhase.listening;
 
@@ -1402,7 +2002,10 @@ class _ChildVoiceBubble extends StatelessWidget {
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
-      constraints: BoxConstraints(minHeight: compact ? 128 : 154),
+      constraints: BoxConstraints(
+        minHeight: compact ? 128 : 154,
+        maxHeight: max(maxHeight, compact ? 128.0 : 154.0),
+      ),
       padding: EdgeInsets.all(compact ? 15 : 20),
       decoration: BoxDecoration(
         color: const Color(0xF2123252),
@@ -1445,18 +2048,33 @@ class _ChildVoiceBubble extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 9),
-                  Text(
-                    body,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: compact ? 20 : 23,
-                      height: 1.35,
-                      fontWeight: FontWeight.w900,
+                  // 아이가 한 말도 자르지 않습니다 - 자기가 한 말이 반쯤
+                  // 잘려 보이면 다시 말해야 하는지 알 수 없습니다.
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Text(
+                        body,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: compact ? 20 : 23,
+                          height: 1.35,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
                     ),
                   ),
-                  if (lowConfidence && lastChildText != null) ...<Widget>[
+                  if (sttHint != null) ...<Widget>[
+                    const SizedBox(height: 6),
+                    Text(
+                      sttHint!,
+                      style: const TextStyle(
+                        color: Color(0xFFFFD56A),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ] else if (lowConfidence &&
+                      lastChildText != null) ...<Widget>[
                     const SizedBox(height: 6),
                     const Text(
                       '잘 들었는지 한 번 더 확인해 주세요.',

@@ -53,7 +53,7 @@ class GetReportDetailUseCase {
 
   final ReportRepository _repository;
 
-  Future<ReportDetail?> call(int sessionId) =>
+  Future<ReportDetail?> call(String sessionId) =>
       _repository.getReportDetail(sessionId);
 }
 
@@ -63,7 +63,7 @@ class MarkReportAsReadUseCase {
 
   final ReportRepository _repository;
 
-  Future<void> call(int sessionId) => _repository.markAsRead(sessionId);
+  Future<void> call(String sessionId) => _repository.markAsRead(sessionId);
 }
 
 /// 설정 읽기.

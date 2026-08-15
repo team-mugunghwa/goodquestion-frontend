@@ -192,7 +192,14 @@ class _HomeContent extends StatelessWidget {
               metrics: metrics,
               onResume: () => _guarded(
                 context,
-                () => context.go(AppRoutes.playOf(session.sessionId)),
+                // 전체 장면 수는 홈만 알고 있습니다 - 재생 화면 진행바가
+                // 쓰도록 함께 넘깁니다. → [AppRoutes.playOf]
+                () => context.go(
+                  AppRoutes.playOf(
+                    session.sessionId,
+                    totalScenes: session.totalScenes,
+                  ),
+                ),
               ),
             ),
           SizedBox(height: metrics.sectionGap),

@@ -172,6 +172,24 @@ void main() {
     expect(vm.step, AuthStep.signIn);
   });
 
+  test('계정 잠김(423)은 서버 메시지 대신 안내 문구로 바뀐다', () async {
+    final vm = _viewModelOf(
+      _Stub(
+        signInError: const ServerFailure(
+          message: '로그인 시도가 많아 계정이 일시적으로 잠겼습니다.',
+          code: 'ACCOUNT_LOCKED',
+        ),
+      ),
+    );
+    await vm.load();
+    vm.setEmail('a@b.com');
+    vm.setPassword('x');
+
+    await vm.submitEmail();
+
+    expect(vm.formError, '로그인을 너무 많이 시도했어요. 잠시 후 다시 시도해 주세요.');
+  });
+
   test('다시 입력하면 에러 메시지가 사라진다', () async {
     final vm = _viewModelOf(
       _Stub(signInError: const UnauthorizedFailure('다시 확인해 주세요.')),

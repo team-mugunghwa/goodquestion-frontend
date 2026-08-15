@@ -72,7 +72,7 @@ class _DialoguePreviewRepository implements PlayRepository {
   @override
   Future<PlaySpeechAudio> synthesizeSpeech({
     required String text,
-    required String characterName,
+    String? characterName,
   }) async => const PlaySpeechAudio(audioUrl: 'preview://speech');
 
   @override
@@ -91,6 +91,7 @@ class _DialoguePreviewRepository implements PlayRepository {
     String? sttRawText,
     double? sttConfidence,
     int sttRetryCount = 0,
+    String? idempotencyKey,
   }) async {
     await Future<void>.delayed(const Duration(seconds: 2));
     return const PlayTurnResult(
@@ -102,11 +103,20 @@ class _DialoguePreviewRepository implements PlayRepository {
   }
 
   @override
+  Future<List<PlayMessage>> sceneMessages(
+    String sessionId, {
+    required String sceneId,
+  }) async => const <PlayMessage>[];
+
+  @override
   Future<PlayMission?> currentMission(String sessionId) async => null;
 
   @override
   Future<PlaySessionSnapshot> completeStoryScene(String sessionId) =>
       resume(sessionId);
+
+  @override
+  Future<void> stop(String sessionId) async {}
 }
 
 class _PreviewVoiceRecorder implements MissionVoiceRecorder {
@@ -134,6 +144,18 @@ class _PreviewAudioPlayer implements StoryAudioPlayer {
   @override
   Future<void> playUrl(String url) =>
       Future<void>.delayed(const Duration(milliseconds: 1700));
+
+  @override
+  bool get canResume => false;
+
+  @override
+  Future<void> setMuted(bool muted) async {}
+
+  @override
+  Future<void> pause() async {}
+
+  @override
+  Future<void> resume() async {}
 
   @override
   Future<void> stop() async {}
