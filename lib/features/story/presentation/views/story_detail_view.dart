@@ -1,7 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/constants/app_breakpoints.dart';
 import '../../../../core/constants/app_icons.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/di/injector.dart';
@@ -34,7 +37,7 @@ import '../widgets/role_card.dart';
 /// | 섹션 | 내용 |
 /// |---|---|
 /// | 1 | 상단 바 — 뒤로가기 + 제목 |
-/// | 2 | 대표 비주얼 |
+/// | 2 | 표지 |
 /// | 3 | 메타 칩(시간·난이도·주제) + 소개 한 줄 — 보호자가 고를 때 보는 정보 |
 /// | 4 | 도입문 + "들려줘" — 아이에게 읽어 주는 글 |
 /// | 5 | 내 역할 카드 |
@@ -44,6 +47,17 @@ import '../widgets/role_card.dart';
 /// 다릅니다.** 소개는 "무슨 이야기인지" 알려 주는 3인칭 설명이라 보호자
 /// 것이고, 도입문은 아이에게 들려주는 말입니다. 같은 카드에 같은 크기로
 /// 붙여 두면 아이가 자기 것이 아닌 문장부터 읽습니다.
+///
+/// ## 태블릿은 2단, 폰은 세로 한 줄
+///
+/// 표지 원본은 **세로 2:3 그림책 판형**입니다(`docs/COVER_ART_GUIDE.md`).
+/// 이걸 가로 배너로 잘라 전폭에 깔면 그림 대부분이 버려지는데 세로는 세로
+/// 대로 다 먹어서, 정작 중요한 역할 카드가 접히는 곳 아래로 내려갑니다.
+///
+/// 태블릿에서는 **왼쪽에 표지 세로 전체, 오른쪽에 글**로 갈라 놓습니다 —
+/// 잘린 그림도 없고, 비어 있던 가로 공간이 글에 쓰입니다. 폰(compact)은
+/// 2단으로 쪼개지 않습니다. 좁으면 카드를 줄이는 게 아니라 **레이아웃을
+/// 바꿉니다.** → [_Content]
 ///
 /// ## 빈 값은 빈 상자가 아니라 없는 섹션입니다
 ///
@@ -193,6 +207,40 @@ class _TopBar extends StatelessWidget {
   }
 }
 
+/// 표지가 가져갈 수 있는 **최대 가로 몫**.
+///
+/// 표지는 [_coverWidthFor] 처럼 높이에 맞춰 세우지만, 아이패드 세로
+/// (1024×1366)처럼 화면이 길면 높이만 따라가다 표지 하나가 본문 폭을 다
+/// 먹습니다(756dp). 이 화면에서 오른쪽 글이 먼저라 여기서 끊고, 그때는
+/// 표지가 **잘리지 않고 작아집니다.**
+///
+/// 4할인 이유: 아이패드 세로에서 오른쪽에 544dp 가 남습니다 — 말풍선 최대
+/// 폭([AppSizes.bubbleMaxWidth] 560)과 거의 같아서 도입문 한 줄 길이가
+/// 다른 화면과 달라지지 않습니다.
+const double _coverWidthShare = 0.4;
+
+/// 2단에서 표지가 설 폭. 높이에 맞춰 세우고 폭이 따라옵니다.
+///
+/// 2:3 을 폭 기준으로 깔면 아이패드 가로(1024×768)에서 세로가 넘칩니다.
+/// 반대로 **쓸 수 있는 높이**에서 시작하면 표지는 어떤 화면에서도 한 번에
+/// 다 보이고, 스크롤 대상에서 빠집니다. → [_Content]
+double _coverWidthFor(BoxConstraints constraints, ScreenMetrics metrics) {
+  // 세로 여백(위 sm · 아래 lg)을 뺀, 표지가 실제로 설 수 있는 높이.
+  final double boxHeight = math.max(
+    constraints.maxHeight - AppSpacing.sm - AppSpacing.lg,
+    0,
+  );
+  final double contentWidth = math.max(
+    constraints.maxWidth - metrics.screenPadding * 2,
+    0,
+  );
+  return math.min(
+    boxHeight * StoryThumbnail.portrait,
+    contentWidth * _coverWidthShare,
+  );
+}
+
+/// 섹션2~5. 태블릿은 표지 | 글 2단, 폰은 세로 한 줄.
 class _Content extends StatelessWidget {
   const _Content({required this.story, required this.metrics});
 
@@ -201,100 +249,215 @@ class _Content extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        metrics.screenPadding,
-        AppSpacing.sm,
-        metrics.screenPadding,
-        AppSpacing.lg,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          // 섹션2 — 그림이 먼저입니다. 아이는 글보다 분위기를 먼저 읽습니다.
-          //
-          // 다만 높이를 묶어 둡니다. 태블릿에서 16:9 를 전폭으로 깔면 커버
-          // 하나가 화면을 다 먹고, 정작 중요한 역할 카드가 접히는 곳 아래로
-          // 내려갑니다.
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.xl),
-            child: SizedBox(
-              height: metrics.isWide ? AppSizes.coverMaxHeight : null,
-              child: StoryThumbnail(
-                image: story.coverImage,
-                fallbackIcon: AppIcons.stories,
-                aspectRatio: metrics.isWide ? null : StoryThumbnail.wide,
-                title: story.title,
-              ),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          // 섹션3 — 메타 칩과 소개. 둘 다 **보호자가 고를 때 보는 판단
-          // 정보**라 한 덩어리로 묶고, 아이 본문(24sp)보다 작게 둡니다.
-          Wrap(
-            spacing: AppSpacing.sm,
-            runSpacing: AppSpacing.sm,
-            children: <Widget>[
-              KidInfoChip(
-                icon: AppIcons.duration,
-                label: AppStrings.minutes(story.estimatedMinutes),
-                metrics: metrics,
-              ),
-              KidInfoChip(
-                icon: AppIcons.difficulty,
-                label: story.difficulty,
-                metrics: metrics,
-              ),
-              for (final String topic in story.topics)
-                KidInfoChip(
-                  icon: AppIcons.topic,
-                  label: topic,
-                  metrics: metrics,
-                ),
-            ],
-          ),
-          if (story.summary.isNotEmpty) ...<Widget>[
-            // 칩과의 간격은 md — 섹션 사이(lg)보다 좁아야 "칩에 딸린 설명"
-            // 으로 읽힙니다.
-            const SizedBox(height: AppSpacing.md),
-            // Align 이 없으면 바깥 Column 의 stretch 가 폭을 꽉 채워 버려서
-            // ConstrainedBox 가 무시됩니다. 태블릿에서 한 줄이 화면 폭만큼
-            // 길어집니다.
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                  maxWidth: AppSizes.bubbleMaxWidth,
-                ),
-                child: Text(
-                  story.summary,
-                  // 18sp 인 kidLabel 을 굵기만 풀어 씁니다. 3인칭 설명문이라
-                  // 라벨 굵기(700)면 제목처럼 보이고, 아이 본문 크기(24sp)면
-                  // 도입문과 구분이 안 됩니다.
-                  style: metrics
-                      .text(AppTypography.kidLabel)
-                      .copyWith(
-                        fontWeight: FontWeight.w400,
-                        color: AppColors.ink500,
-                      ),
-                ),
-              ),
-            ),
-          ],
-          // 섹션4 — 도입문. 아이에게 들려주는 말입니다.
-          // 서버 `intro` 가 비고 음성도 없으면 카드를 통째로 안 그립니다.
-          if (story.introText.isNotEmpty ||
-              story.introAudio != null) ...<Widget>[
+    final EdgeInsets padding = EdgeInsets.fromLTRB(
+      metrics.screenPadding,
+      AppSpacing.sm,
+      metrics.screenPadding,
+      AppSpacing.lg,
+    );
+
+    // 폰(compact)은 2단으로 쪼개지 않습니다. 390dp 를 둘로 나누면 표지도
+    // 글도 못 씁니다 — 좁으면 카드를 줄이는 게 아니라 레이아웃을 바꿉니다.
+    if (!metrics.isWide) {
+      return SingleChildScrollView(
+        padding: padding,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            // 폰에서는 표지를 세로 전체로 깔지 않습니다. 390dp 폭의 2:3 은
+            // 585dp — 첫 화면이 표지 하나로 끝나고 칩·도입·역할이 전부
+            // 접히는 곳 아래로 밀립니다. 홈 카드와 같은 16:9 로 자릅니다.
+            // 표지는 주인공이 세로 가운데라 가운데 크롭이 안전합니다.
+            // (`docs/COVER_ART_GUIDE.md`)
+            _Cover(story: story, aspectRatio: StoryThumbnail.wide),
             const SizedBox(height: AppSpacing.lg),
-            _IntroCard(story: story, metrics: metrics),
+            ..._sections(),
           ],
-          // 섹션5 — 내 역할. 이름이 비면(시드 미완) 빈 파스텔 상자 대신
-          // 아무것도 안 그립니다.
-          if (story.role.name.isNotEmpty) ...<Widget>[
-            SizedBox(height: metrics.sectionGap),
-            RoleCard(role: story.role, metrics: metrics),
-          ],
-        ],
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final double coverWidth = _coverWidthFor(constraints, metrics);
+        return Padding(
+          padding: padding,
+          child: Align(
+            // 세로는 위로 붙입니다. 아이패드 세로처럼 화면이 길면 표지가
+            // 폭 상한에 걸려 두 단 다 짧아지는데, 그때 덩어리를 가운데
+            // 띄우면 상단 바와 내용 사이가 빈 띠로 끊깁니다.
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              // 2000dp 짜리 태블릿에서 두 단이 양 끝으로 벌어지면 표지와
+              // 글이 한 화면의 두 물건처럼 안 읽힙니다. 글 칼럼은 보호자
+              // 본문 폭에서 끊고, 남는 폭은 양옆으로 흘려보냅니다.
+              constraints: BoxConstraints(
+                maxWidth:
+                    coverWidth + AppSpacing.xl + AppBreakpoints.maxContentWidth,
+              ),
+              child: Row(
+                // stretch 를 주면 표지 높이가 강제로 늘어나 2:3 이 깨집니다.
+                // 표지 쪽이 짧을 때(폭 상한에 걸린 경우) 가운데에 서게 둡니다.
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: <Widget>[
+                  SizedBox(
+                    width: coverWidth,
+                    child: _Cover(
+                      story: story,
+                      aspectRatio: StoryThumbnail.portrait,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.xl),
+                  // **스크롤은 오른쪽 칼럼만** 합니다. 화면 전체를 스크롤
+                  // 시키면 아이패드 가로(768)에서 표지가 위로 잘려 올라가는데,
+                  // 표지는 이 화면에서 아이가 "무슨 이야기인지" 판단하는
+                  // 유일한 그림입니다. 넘치는 것은 글이니 글을 흐르게 합니다.
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisSize: MainAxisSize.min,
+                        children: _sections(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// 섹션3~5. 2단이든 세로 한 줄이든 **읽는 순서는 같습니다.**
+  List<Widget> _sections() {
+    // 2단에서는 카드 사이를 lg 로 좁힙니다 — 오른쪽 칼럼의 세로는 화면
+    // 높이로 묶여 있어서 sectionGap(64) 을 주면 역할 카드가 그만큼 스크롤
+    // 밖으로 밀립니다. 폰은 어차피 세로로 흐르니 원래 간격을 유지합니다.
+    final double cardGap = metrics.isWide ? AppSpacing.lg : metrics.sectionGap;
+
+    return <Widget>[
+      // 섹션3 — 메타 칩이 소개보다 위입니다.
+      //
+      // 2단에서 이 줄은 상단 바 제목과 **같은 띠**에 놓입니다. 왼쪽에 제목,
+      // 오른쪽에 시간·난이도·주제 — 화면을 가로지르는 머리글 한 줄로
+      // 읽힙니다. 소개는 그 아래에 와야 "머리글에 딸린 부제"가 되고,
+      // 소개를 칩 위로 올리면 회색 한 줄이 화면 맨 위에서 제목과 경쟁합니다.
+      // 폰에서도 순서가 같아 두 레이아웃의 읽는 차례가 어긋나지 않습니다.
+      _MetaChips(story: story, metrics: metrics),
+      if (story.summary.isNotEmpty) ...<Widget>[
+        // 칩과의 간격은 md — 섹션 사이(lg)보다 좁아야 "칩에 딸린 설명"
+        // 으로 읽힙니다.
+        const SizedBox(height: AppSpacing.md),
+        _SummaryLine(text: story.summary, metrics: metrics),
+      ],
+      // 섹션4 — 도입문. 아이에게 들려주는 말입니다.
+      // 서버 `intro` 가 비고 음성도 없으면 카드를 통째로 안 그립니다.
+      if (story.introText.isNotEmpty || story.introAudio != null) ...<Widget>[
+        const SizedBox(height: AppSpacing.lg),
+        _IntroCard(story: story, metrics: metrics),
+      ],
+      // 섹션5 — 내 역할. 이름이 비면(시드 미완) 빈 파스텔 상자 대신
+      // 아무것도 안 그립니다.
+      if (story.role.name.isNotEmpty) ...<Widget>[
+        SizedBox(height: cardGap),
+        RoleCard(role: story.role, storyId: story.storyId, metrics: metrics),
+      ],
+    ];
+  }
+}
+
+/// 섹션2 — 표지. 아이는 글보다 분위기를 먼저 읽습니다.
+///
+/// 원본은 세로 2:3 그림책 판형(`docs/COVER_ART_GUIDE.md`)이라, 태블릿
+/// 2단에서는 [StoryThumbnail.portrait] 로 **그림 전체**를 세웁니다.
+/// 표지가 없는 이야기는 [StoryThumbnail] 이 제목 표지 → 코드 표지 순으로
+/// 대신 그립니다 — 같은 비율의 면이라 레이아웃은 그대로입니다.
+class _Cover extends StatelessWidget {
+  const _Cover({required this.story, required this.aspectRatio});
+
+  final StoryDetail story;
+  final double aspectRatio;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      // 그림자는 그림을 화면에 붙은 무늬가 아니라 **책으로 얹힌 물건**으로
+      // 보이게 합니다. 다른 카드와 같은 soft 를 씁니다.
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        boxShadow: AppShadows.soft,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        child: StoryThumbnail(
+          image: story.coverImage,
+          fallbackIcon: AppIcons.stories,
+          aspectRatio: aspectRatio,
+          title: story.title,
+        ),
+      ),
+    );
+  }
+}
+
+/// 섹션3 앞줄 — 시간·난이도·주제. **보호자가 고를 때 보는 판단 정보**라
+/// 아이 본문(24sp)보다 작게 둡니다.
+class _MetaChips extends StatelessWidget {
+  const _MetaChips({required this.story, required this.metrics});
+
+  final StoryDetail story;
+  final ScreenMetrics metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: AppSpacing.sm,
+      runSpacing: AppSpacing.sm,
+      children: <Widget>[
+        KidInfoChip(
+          icon: AppIcons.duration,
+          label: AppStrings.minutes(story.estimatedMinutes),
+          metrics: metrics,
+        ),
+        KidInfoChip(
+          icon: AppIcons.difficulty,
+          label: story.difficulty,
+          metrics: metrics,
+        ),
+        for (final String topic in story.topics)
+          KidInfoChip(icon: AppIcons.topic, label: topic, metrics: metrics),
+      ],
+    );
+  }
+}
+
+/// 섹션3 뒷줄 — 3인칭 소개 한 줄. 제목의 **부제**로 읽혀야 합니다.
+class _SummaryLine extends StatelessWidget {
+  const _SummaryLine({required this.text, required this.metrics});
+
+  final String text;
+  final ScreenMetrics metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    // Align 이 없으면 바깥 Column 의 stretch 가 폭을 꽉 채워 버려서
+    // ConstrainedBox 가 무시됩니다. 태블릿에서 한 줄이 칼럼 폭만큼
+    // 길어집니다.
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: AppSizes.bubbleMaxWidth),
+        child: Text(
+          text,
+          // 18sp 인 kidLabel 을 굵기만 풀어 씁니다. 3인칭 설명문이라
+          // 라벨 굵기(700)면 제목처럼 보이고, 아이 본문 크기(24sp)면
+          // 도입문과 구분이 안 됩니다.
+          style: metrics
+              .text(AppTypography.kidLabel)
+              .copyWith(fontWeight: FontWeight.w400, color: AppColors.ink500),
+        ),
       ),
     );
   }
@@ -391,6 +554,8 @@ class _StartBar extends StatelessWidget {
   }
 }
 
+/// 로딩 자리. **실제 콘텐츠와 같은 레이아웃**으로 잡습니다 — 태블릿에서
+/// 세로 스켈레톤을 보여 주고 2단으로 바뀌면 화면이 통째로 덜컹거립니다.
 class _Skeleton extends StatelessWidget {
   const _Skeleton({required this.metrics});
 
@@ -398,26 +563,82 @@ class _Skeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(horizontal: metrics.screenPadding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          const SkeletonBox(
-            aspectRatio: StoryThumbnail.wide,
-            borderRadius: AppRadius.xl,
+    final EdgeInsets padding = EdgeInsets.fromLTRB(
+      metrics.screenPadding,
+      AppSpacing.sm,
+      metrics.screenPadding,
+      AppSpacing.lg,
+    );
+
+    if (!metrics.isWide) {
+      return SingleChildScrollView(
+        padding: padding,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            const SkeletonBox(
+              aspectRatio: StoryThumbnail.wide,
+              borderRadius: AppRadius.xl,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            ..._lines(),
+          ],
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final double coverWidth = _coverWidthFor(constraints, metrics);
+        return Padding(
+          padding: padding,
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth:
+                    coverWidth + AppSpacing.xl + AppBreakpoints.maxContentWidth,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: <Widget>[
+                  SizedBox(
+                    width: coverWidth,
+                    child: const SkeletonBox(
+                      aspectRatio: StoryThumbnail.portrait,
+                      borderRadius: AppRadius.xl,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.xl),
+                  // 콘텐츠와 마찬가지로 오른쪽만 흐릅니다. 폰 가로(390 높이)
+                  // 처럼 세로가 짧은 화면에서 자리표시자가 넘칩니다.
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisSize: MainAxisSize.min,
+                        children: _lines(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: AppSpacing.lg),
-          const SkeletonBox(width: 240, height: AppSpacing.xl),
-          const SizedBox(height: AppSpacing.lg),
-          const SkeletonBox(height: AppSizes.mic, borderRadius: AppRadius.xl),
-          SizedBox(height: metrics.sectionGap),
-          const SkeletonBox(
-            height: AppSizes.illustration,
-            borderRadius: AppRadius.xl,
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
+
+  /// 칩 줄 → 도입 카드 → 역할 카드. 도착할 콘텐츠와 같은 순서·같은 여백.
+  List<Widget> _lines() => <Widget>[
+    const SkeletonBox(width: 240, height: AppSpacing.xl),
+    const SizedBox(height: AppSpacing.lg),
+    const SkeletonBox(height: AppSizes.mic, borderRadius: AppRadius.xl),
+    SizedBox(height: metrics.isWide ? AppSpacing.lg : metrics.sectionGap),
+    const SkeletonBox(
+      height: AppSizes.illustration,
+      borderRadius: AppRadius.xl,
+    ),
+  ];
 }
