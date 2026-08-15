@@ -200,6 +200,75 @@ void main() {
     );
   });
 
+  testWidgets('저신뢰 인식은 바로 제출하지 않고 확인을 거친다', (WidgetTester tester) async {
+    final _SttRetrySpyRepository repository = _SttRetrySpyRepository()
+      ..lowConfidenceAlways = true;
+    await pumpPlay(tester, repository: repository);
+
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
+
+    // 제출이 잡혀 있고, 들은 내용과 두 버튼이 보인다.
+    expect(
+      repository.submittedTexts,
+      isEmpty,
+      reason: '서버가 잘못 들었을 수 있다고 한 결과를 바로 제출하면 안 됩니다',
+    );
+    expect(find.text('이렇게 들었어요. 맞아요?'), findsOneWidget);
+    expect(find.text('방귀를 참으면 안 돼요'), findsOneWidget);
+    expect(find.text('맞아요'), findsOneWidget);
+    expect(find.text('다시 말할래요'), findsOneWidget);
+
+    // "맞아요" - 교정본은 text로, 벤더 원문은 sttRawText로 제출된다.
+    await tester.tap(find.text('맞아요'));
+    await tester.pumpAndSettle();
+    expect(repository.submittedTexts, <String>['방귀를 참으면 안 돼요']);
+    expect(
+      repository.submittedRawTexts,
+      <String?>['방비를 참으면 안 돼요'],
+      reason: 'sttRawText에는 교정 전 원문이 가야 합니다 - text를 되올리면 원문 유실',
+    );
+  });
+
+  testWidgets('저신뢰 확인에서 다시 말하면 제출 없이 재녹음하고 재시도 횟수를 센다', (
+    WidgetTester tester,
+  ) async {
+    final _SttRetrySpyRepository repository = _SttRetrySpyRepository()
+      ..lowConfidenceAlways = true;
+    await pumpPlay(tester, repository: repository);
+
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('다시 말할래요'));
+    await tester.pumpAndSettle();
+
+    expect(repository.submittedTexts, isEmpty);
+    // 재녹음이 자동으로 시작돼 있어야 한다 - 아이가 마이크를 또 찾게 하지 않는다.
+    expect(find.byTooltip('말하기 완료'), findsOneWidget);
+
+    // 두 번째 발화를 확정하면 재시도 횟수 1이 실려 간다.
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('맞아요'));
+    await tester.pumpAndSettle();
+    expect(repository.lastSttRetryCount, 1);
+  });
+
+  testWidgets('저신뢰 확인은 6초 무반응이면 그대로 제출한다', (WidgetTester tester) async {
+    final _SttRetrySpyRepository repository = _SttRetrySpyRepository()
+      ..lowConfidenceAlways = true;
+    await pumpPlay(tester, repository: repository);
+
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
+    expect(repository.submittedTexts, isEmpty);
+
+    // 확인은 시험이 아니다 - 답을 못 고르는 아이도 이야기는 계속돼야 한다.
+    await tester.pump(const Duration(seconds: 7));
+    await tester.pumpAndSettle();
+    expect(repository.submittedTexts, <String>['방귀를 참으면 안 돼요']);
+  });
+
   testWidgets('STORY(전개) 장면은 문장마다 내레이션 음성을 실제로 요청한다', (
     WidgetTester tester,
   ) async {
@@ -1447,6 +1516,13 @@ class _SttRetrySpyRepository implements PlayRepository {
   int _transcribeCalls = 0;
   int? lastSttRetryCount;
 
+  /// true면 모든 인식 결과를 저신뢰로 돌려준다 - 확인 단계 테스트용.
+  bool lowConfidenceAlways = false;
+
+  /// 제출된 발화들. 확인 단계가 "제출을 잡아 두는지"를 이걸로 판정한다.
+  final List<String> submittedTexts = <String>[];
+  final List<String?> submittedRawTexts = <String?>[];
+
   @override
   Future<PlaySessionSnapshot> resume(String sessionId) async =>
       const PlaySessionSnapshot(
@@ -1486,6 +1562,14 @@ class _SttRetrySpyRepository implements PlayRepository {
   @override
   Future<PlayTranscription> transcribeAudio(Uint8List wavBytes) async {
     _transcribeCalls++;
+    if (lowConfidenceAlways) {
+      return const PlayTranscription(
+        text: '방귀를 참으면 안 돼요',
+        rawText: '방비를 참으면 안 돼요',
+        confidence: .3,
+        lowConfidence: true,
+      );
+    }
     if (_transcribeCalls == 1) {
       throw const ServerFailure(message: '무음이거나 인식 실패', code: 'STT_EMPTY_TEXT');
     }
@@ -1513,6 +1597,8 @@ class _SttRetrySpyRepository implements PlayRepository {
     String? idempotencyKey,
   }) async {
     lastSttRetryCount = sttRetryCount;
+    submittedTexts.add(text);
+    submittedRawTexts.add(sttRawText);
     return const PlayTurnResult(
       characterText: null,
       characterAudioUrl: null,

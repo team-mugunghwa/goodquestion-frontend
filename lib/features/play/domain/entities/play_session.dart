@@ -68,9 +68,17 @@ class PlayTranscription {
     required this.text,
     required this.confidence,
     required this.lowConfidence,
-  });
+    String? rawText,
+  }) : rawText = rawText ?? text;
 
   final String text;
+
+  /// 벤더가 돌려준 원문. 서버가 이야기 어휘 오인식을 교정해 내려주므로([text]),
+  /// 발화 제출의 sttRawText에는 **이 값을** 되올린다 - text를 되올리면 교정
+  /// 전에 실제로 무엇이 인식됐는지가 유실된다. 서버가 아직 rawText를 안 주면
+  /// text와 같다.
+  final String rawText;
+
   final double? confidence;
   final bool lowConfidence;
 }
