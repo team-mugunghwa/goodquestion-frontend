@@ -64,6 +64,14 @@ class AuthRemoteDataSource {
     },
     parse: (_) {},
   );
+
+  /// 리프레시 토큰을 서버에서 무효화합니다. 이후로는 이 토큰으로 재발급이
+  /// 안 됩니다.
+  Future<void> logout(String refreshToken) => _client.post<void>(
+    '/auth/logout',
+    body: <String, dynamic>{'refreshToken': refreshToken},
+    parse: (_) {},
+  );
 }
 
 Map<String, dynamic> _map(Object? data) {
