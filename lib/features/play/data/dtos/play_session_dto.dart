@@ -14,6 +14,7 @@ class PlaySessionDto {
       currentScene: _scene(json['currentScene']),
       openingText: _messageText(json['lastCharacterMessage']),
       openingAudioUrl: _messageAudioUrl(json['lastCharacterMessage']),
+      openingAudioTimings: _messageAudioTimings(json['lastCharacterMessage']),
       mission: mission(json['exposedMission']),
       messages: messages(json['messages']),
     );
@@ -25,6 +26,7 @@ class PlaySessionDto {
         currentScene: _scene(json['currentScene']),
         openingText: _messageText(json['openingMessage']),
         openingAudioUrl: _messageAudioUrl(json['openingMessage']),
+        openingAudioTimings: _messageAudioTimings(json['openingMessage']),
       );
 
   static PlayMission? mission(Object? value) {
@@ -59,10 +61,14 @@ class PlaySessionDto {
       PlayTurnResult(
         characterText: _messageText(json['characterMessage']),
         characterAudioUrl: _messageAudioUrl(json['characterMessage']),
+        characterAudioTimings: _messageAudioTimings(json['characterMessage']),
         mission: mission(json['mission']),
         sceneTransition: _transition(json['sceneTransition']),
         closingReactionText: _messageText(json['closingReaction']),
         closingReactionAudioUrl: _messageAudioUrl(json['closingReaction']),
+        closingReactionAudioTimings: _messageAudioTimings(
+          json['closingReaction'],
+        ),
         analysis: _analysis(json['analysis']),
         progress: _progress(json['progress']),
       );
@@ -215,6 +221,8 @@ class PlaySessionDto {
       imageUrl: value['imageUrl'] as String?,
       characterName: value['characterName'] as String?,
       maxTurns: (value['maxTurns'] as num?)?.toInt(),
+      narrationAudioUrl: value['narrationAudioUrl'] as String?,
+      narrationTimings: audioTimings(value['narrationTimings']),
     );
   }
 
@@ -223,4 +231,33 @@ class PlaySessionDto {
 
   static String? _messageAudioUrl(Object? value) =>
       value is Map<String, dynamic> ? value['audioUrl'] as String? : null;
+
+  static List<PlayAudioTiming> _messageAudioTimings(Object? value) =>
+      value is Map<String, dynamic>
+      ? audioTimings(value['audioTimings'])
+      : const <PlayAudioTiming>[];
+
+  /// `[{index,start,end}]` — 서버가 문장마다 따로 합성해 잰 실측 구간(초).
+  ///
+  /// 형식이 어긋난 항목은 조용히 버린다 — 자막 실측 동기화는 부가 기능이라
+  /// 이것 때문에 응답 전체 파싱이 죽으면 안 된다(소리·자막은 폴백으로 나온다).
+  static List<PlayAudioTiming> audioTimings(Object? value) {
+    if (value is! List) return const <PlayAudioTiming>[];
+    final List<PlayAudioTiming> timings = <PlayAudioTiming>[];
+    for (final Object? item in value) {
+      if (item is! Map<String, dynamic>) continue;
+      final num? index = item['index'] as num?;
+      final num? start = item['start'] as num?;
+      final num? end = item['end'] as num?;
+      if (index == null || start == null || end == null) continue;
+      timings.add(
+        PlayAudioTiming(
+          index: index.toInt(),
+          start: start.toDouble(),
+          end: end.toDouble(),
+        ),
+      );
+    }
+    return timings;
+  }
 }
