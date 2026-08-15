@@ -737,7 +737,12 @@ class _PlayPageState extends State<PlayPage> {
       // → `docs/이야기_전개_가이드.md` 6장
       final String? voiceHint = _voiceRetryHint(error);
       if (voiceHint != null) {
-        _recordFailedSttAttempt(voiceHint, codeSpecific: true);
+        // 캐릭터가 하는 말과 **겹치지 않을 때만** 작은 글씨를 함께 남깁니다.
+        // STT_EMPTY_TEXT 는 캐릭터가 이미 "다시 한 번 말해 줄래?"라고 하는
+        // 자리라 같은 말을 두 번 띄우게 됩니다.
+        final bool addsInstruction =
+            error is ServerFailure && error.code != 'STT_EMPTY_TEXT';
+        _recordFailedSttAttempt(voiceHint, codeSpecific: addsInstruction);
         return;
       }
       if (!mounted) return;
