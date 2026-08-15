@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -79,10 +80,25 @@ class _PlayPageState extends State<PlayPage> {
   int _speechToken = 0;
   String? _lastChildText;
   bool _lastSttLowConfidence = false;
+
+  /// 이번 발화를 몇 번 다시 녹음했는지. 무음/저신뢰로 다시 말했을 때마다
+  /// 늘어나고, 제출한 뒤/새 차례가 시작되면 0으로 돌아갑니다. 제출 시
+  /// `sttRetryCount` 로 그대로 실어 보냅니다. → `docs/이야기_전개_가이드.md` 3.4
+  int _sttRetryCount = 0;
+
+  /// 422 STT_EMPTY_TEXT(무음/인식 실패) 나 로컬 녹음 실패일 때만 씁니다.
+  /// 화면 전체를 에러로 바꾸지 않고 마이크 옆에 짧게 띄웁니다 - 아이가 자주
+  /// 겪을 수 있는 흔한 상황이라 화면이 통째로 바뀌면 매번 놀랍니다.
+  String? _sttHint;
   String? _retainedStoryImageUrl;
   String? _resultImageUrl;
   DialogueCharacterManifest? _characterManifest;
   DialogueCharacterStateMachine? _character;
+
+  /// 지금 보내고 있는 발화의 Idempotency-Key. 응답을 받으면(성공이든 최종
+  /// 실패든) `null`로 되돌립니다 — 재시도 사이에는 같은 키를 유지하고,
+  /// 다음 발화는 새 키를 받게 하기 위해서입니다. → `docs/이야기_전개_가이드.md` 3.4
+  String? _pendingIdempotencyKey;
 
   bool get _isListening => _phase == _DialoguePhase.listening;
 
@@ -195,10 +211,12 @@ class _PlayPageState extends State<PlayPage> {
       });
       _activateSnapshot(snapshot);
     } on Failure catch (error) {
+      // resume 자체가 실패하면 다시 resume 을 부를 수 없습니다 - 여기서는
+      // 자동 복구를 시도하지 않고 메시지만 보여줍니다.
       if (!mounted) return;
       setState(() {
         _loadingSession = false;
-        _loadError = error.message;
+        _loadError = _describeFailure(error);
       });
     }
   }
@@ -258,7 +276,8 @@ class _PlayPageState extends State<PlayPage> {
       );
     } on Failure catch (error) {
       if (!mounted) return;
-      setState(() => _loadError = error.message);
+      if (await _tryAutoRecover(error)) return;
+      setState(() => _loadError = _describeFailure(error));
     }
   }
 
@@ -290,15 +309,16 @@ class _PlayPageState extends State<PlayPage> {
       _submittingUtterance = true;
       _phase = _DialoguePhase.characterSpeaking;
       _loadError = null;
+      _sttHint = null;
       _lastChildText = normalized;
       _lastSttLowConfidence = lowConfidence;
     });
     try {
-      final PlayTurnResult result = await widget.repository!.submitUtterance(
-        widget.sessionId,
+      final PlayTurnResult result = await _submitUtteranceWithRetry(
         text: normalized,
         sttRawText: sttRawText,
         sttConfidence: sttConfidence,
+        sttRetryCount: _sttRetryCount,
       );
       if (!mounted) return;
       setState(() {
@@ -309,11 +329,135 @@ class _PlayPageState extends State<PlayPage> {
       await _presentTurnResult(result);
     } on Failure catch (error) {
       if (!mounted) return;
+      if (await _tryAutoRecover(error)) {
+        setState(() {
+          _submittingUtterance = false;
+          _transcribingVoice = false;
+        });
+        return;
+      }
       setState(() {
         _submittingUtterance = false;
         _transcribingVoice = false;
-        _loadError = error.message;
+        _loadError = _describeFailure(error);
       });
+    }
+  }
+
+  /// [_submitDialogue]와 [_submitMission]이 공유하는 발화 제출.
+  ///
+  /// Idempotency-Key 는 발화 하나당 하나입니다 - 최초 생성 후 재시도 사이에는
+  /// 그대로 유지하고, 응답을 받으면(성공이든 최종 실패든) 비워서 다음 발화가
+  /// 새 키를 받게 합니다. `REQUEST_IN_PROGRESS`(같은 키의 요청이 아직 처리
+  /// 중)만 같은 키로 재시도합니다 - 그 외 실패는 그대로 올립니다.
+  /// → `docs/이야기_전개_가이드.md` 3.4
+  Future<PlayTurnResult> _submitUtteranceWithRetry({
+    required String text,
+    String? missionId,
+    String? sttRawText,
+    double? sttConfidence,
+    int sttRetryCount = 0,
+  }) async {
+    final String key = _pendingIdempotencyKey ??= _newIdempotencyKey();
+    const int maxAttempts = 3;
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        final PlayTurnResult result = await widget.repository!.submitUtterance(
+          widget.sessionId,
+          text: text,
+          missionId: missionId,
+          sttRawText: sttRawText,
+          sttConfidence: sttConfidence,
+          sttRetryCount: sttRetryCount,
+          idempotencyKey: key,
+        );
+        _pendingIdempotencyKey = null;
+        return result;
+      } on ServerFailure catch (error) {
+        final bool canRetry =
+            error.code == 'REQUEST_IN_PROGRESS' && attempt < maxAttempts;
+        if (!canRetry) {
+          _pendingIdempotencyKey = null;
+          rethrow;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 1200));
+      } on Failure {
+        _pendingIdempotencyKey = null;
+        rethrow;
+      }
+    }
+    // maxAttempts 를 넘기면 위 루프의 rethrow 로 항상 빠져나가므로 여기는 오지 않습니다.
+    throw const UnknownFailure();
+  }
+
+  /// UUID v4 형태의 키. 별도 패키지 없이 `dart:math` 만으로 충분합니다 -
+  /// 서버는 문자열 유일성만 보면 되고 형식을 검증하지 않습니다.
+  String _newIdempotencyKey() {
+    final Random random = Random.secure();
+    final List<int> bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0F) | 0x40;
+    bytes[8] = (bytes[8] & 0x3F) | 0x80;
+    String hex(int start, int end) => bytes
+        .sublist(start, end)
+        .map((int b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
+    return '${hex(0, 4)}-${hex(4, 6)}-${hex(6, 8)}-${hex(8, 10)}-${hex(10, 16)}';
+  }
+
+  /// 서버 에러 코드를 아이가 이해할 수 있는 말로 바꿉니다. 매핑이 없으면
+  /// 서버 메시지를 그대로 씁니다. → `docs/이야기_전개_가이드.md` 6장
+  String _describeFailure(Failure error) {
+    if (error is ServerFailure) {
+      switch (error.code) {
+        case 'STT_EMPTY_TEXT':
+          return '잘 못 들었어요. 다시 말해 볼까?';
+        case 'MISSION_NOT_EXPOSED':
+          return '미션을 다시 확인하고 있어요.';
+        case 'SESSION_NOT_IN_PROGRESS':
+        case 'SCENE_NOT_STORY':
+        case 'SCENE_NOT_DIALOGUE':
+        case 'MAX_TURNS_EXCEEDED':
+        case 'CONCURRENT_TURN':
+          return '화면을 다시 불러오고 있어요.';
+      }
+    }
+    return error.message;
+  }
+
+  /// "화면 상태가 서버와 어긋난" 계열 코드는 [_loadSession]으로 phase 를
+  /// 다시 확인하면 저절로 맞는 화면으로 돌아옵니다 - 아이에게 에러를 보여줄
+  /// 필요 없이 조용히 복구합니다. `MISSION_NOT_EXPOSED`는 미션 오버레이
+  /// 상태만 다시 읽어옵니다. 복구했으면 true, 그 외 코드는 false(호출부가
+  /// 메시지를 보여줌). → `docs/이야기_전개_가이드.md` 6장
+  Future<bool> _tryAutoRecover(Failure error) async {
+    if (error is! ServerFailure) return false;
+    switch (error.code) {
+      case 'SESSION_NOT_IN_PROGRESS':
+      case 'SCENE_NOT_STORY':
+      case 'SCENE_NOT_DIALOGUE':
+      case 'MAX_TURNS_EXCEEDED':
+      case 'CONCURRENT_TURN':
+        await _loadSession();
+        return true;
+      case 'MISSION_NOT_EXPOSED':
+        await _refreshMission();
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  Future<void> _refreshMission() async {
+    final PlayRepository? repository = widget.repository;
+    if (repository == null) return;
+    try {
+      final PlayMission? mission = await repository.currentMission(
+        widget.sessionId,
+      );
+      if (!mounted) return;
+      setState(() => _mission = mission);
+    } on Failure {
+      // 미션 재확인 자체가 실패해도 대화 화면은 그대로 둡니다.
     }
   }
 
@@ -369,18 +513,39 @@ class _PlayPageState extends State<PlayPage> {
         lowConfidence: transcription.lowConfidence,
       );
     } on Failure catch (error) {
+      // 무음이거나 인식 실패 - 흔히 겪는 상황이라 화면을 통째로 에러로
+      // 바꾸지 않고 마이크 옆에 짧게 안내한 뒤 바로 다시 녹음할 수 있게
+      // 둡니다. → `docs/이야기_전개_가이드.md` 3.4, 6장
+      if (error is ServerFailure && error.code == 'STT_EMPTY_TEXT') {
+        _recordFailedSttAttempt('잘 못 들었어요. 다시 말해 볼까?');
+        return;
+      }
       if (!mounted) return;
+      if (await _tryAutoRecover(error)) {
+        setState(() => _transcribingVoice = false);
+        return;
+      }
       setState(() {
         _transcribingVoice = false;
-        _loadError = error.message;
+        _loadError = _describeFailure(error);
       });
     } on Object {
-      if (!mounted) return;
-      setState(() {
-        _transcribingVoice = false;
-        _loadError = '목소리를 잘 듣지 못했어요. 다시 말해 주세요.';
-      });
+      // 서버까지 가지도 못한 로컬 실패(녹음이 비었거나 업로드 자체가
+      // 안 됨)도 같은 종류의 문제라 같은 방식으로 안내합니다.
+      _recordFailedSttAttempt('목소리를 잘 듣지 못했어요. 다시 말해 주세요.');
     }
+  }
+
+  /// STT 가 텍스트를 못 만들어 다시 녹음해야 할 때 공통으로 부릅니다.
+  /// 화면은 그대로 두고 마이크 옆 안내만 바꾸며, 재시도 횟수를 세어 뒀다가
+  /// 이번 발화가 결국 제출될 때 `sttRetryCount` 로 함께 보냅니다.
+  void _recordFailedSttAttempt(String hint) {
+    if (!mounted) return;
+    setState(() {
+      _transcribingVoice = false;
+      _sttRetryCount++;
+      _sttHint = hint;
+    });
   }
 
   /// 턴 결과로 표정을 옮긴다. 캐릭터 대사를 재생하기 **전에** 부른다 - 아이 말에 대한 반응이
@@ -450,8 +615,7 @@ class _PlayPageState extends State<PlayPage> {
       _loadError = null;
     });
     try {
-      final PlayTurnResult result = await widget.repository!.submitUtterance(
-        widget.sessionId,
+      final PlayTurnResult result = await _submitUtteranceWithRetry(
         text: answer,
         missionId: mission.missionId,
       );
@@ -470,9 +634,13 @@ class _PlayPageState extends State<PlayPage> {
       await _presentTurnResult(result);
     } on Failure catch (error) {
       if (!mounted) return;
+      if (await _tryAutoRecover(error)) {
+        setState(() => _submittingMission = false);
+        return;
+      }
       setState(() {
         _submittingMission = false;
-        _loadError = error.message;
+        _loadError = _describeFailure(error);
       });
     }
   }
@@ -512,9 +680,13 @@ class _PlayPageState extends State<PlayPage> {
       _activateSnapshot(snapshot);
     } on Failure catch (error) {
       if (!mounted) return;
+      if (await _tryAutoRecover(error)) {
+        setState(() => _advancingScene = false);
+        return;
+      }
       setState(() {
         _advancingScene = false;
-        _loadError = error.message;
+        _loadError = _describeFailure(error);
       });
     }
   }
@@ -627,6 +799,8 @@ class _PlayPageState extends State<PlayPage> {
       _listeningSeconds = 0;
       _recordingVoice = false;
       _transcribingVoice = false;
+      _sttRetryCount = 0;
+      _sttHint = null;
     });
     _listeningTimer?.cancel();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -660,12 +834,16 @@ class _PlayPageState extends State<PlayPage> {
     });
   }
 
+  /// **되돌릴 수 없습니다.** 그만하면 이 세션은 STOPPED 로 바뀌어 이어하기
+  /// 목록에서 사라집니다 - 다이얼로그 문구도 그걸 분명히 해야 합니다.
+  /// 앱 이탈·백그라운드 전환에는 이 메서드 자체가 불리지 않습니다(오직
+  /// "이야기 나가기" 버튼에서만). → `docs/이야기_전개_가이드.md` 3.8
   Future<void> _confirmExit() async {
     final bool? leave = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) => AlertDialog(
-        title: const Text('이야기를 나갈까요?'),
-        content: const Text('지금까지 들은 곳은 저장해 둘게요.'),
+        title: const Text('이야기를 그만할까요?'),
+        content: const Text('그만하면 다시 이어서 들을 수 없어요. 처음부터 다시 시작해야 해요.'),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -673,12 +851,20 @@ class _PlayPageState extends State<PlayPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('이야기 나가기'),
+            child: const Text('그만하기'),
           ),
         ],
       ),
     );
-    if (leave == true && mounted) await Navigator.of(context).maybePop();
+    if (leave != true || !mounted) return;
+    // 서버에 못 알려도 나가기 자체는 막지 않습니다 - 최악의 경우 세션이
+    // IN_PROGRESS 로 남을 뿐이라, 나가기를 막는 것보다 안전한 실패입니다.
+    try {
+      await widget.repository?.stop(widget.sessionId);
+    } on Failure {
+      // 무시합니다.
+    }
+    if (mounted) await Navigator.of(context).maybePop();
   }
 
   @override
@@ -769,6 +955,7 @@ class _PlayPageState extends State<PlayPage> {
                         submitting: _submittingUtterance,
                         lastChildText: _lastChildText,
                         lastSttLowConfidence: _lastSttLowConfidence,
+                        sttHint: _sttHint,
                       ),
                     ),
                   ],
@@ -1122,6 +1309,7 @@ class _DialogueCanvas extends StatelessWidget {
     required this.submitting,
     required this.lastChildText,
     required this.lastSttLowConfidence,
+    this.sttHint,
   });
 
   /// 제작한 표정 에셋이 있는 장면에서만 값이 있다. null이면 [characterAsset] 한 장으로 그린다.
@@ -1139,6 +1327,10 @@ class _DialogueCanvas extends StatelessWidget {
   final bool submitting;
   final String? lastChildText;
   final bool lastSttLowConfidence;
+
+  /// 무음/인식 실패로 다시 말해야 할 때만 값이 있다. [lastSttLowConfidence]
+  /// 와 달리 화면을 안 바꾸고 마이크 옆에만 짧게 띄운다.
+  final String? sttHint;
 
   @override
   Widget build(BuildContext context) {
@@ -1214,6 +1406,7 @@ class _DialogueCanvas extends StatelessWidget {
                 onMicTap: onMicTap,
                 lastChildText: lastChildText,
                 lowConfidence: lastSttLowConfidence,
+                sttHint: sttHint,
                 compact: compact,
               ),
             ),
@@ -1357,6 +1550,7 @@ class _ChildVoiceBubble extends StatelessWidget {
     required this.lastChildText,
     required this.lowConfidence,
     required this.compact,
+    this.sttHint,
   });
 
   final _DialoguePhase phase;
@@ -1368,6 +1562,7 @@ class _ChildVoiceBubble extends StatelessWidget {
   final String? lastChildText;
   final bool lowConfidence;
   final bool compact;
+  final String? sttHint;
 
   bool get listening => phase == _DialoguePhase.listening;
 
@@ -1448,7 +1643,17 @@ class _ChildVoiceBubble extends StatelessWidget {
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                  if (lowConfidence && lastChildText != null) ...<Widget>[
+                  if (sttHint != null) ...<Widget>[
+                    const SizedBox(height: 6),
+                    Text(
+                      sttHint!,
+                      style: const TextStyle(
+                        color: Color(0xFFFFD56A),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ] else if (lowConfidence && lastChildText != null) ...<Widget>[
                     const SizedBox(height: 6),
                     const Text(
                       '잘 들었는지 한 번 더 확인해 주세요.',

@@ -115,6 +115,7 @@ class PlayRemoteDataSource {
     String? sttRawText,
     double? sttConfidence,
     int sttRetryCount = 0,
+    String? idempotencyKey,
   }) => _client.post<PlayTurnResult>(
     '/sessions/$sessionId/utterances',
     body: <String, Object?>{
@@ -124,6 +125,9 @@ class PlayRemoteDataSource {
       'sttRetryCount': sttRetryCount,
       'missionId': missionId,
     },
+    headers: idempotencyKey != null
+        ? <String, dynamic>{'Idempotency-Key': idempotencyKey}
+        : null,
     parse: (Object? data) {
       if (data is Map<String, dynamic>) {
         return PlaySessionDto.fromUtteranceJson(data);
@@ -131,4 +135,8 @@ class PlayRemoteDataSource {
       throw const ParseException('대화 응답 형식이 올바르지 않습니다.');
     },
   );
+
+  /// 본문 없이 200 만 옵니다. → `docs/이야기_전개_가이드.md` 3.8
+  Future<void> stop(String sessionId) =>
+      _client.post<void>('/sessions/$sessionId/stop', parse: (_) {});
 }

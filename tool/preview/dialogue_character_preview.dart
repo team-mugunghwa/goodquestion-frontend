@@ -128,10 +128,14 @@ class _StubRepository implements PlayRepository {
     String? sttRawText,
     double? sttConfidence,
     int sttRetryCount = 0,
+    String? idempotencyKey,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
     return next.build();
   }
+
+  @override
+  Future<void> stop(String sessionId) async {}
 
   @override
   Future<PlayMission?> currentMission(String sessionId) async => null;

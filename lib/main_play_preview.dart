@@ -91,6 +91,7 @@ class _DialoguePreviewRepository implements PlayRepository {
     String? sttRawText,
     double? sttConfidence,
     int sttRetryCount = 0,
+    String? idempotencyKey,
   }) async {
     await Future<void>.delayed(const Duration(seconds: 2));
     return const PlayTurnResult(
@@ -107,6 +108,9 @@ class _DialoguePreviewRepository implements PlayRepository {
   @override
   Future<PlaySessionSnapshot> completeStoryScene(String sessionId) =>
       resume(sessionId);
+
+  @override
+  Future<void> stop(String sessionId) async {}
 }
 
 class _PreviewVoiceRecorder implements MissionVoiceRecorder {
