@@ -181,6 +181,9 @@ class _FakeAudioPlayer implements StoryAudioPlayer {
   Future<void> playUrl(String url) async {}
 
   @override
+  Stream<Duration> get onPosition => const Stream<Duration>.empty();
+
+  @override
   bool get canResume => false;
 
   @override
