@@ -125,32 +125,37 @@ void main() {
     expect(find.text('이야기를 잠시 멈췄어요'), findsNothing);
   });
 
-  testWidgets('나가기는 실수 방지를 위해 확인하고, 되돌릴 수 없다고 알려준다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('나가기는 한 번 확인하고, 이어 들을 수 있다고 알려준다', (WidgetTester tester) async {
     await pumpPlay(tester);
 
     await tester.tap(find.byTooltip('나가기'));
     await tester.pumpAndSettle();
-    expect(find.text('이야기를 그만할까요?'), findsOneWidget);
-    // stop 은 되돌릴 수 없습니다 - "저장해 둘게요" 처럼 다시 들을 수 있는
-    // 것으로 오해하게 하면 안 됩니다.
-    expect(find.text('그만하면 다시 이어서 들을 수 없어요. 처음부터 다시 시작해야 해요.'), findsOneWidget);
+    expect(find.text('이야기에서 나갈까요?'), findsOneWidget);
+    // 나가도 듣던 자리는 남습니다 - 겁주는 문구로 나가기를 막으면 안 됩니다.
+    expect(find.text('여기까지 들은 곳을 기억해 둘게요. 홈에서 이어 들을 수 있어요.'), findsOneWidget);
   });
 
-  testWidgets('그만하기를 확정하면 서버에도 stop 을 알린다', (WidgetTester tester) async {
+  testWidgets('나가기는 세션을 끝내지 않는다 - 홈에서 이어 들을 수 있어야 한다', (
+    WidgetTester tester,
+  ) async {
     final _StopSpyRepository repository = _StopSpyRepository();
     await pumpPlayInRouter(tester, repository: repository);
 
     await tester.tap(find.byTooltip('나가기'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('그만하기'));
+    await tester.tap(find.text('나가기').last);
     await tester.pumpAndSettle();
 
-    expect(repository.stoppedSessionId, 'preview-session');
+    expect(
+      repository.stoppedSessionId,
+      isNull,
+      reason:
+          'stop 은 세션을 STOPPED 로 바꿔 이어하기 목록에서 지웁니다 - 되돌릴 수 없어서 '
+          '화면을 벗어나는 것만으로 부르면 안 됩니다',
+    );
   });
 
-  testWidgets('그만하기를 확정하면 재생 화면에서 실제로 빠져나온다', (WidgetTester tester) async {
+  testWidgets('나가기를 확정하면 재생 화면에서 실제로 빠져나온다', (WidgetTester tester) async {
     // 이 화면은 홈·이야기 상세에서 go 로 들어와 스택에 되돌아갈 화면이
     // 없습니다. pop 계열로 나가려 하면 조용히 아무 일도 일어나지 않아,
     // 아이는 나가기를 눌러도 그대로 남습니다.
@@ -159,7 +164,7 @@ void main() {
 
     await tester.tap(find.byTooltip('나가기'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('그만하기'));
+    await tester.tap(find.text('나가기').last);
     await tester.pumpAndSettle();
 
     expect(find.byType(PlayPage), findsNothing);
@@ -668,9 +673,9 @@ class _FakeAudioPlayer implements StoryAudioPlayer {
   Future<void> stop() async {}
 }
 
-/// "그만하기"가 실제로 `POST /sessions/{id}/stop`(→ [stop])을 부르는지만
-/// 확인하는 최소 가짜입니다. 그 외 메서드는 대화 화면이 뜨는 데 필요한
-/// 만큼만 값을 돌려줍니다.
+/// `POST /sessions/{id}/stop`(→ [stop])이 불렸는지만 기록하는 최소 가짜입니다.
+/// 나가기가 세션을 끝내지 않는지 보는 데 씁니다. 그 외 메서드는 대화 화면이
+/// 뜨는 데 필요한 만큼만 값을 돌려줍니다.
 class _StopSpyRepository implements PlayRepository {
   String? stoppedSessionId;
 

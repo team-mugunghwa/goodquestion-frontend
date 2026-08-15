@@ -1060,16 +1060,22 @@ class _PlayPageState extends State<PlayPage> {
     });
   }
 
-  /// **되돌릴 수 없습니다.** 그만하면 이 세션은 STOPPED 로 바뀌어 이어하기
-  /// 목록에서 사라집니다 - 다이얼로그 문구도 그걸 분명히 해야 합니다.
-  /// 앱 이탈·백그라운드 전환에는 이 메서드 자체가 불리지 않습니다(오직
-  /// "이야기 나가기" 버튼에서만). → `docs/이야기_전개_가이드.md` 3.8
+  /// 나가기 — **듣던 자리를 남겨 둡니다.**
+  ///
+  /// 세션은 IN_PROGRESS 그대로라 홈 이어하기 카드로 다시 들어옵니다. 그래서
+  /// 서버에 아무것도 알리지 않습니다. `stop` 은 STOPPED 로 바꿔 이어하기
+  /// 목록에서 지워 버리는, 되돌릴 수 없는 호출이라 "그만두겠다"는 명시적
+  /// 행동에만 씁니다 - 화면을 벗어나는 것은 그런 행동이 아닙니다.
+  /// → `docs/이야기_전개_가이드.md` 3.8 · 8장
+  ///
+  /// 그래도 한 번 묻습니다. 잃는 것은 없지만 화면이 통째로 바뀌는 일이라,
+  /// 잘못 눌렀을 때 되돌릴 틈은 있어야 합니다.
   Future<void> _confirmExit() async {
     final bool? leave = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) => AlertDialog(
-        title: const Text('이야기를 그만할까요?'),
-        content: const Text('그만하면 다시 이어서 들을 수 없어요. 처음부터 다시 시작해야 해요.'),
+        title: const Text('이야기에서 나갈까요?'),
+        content: const Text('여기까지 들은 곳을 기억해 둘게요. 홈에서 이어 들을 수 있어요.'),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -1077,27 +1083,18 @@ class _PlayPageState extends State<PlayPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('그만하기'),
+            child: const Text('나가기'),
           ),
         ],
       ),
     );
     if (leave != true || !mounted) return;
-    // 나가기로 마음을 정한 순간 소리부터 멈춥니다 - stop 응답을 기다리는
-    // 동안에도 이야기가 계속 들리면 안 나가지는 것처럼 보입니다.
+    // 나가기로 마음을 정한 순간 소리부터 멈춥니다 - 화면이 바뀌는 동안에도
+    // 이야기가 계속 들리면 안 나가지는 것처럼 보입니다.
     _stopSpeaking();
-    // 서버에 못 알려도 나가기 자체는 막지 않습니다 - 최악의 경우 세션이
-    // IN_PROGRESS 로 남을 뿐이라, 나가기를 막는 것보다 안전한 실패입니다.
-    try {
-      await widget.repository?.stop(widget.sessionId);
-    } on Failure {
-      // 무시합니다.
-    }
-    if (!mounted) return;
     // **pop 이 아니라 go 입니다.** 이 화면은 홈 이어하기·이야기 상세에서
     // `context.go` 로 들어와 되돌아갈 화면이 스택에 없습니다 - maybePop 은
     // 조용히 아무 일도 안 하고, 아이는 나가기를 눌러도 그대로 남습니다.
-    // 그만하기는 이야기를 끝내는 것이라 돌아갈 곳도 홈이 맞습니다.
     context.go(AppRoutes.home);
   }
 
