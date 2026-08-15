@@ -651,6 +651,10 @@ class _PlayPageState extends State<PlayPage> {
   /// 시간만큼 기다렸다가 다음 문장으로 넘어갑니다 - 화면이 죽지 않습니다.
   /// → `docs/이야기_전개_가이드.md` 3.2
   void _scheduleCurrentNarration() {
+    debugPrint(
+      '[narration] schedule scene=${_snapshot?.currentScene?.sceneId} '
+      'index=$_narrationIndex paused=$_storyPaused advancing=$_advancingScene',
+    );
     if (_storyPaused || _advancingScene) return;
     final int token = ++_speechToken;
     unawaited(_playCurrentNarration(token));
@@ -659,7 +663,12 @@ class _PlayPageState extends State<PlayPage> {
   Future<void> _playCurrentNarration(int token) async {
     final List<String> sentences =
         _snapshot?.currentScene?.narrationSentences ?? const <String>[];
+    debugPrint(
+      '[narration] play token=$token index=$_narrationIndex '
+      'total=${sentences.length} soundOn=$_soundOn',
+    );
     if (_narrationIndex >= sentences.length) {
+      debugPrint('[narration] scene done, will call story-complete in 700ms');
       _storyTimer = Timer(const Duration(milliseconds: 700), () {
         unawaited(_completeStoryScene());
       });
@@ -671,35 +680,71 @@ class _PlayPageState extends State<PlayPage> {
       try {
         final PlaySpeechAudio audio = await widget.repository!
             .synthesizeSpeech(text: sentence);
-        if (!mounted || token != _speechToken) return;
+        debugPrint('[narration] tts ok, audioUrl len=${audio.audioUrl.length}');
+        if (!mounted || token != _speechToken) {
+          debugPrint(
+            '[narration] stale after tts (mounted=$mounted '
+            'token=$token current=$_speechToken), bailing',
+          );
+          return;
+        }
         await _audioPlayer.playUrl(audio.audioUrl);
+        debugPrint('[narration] playUrl finished');
         played = true;
-      } on Object {
+      } on Object catch (error, stack) {
+        debugPrint('[narration] tts/play FAILED: $error\n$stack');
         played = false;
       }
+    } else {
+      debugPrint('[narration] skipped tts (soundOn=$_soundOn, '
+          'repository=${widget.repository != null})');
     }
-    if (!mounted || token != _speechToken) return;
+    if (!mounted || token != _speechToken) {
+      debugPrint(
+        '[narration] stale before fallback check (mounted=$mounted '
+        'token=$token current=$_speechToken), bailing',
+      );
+      return;
+    }
     if (!played) {
       final int milliseconds = (1400 + sentence.length * 65)
           .clamp(2400, 7500)
           .toInt();
+      debugPrint('[narration] falling back to silent timer (${milliseconds}ms)');
       final Completer<void> completer = Completer<void>();
       _storyTimer = Timer(Duration(milliseconds: milliseconds), () {
         if (!completer.isCompleted) completer.complete();
       });
       await completer.future;
     }
-    if (!mounted || token != _speechToken) return;
+    if (!mounted || token != _speechToken) {
+      debugPrint(
+        '[narration] stale after wait (mounted=$mounted '
+        'token=$token current=$_speechToken), bailing',
+      );
+      return;
+    }
     setState(() => _narrationIndex++);
     _scheduleCurrentNarration();
   }
 
   Future<void> _completeStoryScene() async {
-    if (_advancingScene || widget.repository == null) return;
+    if (_advancingScene || widget.repository == null) {
+      debugPrint(
+        '[narration] completeStoryScene skipped '
+        '(advancing=$_advancingScene, repository=${widget.repository != null})',
+      );
+      return;
+    }
     setState(() => _advancingScene = true);
     try {
       final PlaySessionSnapshot snapshot = await widget.repository!
           .completeStoryScene(widget.sessionId);
+      debugPrint(
+        '[narration] story-complete ok -> phase=${snapshot.phase} '
+        'scene=${snapshot.currentScene?.sceneId} '
+        'sentences=${snapshot.currentScene?.narrationSentences.length}',
+      );
       if (!mounted) return;
       setState(() {
         _snapshot = snapshot;
@@ -708,6 +753,7 @@ class _PlayPageState extends State<PlayPage> {
       });
       _activateSnapshot(snapshot);
     } on Failure catch (error) {
+      debugPrint('[narration] story-complete FAILED: $error');
       if (!mounted) return;
       if (await _tryAutoRecover(error)) {
         setState(() => _advancingScene = false);
