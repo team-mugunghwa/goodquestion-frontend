@@ -103,6 +103,12 @@ class _DialoguePreviewRepository implements PlayRepository {
   }
 
   @override
+  Future<List<PlayMessage>> sceneMessages(
+    String sessionId, {
+    required String sceneId,
+  }) async => const <PlayMessage>[];
+
+  @override
   Future<PlayMission?> currentMission(String sessionId) async => null;
 
   @override

@@ -570,6 +570,93 @@ void main() {
     );
   });
 
+  testWidgets('이어하기 복원은 이 장면의 발화만 되살린다 - 세션 전체 기록을 쓰지 않는다', (
+    WidgetTester tester,
+  ) async {
+    // 이 가짜의 resume 은 세션 전체 기록(= 이전 장면 발화 포함)을 줍니다.
+    // 화면이 그걸 그대로 쓰면 남의 장면 발화가 떠 버립니다.
+    final _DialogueSpyRepository repository = _DialogueSpyRepository();
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      settle: false,
+    );
+
+    for (int i = 0; i < 6; i++) {
+      await tester.pump();
+    }
+
+    expect(
+      repository.sceneMessageRequests,
+      contains('scene-2'),
+      reason: 'MessageResponse 에 장면 식별자가 없어 장면으로 걸러 주는 조회가 필요합니다',
+    );
+    expect(
+      find.text('지난 장면에서 한 말이에요.'),
+      findsNothing,
+      reason: '이전 장면 발화가 새 장면에 떠 있으면 아이가 이번에 한 말로 오해합니다',
+    );
+  });
+
+  testWidgets('장면이 넘어가면 이전 장면에서 한 발화는 새 장면 첫 대사 전에 사라진다', (
+    WidgetTester tester,
+  ) async {
+    final _SceneFlowSpyRepository repository = _SceneFlowSpyRepository();
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      settle: false,
+    );
+
+    // 대화1: 첫 대사를 끝까지 듣고 아이 차례가 됩니다.
+    for (int i = 0; i < 6; i++) {
+      await tester.pump();
+    }
+    audioPlayer.finishPlayback();
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('말하기 완료'), findsOneWidget);
+
+    // 대화1에서 답합니다 - 캐릭터가 답하는 동안에는 계속 보여야 합니다.
+    await tester.tap(find.byTooltip('말하기 완료'));
+    for (int i = 0; i < 8; i++) {
+      await tester.pump();
+    }
+    expect(
+      find.text('나는 이렇게 생각해요'),
+      findsOneWidget,
+      reason: '같은 장면 안에서는 무엇에 대한 답인지 보이도록 남아 있어야 합니다',
+    );
+
+    // 캐릭터 답이 끝나면 장면이 넘어갑니다: 전개2 -> 대화2.
+    audioPlayer.finishPlayback();
+    for (int i = 0; i < 10; i++) {
+      await tester.pump();
+    }
+    audioPlayer.finishPlayback(); // 전개2 내레이션
+    for (int i = 0; i < 8; i++) {
+      await tester.pump();
+    }
+    await tester.pump(const Duration(milliseconds: 700));
+    for (int i = 0; i < 10; i++) {
+      await tester.pump();
+    }
+
+    expect(
+      find.text('나는 두 번째 캐릭터야.'),
+      findsOneWidget,
+      reason: '대화2의 첫 대사까지 왔어야 합니다',
+    );
+    expect(
+      find.text('나는 이렇게 생각해요'),
+      findsNothing,
+      reason: '새 캐릭터가 말을 거는데 아이가 하지도 않은 대답이 떠 있으면 안 됩니다',
+    );
+  });
+
   testWidgets('아이 차례가 시작되면 지난 턴의 아이 발화는 화면에서 지워진다', (
     WidgetTester tester,
   ) async {
@@ -829,9 +916,15 @@ void main() {
 class _DialogueSpyRepository implements PlayRepository {
   final List<String> synthesizedTexts = <String>[];
 
-  /// 이어하기로 복원됐을 때 스냅샷에 들어 있는 지난 턴의 아이 발화.
+  /// 이 장면(scene-2)에서 아이가 마지막으로 한 발화. 이어하기로 들어오면
+  /// 화면에 되살아나야 합니다.
   String? restoredChildText;
 
+  /// `sceneMessages` 가 어떤 장면으로 불렸는지.
+  final List<String> sceneMessageRequests = <String>[];
+
+  /// 세션 전체 기록입니다 - 이전 장면(scene-1) 발화가 섞여 있습니다. 화면이
+  /// 이걸 그대로 쓰면 남의 장면 발화를 띄우게 됩니다.
   @override
   Future<PlaySessionSnapshot> resume(String sessionId) async =>
       PlaySessionSnapshot(
@@ -846,15 +939,40 @@ class _DialogueSpyRepository implements PlayRepository {
         ),
         openingText: '첫 문장이에요. 두 번째 문장이에요. 세 번째 문장이에요.',
         messages: <PlayMessage>[
+          const PlayMessage(
+            messageId: 'm0',
+            speaker: PlaySpeaker.child,
+            turnOrder: 1,
+            text: '지난 장면에서 한 말이에요.',
+          ),
           if (restoredChildText != null)
             PlayMessage(
               messageId: 'm1',
               speaker: PlaySpeaker.child,
-              turnOrder: 1,
+              turnOrder: 3,
               text: restoredChildText!,
             ),
         ],
       );
+
+  @override
+  Future<List<PlayMessage>> sceneMessages(
+    String sessionId, {
+    required String sceneId,
+  }) async {
+    sceneMessageRequests.add(sceneId);
+    if (sceneId != 'scene-2' || restoredChildText == null) {
+      return const <PlayMessage>[];
+    }
+    return <PlayMessage>[
+      PlayMessage(
+        messageId: 'm1',
+        speaker: PlaySpeaker.child,
+        turnOrder: 3,
+        text: restoredChildText!,
+      ),
+    ];
+  }
 
   @override
   Future<PlaySessionSnapshot> completeStoryScene(String sessionId) =>
@@ -895,6 +1013,128 @@ class _DialogueSpyRepository implements PlayRepository {
     mission: null,
     sceneTransition: null,
   );
+
+  @override
+  Future<void> stop(String sessionId) async {}
+}
+
+/// 대화1 -> (전환) -> 전개2 -> 대화2 흐름을 그대로 태워 보는 가짜입니다.
+/// 장면이 바뀔 때 이전 장면의 아이 발화가 남는지 보려면 실제로 장면을
+/// 넘겨 봐야 합니다.
+class _SceneFlowSpyRepository implements PlayRepository {
+  bool _transitioned = false;
+
+  /// 진짜 서버처럼 `messages` 는 **세션 전체** 기록입니다 - 장면이 넘어가도
+  /// 대화1에서 한 발화가 그대로 들어 있습니다.
+  static const List<PlayMessage> _sessionMessages = <PlayMessage>[
+    PlayMessage(
+      messageId: 'm1',
+      speaker: PlaySpeaker.child,
+      turnOrder: 2,
+      text: '나는 이렇게 생각해요',
+    ),
+  ];
+
+  @override
+  Future<PlaySessionSnapshot> resume(String sessionId) async => _transitioned
+      ? const PlaySessionSnapshot(
+          phase: PlayPhase.story,
+          currentScene: PlayScene(
+            sceneId: 'scene-2',
+            sceneOrder: 2,
+            sceneType: PlaySceneType.story,
+            narrationSentences: <String>['그래서 둘은 길을 떠났어요.'],
+          ),
+          messages: _sessionMessages,
+        )
+      : const PlaySessionSnapshot(
+          phase: PlayPhase.dialogue,
+          currentScene: PlayScene(
+            sceneId: 'scene-1',
+            sceneOrder: 1,
+            sceneType: PlaySceneType.dialogue,
+            narrationSentences: <String>[],
+            characterName: '토리',
+            maxTurns: 4,
+          ),
+          openingText: '무슨 생각이 들었어?',
+        );
+
+  @override
+  Future<PlaySessionSnapshot> completeStoryScene(String sessionId) async =>
+      const PlaySessionSnapshot(
+        phase: PlayPhase.dialogue,
+        currentScene: PlayScene(
+          sceneId: 'scene-3',
+          sceneOrder: 3,
+          sceneType: PlaySceneType.dialogue,
+          narrationSentences: <String>[],
+          characterName: '모리',
+          maxTurns: 4,
+        ),
+        openingText: '나는 두 번째 캐릭터야.',
+      );
+
+  /// 장면으로 걸러 주는 조회 - 대화1의 발화는 대화1에서만 나옵니다.
+  @override
+  Future<List<PlayMessage>> sceneMessages(
+    String sessionId, {
+    required String sceneId,
+  }) async => sceneId == 'scene-1'
+      ? const <PlayMessage>[
+          PlayMessage(
+            messageId: 'm1',
+            speaker: PlaySpeaker.child,
+            turnOrder: 2,
+            text: '나는 이렇게 생각해요',
+          ),
+        ]
+      : const <PlayMessage>[];
+
+  @override
+  Future<PlayOpeningMessage> openCurrentScene(String sessionId) async =>
+      const PlayOpeningMessage(text: '', audioUrl: null, alreadyOpened: true);
+
+  @override
+  Future<PlayMission?> currentMission(String sessionId) async => null;
+
+  @override
+  Future<PlayTranscription> transcribeAudio(Uint8List wavBytes) async =>
+      const PlayTranscription(
+        text: '나는 이렇게 생각해요',
+        confidence: .9,
+        lowConfidence: false,
+      );
+
+  @override
+  Future<PlaySpeechAudio> synthesizeSpeech({
+    required String text,
+    String? characterName,
+  }) async => const PlaySpeechAudio(audioUrl: 'stub://flow');
+
+  @override
+  Future<PlayTurnResult> submitUtterance(
+    String sessionId, {
+    required String text,
+    String? missionId,
+    String? sttRawText,
+    double? sttConfidence,
+    int sttRetryCount = 0,
+    String? idempotencyKey,
+  }) async {
+    _transitioned = true;
+    return const PlayTurnResult(
+      characterText: '좋은 생각이야!',
+      characterAudioUrl: null,
+      mission: null,
+      sceneTransition: PlaySceneTransition(
+        next: PlayTransitionTarget.scene,
+        nextSceneId: 'scene-2',
+        nextSceneOrder: 2,
+        nextSceneType: PlaySceneType.story,
+      ),
+    );
+  }
 
   @override
   Future<void> stop(String sessionId) async {}
@@ -1044,6 +1284,12 @@ class _StopSpyRepository implements PlayRepository {
       );
 
   @override
+  Future<List<PlayMessage>> sceneMessages(
+    String sessionId, {
+    required String sceneId,
+  }) async => const <PlayMessage>[];
+
+  @override
   Future<PlayMission?> currentMission(String sessionId) async => null;
 
   @override
@@ -1110,6 +1356,12 @@ class _SttRetrySpyRepository implements PlayRepository {
         audioUrl: null,
         alreadyOpened: true,
       );
+
+  @override
+  Future<List<PlayMessage>> sceneMessages(
+    String sessionId, {
+    required String sceneId,
+  }) async => const <PlayMessage>[];
 
   @override
   Future<PlayMission?> currentMission(String sessionId) async => null;
@@ -1186,6 +1438,12 @@ class _StoryNarrationSpyRepository implements PlayRepository {
   @override
   Future<PlayOpeningMessage> openCurrentScene(String sessionId) async =>
       const PlayOpeningMessage(text: '', audioUrl: null, alreadyOpened: true);
+
+  @override
+  Future<List<PlayMessage>> sceneMessages(
+    String sessionId, {
+    required String sceneId,
+  }) async => const <PlayMessage>[];
 
   @override
   Future<PlayMission?> currentMission(String sessionId) async => null;

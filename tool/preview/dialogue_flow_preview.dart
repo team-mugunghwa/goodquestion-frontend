@@ -229,6 +229,12 @@ class _FlowRepository implements PlayRepository {
   Future<void> stop(String sessionId) async {}
 
   @override
+  Future<List<PlayMessage>> sceneMessages(
+    String sessionId, {
+    required String sceneId,
+  }) async => const <PlayMessage>[];
+
+  @override
   Future<PlayMission?> currentMission(String sessionId) async => null;
 
   @override
