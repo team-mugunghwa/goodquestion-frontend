@@ -292,10 +292,8 @@ Future<void> _signOutAndRedirectToLogin() async {
 /// Future 가 있으면 새로 호출하지 않고 그 결과를 같이 기다립니다.
 Future<bool>? _refreshFuture;
 
-Future<bool> _refreshTokens() =>
-    _refreshFuture ??= _doRefreshTokens().whenComplete(
-      () => _refreshFuture = null,
-    );
+Future<bool> _refreshTokens() => _refreshFuture ??= _doRefreshTokens()
+    .whenComplete(() => _refreshFuture = null);
 
 /// `POST /auth/refresh` 로 액세스·리프레시 토큰을 재발급합니다.
 ///
@@ -320,9 +318,7 @@ Future<bool> _doRefreshTokens() async {
   );
   if ((response.statusCode ?? 0) != 200) return false;
   final Object? body = response.data;
-  final Map<String, dynamic>? map = body is Map<String, dynamic>
-      ? body
-      : null;
+  final Map<String, dynamic>? map = body is Map<String, dynamic> ? body : null;
   final String? newAccess = map?['accessToken'] as String?;
   final String? newRefresh = map?['refreshToken'] as String?;
   if (newAccess == null ||
