@@ -303,6 +303,9 @@ abstract final class AuthStrings {
   /// 소셜 로그인 실패 시뮬레이션.
   static const String socialFailed = '로그인에 실패했어요. 잠시 후 다시 시도해 주세요.';
 
+  /// 비밀번호 5회 실패로 계정이 잠겼을 때(423 `ACCOUNT_LOCKED`).
+  static const String accountLocked = '로그인을 너무 많이 시도했어요. 잠시 후 다시 시도해 주세요.';
+
   // ── 스텝 2 동의 ──
   static const String consentTitle = '동의가 필요해요';
   static const String consentAll = '전체 동의';
