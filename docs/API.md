@@ -141,8 +141,8 @@ _(도메인별 코드는 기능 추가 시 여기에 계속 채웁니다)_
 | `GET` | `/stories` | 이야기 목록 + 주제 필터 | 🚧 협의 중 |
 | `GET` | `/stories/{id}` | 이야기 상세 (요약·역할·도입 음성) | 🚧 협의 중 |
 | `POST` | `/sessions` | 이야기 시작 → 세션 생성 | 🚧 협의 중 |
-| `GET` | `/words` | 담은 단어 (이야기별 그룹) | 🚧 협의 중 |
-| `PATCH` | `/words/{id}/like` | 단어 좋아요 토글 | 🚧 협의 중 |
+| `GET` | `/children/{childId}/words` | 담은 단어 (평면 목록) | ✅ 연동됨 |
+| `PATCH` | `/children/{childId}/words/{wordId}/favorite` | 모르는 말 ↔ 좋아하는 말 | ✅ 연동됨 |
 | `GET` | `/mypage` | 마이페이지 요약 (아이·활동·리포트 배지) | 🚧 협의 중 |
 | `GET` | `/reports` | 보호자 리포트 목록 | 🚧 협의 중 |
 | `GET` | `/reports/{sessionId}` | 리포트 상세 | 🚧 협의 중 |
@@ -247,31 +247,49 @@ _(도메인별 코드는 기능 추가 시 여기에 계속 채웁니다)_
 
 **Request** `{ "storyId": 11 }` · **Response `data`** `{ "sessionId": 9011 }`
 
-### `GET /words`
+### `GET /children/{childId}/words`
+
+**평면 배열**을 최신순(`createdAt` 내림차순)으로 받습니다. 감싸는 객체가 없습니다.
 
 | 필드 | 타입 | null 가능 | 설명 |
 |---|---|---|---|
-| `child.name` / `child.avatar` | string | ✅ | 헤더 표시용 |
-| `totalCount` | int | ❌ | 헤더 배지 숫자 |
-| `groups[]` | array | ❌ | **이야기별 그룹.** 최근 담은 이야기가 위 |
-| `groups[].storyId` | int | ❌ | 이야기 ID |
-| `groups[].storyTitle` | string | ❌ | 이야기 제목 |
-| `groups[].storyImage` | string | ✅ | 필터 칩·그룹 헤더 이미지 |
-| `groups[].words[].wordId` | int | ❌ | 단어 ID |
-| `groups[].words[].word` | string | ❌ | 표제어 |
-| `groups[].words[].meaning` | string | ❌ | 쉬운 뜻 (모달 전용) |
-| `groups[].words[].sentence` | string | ❌ | 이야기 속 문장 (모달 전용) |
-| `groups[].words[].audio` | string | ✅ | 발음 음성 |
-| `groups[].words[].liked` | bool | ❌ | 좋아요 여부 |
-| `groups[].words[].savedAt` | string | ✅ | ISO 8601 |
+| `id` | string(UUID) | ❌ | 단어 ID |
+| `word` | string | ❌ | 표제어 |
+| `meaning` | string | ✅ | 쉬운 뜻. **없을 수 있습니다** — 서버가 LLM 으로 만들지만 실패하거나 아직 안 만든 단어가 있습니다 |
+| `exampleSentence` | string | ✅ | 이야기 속 문장 |
+| `entryType` | string | ❌ | `UNKNOWN`(모르는 말) / `FAVORITE`(좋아하는 말) |
+| `sourceSceneId` | string(UUID) | ✅ | 단어가 나온 장면 |
+| `storyId` `storyTitle` `storyImageUrl` | string | ✅ | 이야기 정보. 장면 없이 저장된 단어는 셋 다 `null` |
+| `createdAt` | string | ❌ | ISO 8601 |
 
-> **평면 리스트로 주지 마세요.** 아이의 기억 단서는 "언제 담았나"가 아니라
-> "어떤 이야기에서 만났나"입니다. 그룹핑을 앱에서 하면 순서 기준이 서버와
-> 어긋납니다. (PRD F-10)
+**이야기별 묶음은 앱이 만듭니다.** 서버 응답을 그룹 구조로 바꾸면 저장·즐겨찾기
+응답까지 같이 흔들려서, 서버는 평면을 유지하고 `WordRepositoryImpl` 이 묶습니다.
 
-### `PATCH /words/{id}/like`
+이야기를 모르는 단어(`storyId == null`)는 이름 없는 묶음 하나로 모으고, 화면은
+그 묶음의 **헤더와 필터 칩을 그리지 않습니다** — 붙일 이름이 없는데 지어내면
+아이가 그걸 이야기 제목으로 읽습니다.
 
-좋아요 토글. **Response `data`** `{ "liked": true }`
+> **`entryType` 으로 목록을 거르지 마세요.** 화면의 하트가 이 값을 바꾸므로,
+> 걸러서 받으면 하트를 켠 단어가 목록에서 사라집니다 — 아이는 자기가 지운 줄
+> 압니다. 하트는 "분류를 바꾸는 것"이지 "목록에서 빼는 것"이 아닙니다.
+
+**단어 음성 필드는 없습니다.** 화면은 기기 내장 목소리로 읽어 줍니다.
+→ [DECISIONS.md](DECISIONS.md) 019
+
+### `PATCH /children/{childId}/words/{wordId}/favorite`
+
+`UNKNOWN` ↔ `FAVORITE` 토글. 바뀐 단어(`WordResponse`)를 그대로 돌려받습니다.
+앱은 `entryType == 'FAVORITE'` 를 하트 켜짐으로 읽습니다.
+
+### 아직 안 붙인 것
+
+| 무엇 | API | 왜 |
+|---|---|---|
+| 단어 담기 | `POST /children/{childId}/words` | 이야기 재생 화면에 버튼이 아직 없음 |
+| 단어 지우기 | `DELETE /children/{childId}/words/{wordId}` | 기획 요건 아님 |
+
+담을 때는 **항상 `UNKNOWN` 으로** 저장해야 합니다. `FAVORITE` 으로 담으면
+하트를 껐을 때 "모르는 말"로 잘못 분류됩니다.
 
 ### 보호자 화면 (`/mypage` · `/reports` · `/settings`)
 
