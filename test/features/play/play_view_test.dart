@@ -203,6 +203,35 @@ void main() {
     );
   });
 
+  testWidgets('녹음이 서버 한도를 넘어도 화면을 안 바꾸고 짧게 말하라고만 한다', (
+    WidgetTester tester,
+  ) async {
+    // 실서버에서 확인된 자리입니다. 한도를 넘기면 413이 오는데 전면 에러
+    // 화면을 띄우면 아이가 대화 중간에 통째로 튕깁니다 - 이야기가 깨진 게
+    // 아니라 이번에 말한 게 길었을 뿐이라 그 자리를 지켜야 합니다.
+    final _SttRetrySpyRepository repository = _SttRetrySpyRepository(
+      firstFailureCode: 'AUDIO_TOO_LARGE',
+    );
+    await pumpPlay(tester, repository: repository);
+
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('조금만 짧게 말해 줄래?'), findsOneWidget);
+    expect(find.byTooltip('나가기'), findsOneWidget); // 대화 화면 그대로
+    expect(find.text('다시 불러오기'), findsNothing); // 전면 에러가 아니다
+
+    // 다시 말하면 그대로 이어집니다.
+    await tester.tap(find.byTooltip('눌러서 말하기'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('맞아요'));
+    await tester.pumpAndSettle();
+
+    expect(repository.lastSttRetryCount, 1);
+  });
+
   testWidgets('변환 결과는 아이가 맞다고 확인하기 전까지 제출되지 않는다', (WidgetTester tester) async {
     final _AutoStopSpyRepository repository = _AutoStopSpyRepository();
     await pumpPlay(tester, repository: repository);
@@ -1606,6 +1635,12 @@ class _StopSpyRepository implements PlayRepository {
 /// 첫 녹음은 422 `STT_EMPTY_TEXT`로 실패시키고, 그다음부터는 성공시킵니다.
 /// 결국 제출되는 `sttRetryCount`를 [lastSttRetryCount]에 기록합니다.
 class _SttRetrySpyRepository implements PlayRepository {
+  _SttRetrySpyRepository({this.firstFailureCode = 'STT_EMPTY_TEXT'});
+
+  /// 첫 변환에서 서버가 돌려줄 실패 코드. 무음(`STT_EMPTY_TEXT`)과 녹음 초과
+  /// (`AUDIO_TOO_LARGE`)는 아이 입장에서 같은 자리라 같은 흐름을 타야 합니다.
+  final String firstFailureCode;
+
   int _transcribeCalls = 0;
   int? lastSttRetryCount;
 
@@ -1649,7 +1684,7 @@ class _SttRetrySpyRepository implements PlayRepository {
   Future<PlayTranscription> transcribeAudio(Uint8List wavBytes) async {
     _transcribeCalls++;
     if (_transcribeCalls == 1) {
-      throw const ServerFailure(message: '무음이거나 인식 실패', code: 'STT_EMPTY_TEXT');
+      throw ServerFailure(message: '변환 실패', code: firstFailureCode);
     }
     return const PlayTranscription(
       text: '나는 이렇게 생각해요',

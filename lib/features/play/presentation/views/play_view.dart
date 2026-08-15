@@ -546,6 +546,8 @@ class _PlayPageState extends State<PlayPage> {
       switch (error.code) {
         case 'STT_EMPTY_TEXT':
           return '잘 못 들었어요. 다시 말해 볼까?';
+        case 'AUDIO_TOO_LARGE':
+          return '조금만 짧게 말해 줄래?';
         case 'MISSION_NOT_EXPOSED':
           return '미션을 다시 확인하고 있어요.';
         case 'SESSION_NOT_IN_PROGRESS':
@@ -678,6 +680,15 @@ class _PlayPageState extends State<PlayPage> {
       // 둡니다. → `docs/이야기_전개_가이드.md` 3.4, 6장
       if (error is ServerFailure && error.code == 'STT_EMPTY_TEXT') {
         _recordFailedSttAttempt('잘 못 들었어요. 다시 말해 볼까?');
+        return;
+      }
+      // 녹음이 서버 한도를 넘은 경우(413)도 같은 자리입니다. 실서버에서
+      // 확인해 보니 전면 에러 화면이 떠서 아이가 대화 중간에 통째로 튕겼는데,
+      // 이건 이야기가 깨진 게 아니라 "이번에 말한 게 너무 길었다"일 뿐입니다.
+      // 다시 녹음하면 그만이라 자리를 지키고 안내만 바꿉니다.
+      // → `docs/이야기_전개_가이드.md` 6장
+      if (error is ServerFailure && error.code == 'AUDIO_TOO_LARGE') {
+        _recordFailedSttAttempt('조금만 짧게 말해 줄래?');
         return;
       }
       if (!mounted) return;
