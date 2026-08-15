@@ -1083,6 +1083,9 @@ class _PlayPageState extends State<PlayPage> {
       ),
     );
     if (leave != true || !mounted) return;
+    // 나가기로 마음을 정한 순간 소리부터 멈춥니다 - stop 응답을 기다리는
+    // 동안에도 이야기가 계속 들리면 안 나가지는 것처럼 보입니다.
+    _stopSpeaking();
     // 서버에 못 알려도 나가기 자체는 막지 않습니다 - 최악의 경우 세션이
     // IN_PROGRESS 로 남을 뿐이라, 나가기를 막는 것보다 안전한 실패입니다.
     try {
@@ -1090,7 +1093,24 @@ class _PlayPageState extends State<PlayPage> {
     } on Failure {
       // 무시합니다.
     }
-    if (mounted) await Navigator.of(context).maybePop();
+    if (!mounted) return;
+    // **pop 이 아니라 go 입니다.** 이 화면은 홈 이어하기·이야기 상세에서
+    // `context.go` 로 들어와 되돌아갈 화면이 스택에 없습니다 - maybePop 은
+    // 조용히 아무 일도 안 하고, 아이는 나가기를 눌러도 그대로 남습니다.
+    // 그만하기는 이야기를 끝내는 것이라 돌아갈 곳도 홈이 맞습니다.
+    context.go(AppRoutes.home);
+  }
+
+  /// 지금 나오고 있는 말과 예약된 다음 문장을 모두 끊습니다.
+  void _stopSpeaking() {
+    _speechToken++;
+    _questionTimer?.cancel();
+    _listeningTimer?.cancel();
+    _storyTimer?.cancel();
+    _releaseSpeechWait();
+    _releaseNarrationWait();
+    _openPauseGate();
+    unawaited(_audioPlayer.stop());
   }
 
   @override
