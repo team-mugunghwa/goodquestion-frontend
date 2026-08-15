@@ -44,6 +44,30 @@ abstract final class AppRoutes {
   /// 설정
   static const String settings = '/settings';
 
+  /// 공지사항 목록. 설정 > 안내에서 들어옵니다.
+  static const String notices = '/notices';
+
+  /// 공지 상세 (템플릿). 이동할 때는 [noticeDetailOf] 를 쓰세요.
+  static const String noticeDetailPath = '/notices/:noticeId';
+
+  /// 이용 안내.
+  static const String guides = '/guides';
+
+  /// 고객센터 — 내 문의 목록.
+  ///
+  /// **관리자 콘솔이 답변 알림에 `/support/{inquiryId}` 를 실어 보냅니다.**
+  /// 이 경로를 바꾸면 이미 나간 알림이 갈 곳을 잃습니다.
+  static const String support = '/support';
+
+  /// 문의 작성.
+  static const String inquiryNew = '/support/new';
+
+  /// 문의 상세 (템플릿). 이동할 때는 [inquiryDetailOf] 를 쓰세요.
+  static const String inquiryDetailPath = '/support/:inquiryId';
+
+  /// 알림함.
+  static const String notifications = '/notifications';
+
   /// 보호자 인증 — 로그인·회원가입·약관 동의를 한 화면에서 처리합니다.
   static const String auth = '/auth';
 
@@ -72,6 +96,8 @@ abstract final class AppRoutes {
   /// 경로 파라미터 이름. `state.pathParameters[AppRoutes.storyIdParam]`
   static const String storyIdParam = 'storyId';
   static const String sessionIdParam = 'sessionId';
+  static const String noticeIdParam = 'noticeId';
+  static const String inquiryIdParam = 'inquiryId';
 
   static String storyDetailOf(String storyId) => '/stories/$storyId';
 
@@ -93,4 +119,8 @@ abstract final class AppRoutes {
   static String playRecapOf(String sessionId) => '/play/$sessionId/recap';
 
   static String reportDetailOf(String sessionId) => '/mypage/report/$sessionId';
+
+  static String noticeDetailOf(String noticeId) => '/notices/$noticeId';
+
+  static String inquiryDetailOf(String inquiryId) => '/support/$inquiryId';
 }
