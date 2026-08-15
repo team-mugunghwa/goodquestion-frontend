@@ -978,6 +978,11 @@ class _PlayPageState extends State<PlayPage> {
     return sentences.isEmpty ? <String>[text.trim()] : sentences;
   }
 
+  /// 캐릭터 대사가 끝나고 아이 차례가 되는 지점.
+  ///
+  /// 여기서 지난 턴의 발화를 지웁니다. 캐릭터가 그 말에 답하는 동안에는
+  /// 남겨 두는 게 맞지만(무엇에 대한 답인지 보여야 합니다), 새 차례가
+  /// 시작됐는데도 남아 있으면 아이가 이번에 한 말로 오해합니다.
   void _startListening() {
     if (!mounted || _phase == _DialoguePhase.paused) return;
     setState(() {
@@ -987,6 +992,8 @@ class _PlayPageState extends State<PlayPage> {
       _transcribingVoice = false;
       _sttRetryCount = 0;
       _sttHint = null;
+      _lastChildText = null;
+      _lastSttLowConfidence = false;
     });
     _listeningTimer?.cancel();
     WidgetsBinding.instance.addPostFrameCallback((_) {

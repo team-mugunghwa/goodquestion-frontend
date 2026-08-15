@@ -288,6 +288,45 @@ void main() {
     );
   });
 
+  testWidgets('아이 차례가 시작되면 지난 턴의 아이 발화는 화면에서 지워진다', (
+    WidgetTester tester,
+  ) async {
+    final _DialogueSpyRepository repository = _DialogueSpyRepository()
+      ..restoredChildText = '어제 한 말이에요.';
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      settle: false,
+    );
+
+    // 캐릭터가 말하는 동안에는 무엇에 대한 답인지 보이도록 남아 있습니다.
+    for (int i = 0; i < 6; i++) {
+      await tester.pump();
+    }
+    expect(find.text('어제 한 말이에요.'), findsOneWidget);
+
+    // 대사를 끝까지 듣고 아이 차례가 되면 지워집니다.
+    for (int sentence = 0; sentence < 3; sentence++) {
+      audioPlayer.finishPlayback();
+      for (int i = 0; i < 6; i++) {
+        await tester.pump();
+      }
+    }
+    await tester.pumpAndSettle();
+    expect(
+      find.byTooltip('말하기 완료'),
+      findsOneWidget,
+      reason: '대사가 끝나면 마이크가 켜지며 아이 차례가 시작됩니다',
+    );
+    expect(
+      find.text('어제 한 말이에요.'),
+      findsNothing,
+      reason: '새 차례에 남아 있으면 아이가 이번에 한 말로 오해합니다',
+    );
+  });
+
   testWidgets('일시정지 후 다시 재생하면 장면 처음이 아니라 멈춘 문장부터 이어진다', (
     WidgetTester tester,
   ) async {
