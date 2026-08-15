@@ -215,32 +215,7 @@ class PlaySessionDto {
       imageUrl: value['imageUrl'] as String?,
       characterName: value['characterName'] as String?,
       maxTurns: (value['maxTurns'] as num?)?.toInt(),
-      narrationAudioUrl: value['narrationAudioUrl'] as String?,
-      narrationTimings: _narrationTimings(value['narrationTimings']),
     );
-  }
-
-  /// 문장별 실측 구간. 서버가 안 주거나 형식이 다르면 빈 목록으로 둡니다 -
-  /// 그 경우 화면이 기존 글자수 타이머로 넘어갑니다.
-  static List<PlayNarrationTiming> _narrationTimings(Object? value) {
-    if (value is! List) return const <PlayNarrationTiming>[];
-    final List<PlayNarrationTiming> timings = <PlayNarrationTiming>[];
-    for (final Object? item in value) {
-      if (item is! Map<String, dynamic>) continue;
-      final num? index = item['index'] as num?;
-      final num? start = item['start'] as num?;
-      final num? end = item['end'] as num?;
-      if (index == null || start == null || end == null) continue;
-      timings.add(
-        PlayNarrationTiming(
-          index: index.toInt(),
-          start: start.toDouble(),
-          end: end.toDouble(),
-        ),
-      );
-    }
-    timings.sort((a, b) => a.index.compareTo(b.index));
-    return List<PlayNarrationTiming>.unmodifiable(timings);
   }
 
   static String? _messageText(Object? value) =>
