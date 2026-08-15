@@ -14,18 +14,28 @@ class DeviceStoryAudioPlayer implements StoryAudioPlayer {
   DeviceStoryAudioPlayer();
 
   AudioPlayer? _player;
-  AudioPlayer get _devicePlayer => _player ??= AudioPlayer();
 
+  /// 재생마다 [AudioPlayer]를 새로 만듭니다. 같은 인스턴스를 재사용하면
+  /// (`stop()` 후 `play()`) 두 번째 재생부터 `onPlayerComplete`가 아예 안
+  /// 오는 경우가 있습니다 - audioplayers 알려진 문제
+  /// (bluefireteam/audioplayers#1696, "It does not want to play again after
+  /// completed"). 첫 장면 내레이션만 들리고 다음 장면부터 조용해지는 증상과
+  /// 정확히 일치합니다.
   @override
   Future<void> playUrl(String url) async {
-    await _devicePlayer.stop();
+    final AudioPlayer? previous = _player;
+    final AudioPlayer player = AudioPlayer();
+    _player = player;
+    if (previous != null) {
+      unawaited(previous.dispose());
+    }
     final Completer<void> completer = Completer<void>();
     late final StreamSubscription<void> subscription;
-    subscription = _devicePlayer.onPlayerComplete.listen((_) {
+    subscription = player.onPlayerComplete.listen((_) {
       if (!completer.isCompleted) completer.complete();
       unawaited(subscription.cancel());
     });
-    await _devicePlayer.play(_sourceFor(url));
+    await player.play(_sourceFor(url));
     await completer.future.timeout(
       const Duration(seconds: 45),
       onTimeout: () => unawaited(subscription.cancel()),
