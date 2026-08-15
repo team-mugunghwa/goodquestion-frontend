@@ -94,6 +94,11 @@ class StorySummaryDto {
   );
 }
 
+/// 더미 JSON(`assets/dummy/story_details.json`)의 모양.
+///
+/// 이 더미는 서버가 붙기 전에 쓰던 것이라 **서버에 없는 키**(`situationText`,
+/// `role.description`)를 아직 들고 있습니다. 엔티티에서 걷어낸 필드라 여기서
+/// 읽지 않고 그냥 흘려보냅니다 — 더미 파일은 손대지 않습니다.
 class StoryDetailDto {
   const StoryDetailDto({
     required this.storyId,
@@ -101,8 +106,8 @@ class StoryDetailDto {
     required this.estimatedMinutes,
     required this.difficulty,
     required this.topics,
+    required this.summary,
     required this.introText,
-    required this.situationText,
     required this.role,
     this.coverImage,
     this.introAudio,
@@ -117,8 +122,10 @@ class StoryDetailDto {
     topics: (json['topics'] as List<dynamic>? ?? <dynamic>[])
         .whereType<String>()
         .toList(growable: false),
+    // 더미에는 아직 `summary` 키가 없어 빈 문자열입니다. 화면은 비면 그 줄을
+    // 안 그리므로 더미도 그대로 성립합니다.
+    summary: json['summary'] as String? ?? '',
     introText: json['introText'] as String? ?? '',
-    situationText: json['situationText'] as String? ?? '',
     introAudio: json['introAudio'] as String?,
     role: StoryRoleDto.fromJson(
       json['role'] as Map<String, dynamic>? ?? <String, dynamic>{},
@@ -131,8 +138,8 @@ class StoryDetailDto {
   final int estimatedMinutes;
   final String difficulty;
   final List<String> topics;
+  final String summary;
   final String introText;
-  final String situationText;
   final String? introAudio;
   final StoryRoleDto role;
 
@@ -144,35 +151,25 @@ class StoryDetailDto {
     estimatedMinutes: estimatedMinutes,
     difficulty: difficulty,
     topics: topics,
+    summary: summary,
     introText: introText,
-    situationText: situationText,
     introAudio: introAudio,
     role: role.toEntity(),
   );
 }
 
 class StoryRoleDto {
-  const StoryRoleDto({
-    required this.name,
-    required this.description,
-    this.characterImage,
-  });
+  const StoryRoleDto({required this.name, this.characterImage});
 
   factory StoryRoleDto.fromJson(Map<String, dynamic> json) => StoryRoleDto(
     name: json['name'] as String? ?? '',
-    description: json['description'] as String? ?? '',
     characterImage: json['characterImage'] as String?,
   );
 
   final String name;
-  final String description;
   final String? characterImage;
 
-  StoryRole toEntity() => StoryRole(
-    name: name,
-    description: description,
-    characterImage: characterImage,
-  );
+  StoryRole toEntity() => StoryRole(name: name, characterImage: characterImage);
 }
 
 List<Map<String, dynamic>> _list(Object? raw) =>

@@ -22,6 +22,7 @@ import 'package:goodquestion/features/story/presentation/viewmodels/story_detail
 import 'package:goodquestion/features/story/presentation/viewmodels/story_list_view_model.dart';
 import 'package:goodquestion/features/story/presentation/views/story_detail_view.dart';
 import 'package:goodquestion/features/story/presentation/views/story_list_view.dart';
+import 'package:goodquestion/features/story/presentation/widgets/role_card.dart';
 import 'package:provider/provider.dart';
 
 /// 진행 중 세션이 없는 홈. 상세 화면 테스트는 "시작하기 → 새 세션" 만
@@ -85,10 +86,23 @@ const StoryDetail _detail = StoryDetail(
   estimatedMinutes: 20,
   difficulty: '쉬움',
   topics: <String>['가족'],
+  summary: '방귀를 참던 며느리가 마음을 털어놓는 이야기.',
   introText: '옛날 어느 마을에 방귀를 참는 며느리가 살았어요.',
-  situationText: '오늘은 며느리가 말해 줄 참이에요.',
   introAudio: 'assets/sounds/story_11_intro.mp3',
-  role: StoryRole(name: '며느리의 친구', description: '고민을 들어주게 될 거야.'),
+  role: StoryRole(name: '며느리의 친구'),
+);
+
+/// 서버 시드가 아직 안 채워진 이야기. 8편 중 7편이 이 모양입니다 —
+/// `childRole` · `intro` 가 빈 문자열이고 도입 음성도 없습니다.
+const StoryDetail _seedless = StoryDetail(
+  storyId: '11',
+  title: '방귀 뀌는 며느리',
+  estimatedMinutes: 20,
+  difficulty: '쉬움',
+  topics: <String>['가족'],
+  summary: '방귀를 참던 며느리가 마음을 털어놓는 이야기.',
+  introText: '',
+  role: StoryRole(name: ''),
 );
 
 void main() {
@@ -175,14 +189,68 @@ void main() {
   });
 
   group('이야기 상세', () {
-    testWidgets('제목·도입문·역할·시작하기가 보인다', (WidgetTester tester) async {
+    testWidgets('제목·소개·도입문·역할·시작하기가 보인다', (WidgetTester tester) async {
       await pump(tester, detailUnder(_StubRepository(detail: _detail)));
 
       expect(find.text('방귀 뀌는 며느리'), findsOneWidget);
+      // 소개(3인칭)와 도입문(아이에게 하는 말)은 다른 자리의 다른 글입니다.
+      expect(find.textContaining('마음을 털어놓는'), findsOneWidget);
       expect(find.textContaining('옛날 어느 마을에'), findsOneWidget);
+      expect(find.text(StoryDetailStrings.roleIntro), findsOneWidget);
       expect(find.textContaining('며느리의 친구'), findsOneWidget);
       expect(find.text(StoryDetailStrings.listen), findsOneWidget);
       expect(find.text(StoryDetailStrings.start), findsOneWidget);
+    });
+
+    testWidgets('시드가 비면 빈 카드 대신 섹션이 사라진다', (WidgetTester tester) async {
+      await pump(tester, detailUnder(_StubRepository(detail: _seedless)));
+
+      // 역할 카드도, 도입 카드도, 영영 안 눌리는 "들려줘"도 없습니다.
+      expect(find.byType(RoleCard), findsNothing);
+      expect(find.text(StoryDetailStrings.roleIntro), findsNothing);
+      expect(find.byType(SpeakerButton), findsNothing);
+      // 남는 것만으로도 화면은 성립합니다 — 제목·소개·칩·시작하기.
+      expect(find.text('방귀 뀌는 며느리'), findsOneWidget);
+      expect(find.textContaining('마음을 털어놓는'), findsOneWidget);
+      expect(find.text('쉬움'), findsOneWidget);
+      expect(find.text(StoryDetailStrings.start), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('빈 시드도 폰 폭에서 무너지지 않는다', (WidgetTester tester) async {
+      await pump(
+        tester,
+        detailUnder(_StubRepository(detail: _seedless)),
+        size: const Size(390, 844),
+      );
+
+      expect(find.text(StoryDetailStrings.start), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('역할 카드는 폰에서 세로로 쌓인다', (WidgetTester tester) async {
+      // 좁으면 카드를 줄이는 게 아니라 레이아웃을 바꿉니다 — 160 짜리 그림
+      // 옆에 이름을 붙이면 폰에서 이름이 세 줄로 쪼개집니다.
+      await pump(
+        tester,
+        detailUnder(_StubRepository(detail: _detail)),
+        size: const Size(390, 844),
+      );
+      await tester.ensureVisible(find.byType(RoleCard));
+      await tester.pumpAndSettle();
+
+      final Offset avatar = tester.getCenter(
+        find
+            .descendant(of: find.byType(RoleCard), matching: find.byType(Image))
+            .first,
+      );
+      final Offset label = tester.getCenter(
+        find.text(StoryDetailStrings.roleIntro),
+      );
+      // 그림 아래에 글, 그리고 둘 다 같은 세로축 위에.
+      expect(label.dy, greaterThan(avatar.dy));
+      expect((label.dx - avatar.dx).abs(), lessThan(2));
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('없는 이야기는 목록으로 가는 문을 준다', (WidgetTester tester) async {
