@@ -165,6 +165,44 @@ void main() {
     );
   });
 
+  testWidgets('첫 전개 장면이 끝나고 다음 장면으로 넘어가도 내레이션이 계속 나온다', (
+    WidgetTester tester,
+  ) async {
+    final _StoryNarrationSpyRepository repository =
+        _StoryNarrationSpyRepository()
+          ..nextSceneOnComplete = const PlaySessionSnapshot(
+            phase: PlayPhase.story,
+            currentScene: PlayScene(
+              sceneId: 'scene-2',
+              sceneOrder: 2,
+              sceneType: PlaySceneType.story,
+              narrationSentences: <String>['그래서 며느리는 이렇게 말했어요.'],
+            ),
+          );
+    await pumpPlay(tester, repository: repository, settle: false);
+
+    // 첫 장면(문장 2개)이 다 끝나고, 다음 장면으로 넘어가기 전 700ms 대기까지
+    // 지나갈 시간을 줍니다.
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    await tester.pump(const Duration(milliseconds: 750));
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+
+    expect(
+      repository.synthesizedTexts,
+      containsAll(<String>['첫 문장이에요.', '두 번째 문장이에요.']),
+      reason: '첫 장면 문장은 둘 다 불렀어야 합니다',
+    );
+    expect(
+      repository.synthesizedTexts,
+      contains('그래서 며느리는 이렇게 말했어요.'),
+      reason: '두 번째 장면으로 넘어간 뒤에도 내레이션 TTS 를 계속 불러야 합니다',
+    );
+  });
+
   testWidgets('1280x720 범용 대화 템플릿 골든', (WidgetTester tester) async {
     await pumpPlay(tester);
     await tester.pump();
@@ -356,6 +394,12 @@ class _StoryNarrationSpyRepository implements PlayRepository {
   final List<String> synthesizedTexts = <String>[];
   final List<String?> synthesizedCharacterNames = <String?>[];
 
+  /// 장면 하나가 끝났을 때(=completeStoryScene 호출) 다음으로 돌려줄 장면.
+  /// null 이면 같은 장면을 반복합니다(무한 루프 방지는 호출부의 pump 횟수가
+  /// 책임짐). 두 번째 장면부터 내레이션이 안 나온다는 버그를 재현하려면
+  /// 이걸 채워서 서로 다른 장면으로 실제로 넘어가게 합니다.
+  PlaySessionSnapshot? nextSceneOnComplete;
+
   @override
   Future<PlaySessionSnapshot> resume(String sessionId) async =>
       const PlaySessionSnapshot(
@@ -369,8 +413,8 @@ class _StoryNarrationSpyRepository implements PlayRepository {
       );
 
   @override
-  Future<PlaySessionSnapshot> completeStoryScene(String sessionId) =>
-      resume(sessionId);
+  Future<PlaySessionSnapshot> completeStoryScene(String sessionId) async =>
+      nextSceneOnComplete ?? await resume(sessionId);
 
   @override
   Future<PlayOpeningMessage> openCurrentScene(String sessionId) async =>
