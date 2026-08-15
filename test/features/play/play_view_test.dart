@@ -3,7 +3,9 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:goodquestion/core/error/failure.dart';
+import 'package:goodquestion/core/router/app_routes.dart';
 import 'package:goodquestion/features/play/domain/entities/play_session.dart';
 import 'package:goodquestion/features/play/domain/repositories/play_repository.dart';
 import 'package:goodquestion/features/play/presentation/views/play_view.dart';
@@ -43,6 +45,44 @@ void main() {
     // STORY 내레이션처럼 스스로 다음 장면을 계속 부르는 반복 흐름은
     // settle: false 로 받아 호출부가 직접 pump 횟수를 제어합니다.
     if (repository != null && settle) await tester.pumpAndSettle();
+  }
+
+  /// 라우터 안에서 재생 화면을 띄웁니다.
+  ///
+  /// 나가기는 `context.go` 로 홈에 갑니다(이 화면은 go 로 들어와 스택에
+  /// 되돌아갈 화면이 없습니다). 그래서 나가기 관련 테스트는 라우터가 있어야
+  /// 합니다.
+  Future<void> pumpPlayInRouter(
+    WidgetTester tester, {
+    required PlayRepository repository,
+  }) async {
+    tester.view.physicalSize = const Size(1280, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final GoRouter router = GoRouter(
+      initialLocation: AppRoutes.playOf('preview-session'),
+      routes: <RouteBase>[
+        GoRoute(
+          path: AppRoutes.home,
+          builder: (_, __) => const Scaffold(body: Text('홈 화면')),
+        ),
+        GoRoute(
+          path: AppRoutes.playPath,
+          builder: (_, GoRouterState state) => PlayPage(
+            sessionId: state.pathParameters[AppRoutes.sessionIdParam]!,
+            repository: repository,
+            voiceRecorder: const _FakeVoiceRecorder(),
+            audioPlayer: const _FakeAudioPlayer(),
+          ),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
   }
 
   testWidgets('좌측 캐릭터와 머리 우측의 한 문장 질문을 보여준다', (WidgetTester tester) async {
@@ -100,7 +140,7 @@ void main() {
 
   testWidgets('그만하기를 확정하면 서버에도 stop 을 알린다', (WidgetTester tester) async {
     final _StopSpyRepository repository = _StopSpyRepository();
-    await pumpPlay(tester, repository: repository);
+    await pumpPlayInRouter(tester, repository: repository);
 
     await tester.tap(find.byTooltip('나가기'));
     await tester.pumpAndSettle();
@@ -108,6 +148,22 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repository.stoppedSessionId, 'preview-session');
+  });
+
+  testWidgets('그만하기를 확정하면 재생 화면에서 실제로 빠져나온다', (WidgetTester tester) async {
+    // 이 화면은 홈·이야기 상세에서 go 로 들어와 스택에 되돌아갈 화면이
+    // 없습니다. pop 계열로 나가려 하면 조용히 아무 일도 일어나지 않아,
+    // 아이는 나가기를 눌러도 그대로 남습니다.
+    await pumpPlayInRouter(tester, repository: _StopSpyRepository());
+    expect(find.byType(PlayPage), findsOneWidget);
+
+    await tester.tap(find.byTooltip('나가기'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('그만하기'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PlayPage), findsNothing);
+    expect(find.text('홈 화면'), findsOneWidget);
   });
 
   testWidgets('무음(STT_EMPTY_TEXT)이면 화면을 안 바꾸고 마이크 옆에 안내만 하고, '
