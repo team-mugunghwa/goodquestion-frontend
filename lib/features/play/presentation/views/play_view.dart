@@ -102,6 +102,11 @@ class _PlayPageState extends State<PlayPage> {
   /// 곧바로 풀어 주려고 들고 있습니다. → [_waitForSpeech] · [_waitForNarration]
   Completer<void>? _speechWait;
   Completer<void>? _narrationWait;
+
+  /// 파일 하나로 여러 문장을 읽는 동안 자막을 넘기는 구독. **재생 위치에
+  /// 묶여 있어** 일시정지하면 자막도 함께 멈춘다 — 벽시계 타이머로 만들면
+  /// 멈춘 사이에도 자막이 넘어간다.
+  StreamSubscription<Duration>? _timingSub;
   String? _lastChildText;
   bool _lastSttLowConfidence = false;
 
@@ -218,6 +223,7 @@ class _PlayPageState extends State<PlayPage> {
     _releaseSpeechWait();
     _releaseNarrationWait();
     _openPauseGate();
+    _stopFollowingTimings();
     unawaited(_voiceRecorder.dispose());
     unawaited(_audioPlayer.dispose());
     super.dispose();
@@ -336,6 +342,7 @@ class _PlayPageState extends State<PlayPage> {
         _playCharacterMessage(
           snapshot.openingText!,
           audioUrl: snapshot.openingAudioUrl,
+          audioTimings: snapshot.openingAudioTimings,
           onComplete: _startListening,
         ),
       );
@@ -359,6 +366,7 @@ class _PlayPageState extends State<PlayPage> {
       await _playCharacterMessage(
         opening.text,
         audioUrl: opening.audioUrl,
+        audioTimings: opening.audioTimings,
         onComplete: _startListening,
       );
     } on Failure catch (error) {
@@ -707,11 +715,16 @@ class _PlayPageState extends State<PlayPage> {
       await _playCharacterMessage(
         reaction,
         audioUrl: result.closingReactionAudioUrl,
+        audioTimings: result.closingReactionAudioTimings,
       );
     }
     final String? reply = result.characterText;
     if (reply != null && reply.trim().isNotEmpty) {
-      await _playCharacterMessage(reply, audioUrl: result.characterAudioUrl);
+      await _playCharacterMessage(
+        reply,
+        audioUrl: result.characterAudioUrl,
+        audioTimings: result.characterAudioTimings,
+      );
     }
     if (!mounted) return;
 
@@ -801,6 +814,25 @@ class _PlayPageState extends State<PlayPage> {
         unawaited(_completeStoryScene());
       });
       return;
+    }
+    final PlayScene? scene = _snapshot?.currentScene;
+    if (_narrationIndex == 0 &&
+        scene != null &&
+        scene.narrationAudioUrl != null &&
+        scene.narrationTimings.isNotEmpty) {
+      final bool playedFromFile = await _playNarrationFromFile(
+        scene,
+        sentences.length,
+        token: token,
+      );
+      if (!mounted || token != _speechToken) return;
+      if (_storyPaused) return;
+      if (playedFromFile) {
+        setState(() => _narrationIndex = sentences.length);
+        _scheduleCurrentNarration();
+        return;
+      }
+      // 재생 실패 - 아래 문장별 합성으로 그대로 폴백한다.
     }
     final String sentence = sentences[_narrationIndex];
     bool played = false;
@@ -994,6 +1026,7 @@ class _PlayPageState extends State<PlayPage> {
   Future<void> _playCharacterMessage(
     String text, {
     String? audioUrl,
+    List<PlayAudioTiming> audioTimings = const <PlayAudioTiming>[],
     VoidCallback? onComplete,
   }) async {
     final int token = ++_speechToken;
@@ -1016,11 +1049,111 @@ class _PlayPageState extends State<PlayPage> {
 
     _speaking = true;
     try {
-      await _speakSentences(sentences, token: token, audioUrl: audioUrl);
+      // 사전 렌더 음성이 실측 구간과 함께 오면 **문장 수와 무관하게** 그 파일
+      // 하나를 재생한다. 예전에는 한 문장짜리만 썼는데, 그러면 두 문장 이상인
+      // 고정 대사 4개가 매번 다시 합성됐다(왕복 비용 + 벤더가 갈리면 딴 목소리).
+      bool playedFromFile = false;
+      if (audioUrl != null && audioTimings.isNotEmpty) {
+        playedFromFile = await _speakFromFile(
+          audioUrl,
+          audioTimings,
+          sentences.length,
+          token: token,
+        );
+      }
+      if (!playedFromFile) {
+        await _speakSentences(sentences, token: token, audioUrl: audioUrl);
+      }
     } finally {
       if (token == _speechToken) _speaking = false;
     }
     if (mounted && token == _speechToken) onComplete?.call();
+  }
+
+  /// 상대 경로(`/tts/...`)를 백엔드 origin 기준 절대 URL로 바꾼다.
+  /// data URL과 절대 URL은 그대로 통과한다.
+  String _resolveMediaUrl(String source) => source.startsWith('/')
+      ? Uri.parse(AppConfig.apiBaseUrl).resolve(source).toString()
+      : source;
+
+  /// 재생 위치가 문장 실측 구간을 지날 때마다 [apply]에 문장 인덱스를 준다.
+  void _followTimings(
+    List<PlayAudioTiming> timings,
+    int sentenceCount,
+    void Function(int index) apply,
+  ) {
+    unawaited(_timingSub?.cancel());
+    _timingSub = _audioPlayer.onPosition.listen((Duration position) {
+      final double seconds = position.inMilliseconds / 1000.0;
+      int index = 0;
+      for (final PlayAudioTiming timing in timings) {
+        if (seconds >= timing.start) index = timing.index;
+      }
+      if (sentenceCount > 0 && index >= sentenceCount) {
+        index = sentenceCount - 1;
+      }
+      apply(index);
+    });
+  }
+
+  void _stopFollowingTimings() {
+    unawaited(_timingSub?.cancel());
+    _timingSub = null;
+  }
+
+  /// 사전 렌더 파일 하나로 대사 전체를 읽는다. 자막은 실측 구간을 따른다.
+  ///
+  /// 실패하면 false - 호출자가 문장별 합성으로 폴백한다. 토큰이 바뀌었으면
+  /// true를 돌려 폴백까지 막는다(이미 다른 발화로 넘어갔다).
+  Future<bool> _speakFromFile(
+    String audioUrl,
+    List<PlayAudioTiming> timings,
+    int sentenceCount, {
+    required int token,
+  }) async {
+    await _awaitResume(token);
+    if (!mounted || token != _speechToken) return true;
+    _followTimings(timings, sentenceCount, (int index) {
+      if (!mounted || token != _speechToken) return;
+      if (_characterSentenceIndex != index) {
+        setState(() => _characterSentenceIndex = index);
+      }
+    });
+    try {
+      await _audioPlayer.playUrl(_resolveMediaUrl(audioUrl));
+      return true;
+    } on Object catch (error) {
+      debugPrint('[dialogue] prerendered play FAILED: $error');
+      return false;
+    } finally {
+      _stopFollowingTimings();
+    }
+  }
+
+  /// 사전 렌더 내레이션 파일 하나로 장면 전체를 읽는다. 문장마다 /api/tts를
+  /// 부르던 왕복(장면당 2~4회)이 사라지고, 화자도 사전 렌더와 같아진다.
+  Future<bool> _playNarrationFromFile(
+    PlayScene scene,
+    int sentenceCount, {
+    required int token,
+  }) async {
+    final String? audioUrl = scene.narrationAudioUrl;
+    if (audioUrl == null) return false;
+    _followTimings(scene.narrationTimings, sentenceCount, (int index) {
+      if (!mounted || token != _speechToken) return;
+      if (_narrationIndex != index) {
+        setState(() => _narrationIndex = index);
+      }
+    });
+    try {
+      await _audioPlayer.playUrl(_resolveMediaUrl(audioUrl));
+      return true;
+    } on Object catch (error) {
+      debugPrint('[narration] prerendered play FAILED: $error');
+      return false;
+    } finally {
+      _stopFollowingTimings();
+    }
   }
 
   Future<void> _speakSentences(
@@ -1054,10 +1187,7 @@ class _PlayPageState extends State<PlayPage> {
           // 내레이션과 같은 규칙입니다 - 합성을 기다리는 사이에 일시정지를
           // 눌렀으면 틀지 않습니다(멈춘 뒤에 소리가 새로 나오면 안 됩니다).
           if (source.isNotEmpty && _phase != _DialoguePhase.paused) {
-            final String resolvedSource = source.startsWith('/')
-                ? Uri.parse(AppConfig.apiBaseUrl).resolve(source).toString()
-                : source;
-            await _audioPlayer.playUrl(resolvedSource);
+            await _audioPlayer.playUrl(_resolveMediaUrl(source));
             played = true;
           }
         } on Object {
@@ -1233,6 +1363,7 @@ class _PlayPageState extends State<PlayPage> {
   /// 지금 나오고 있는 말과 예약된 다음 문장을 모두 끊습니다.
   void _stopSpeaking() {
     _speechToken++;
+    _stopFollowingTimings();
     _questionTimer?.cancel();
     _listeningTimer?.cancel();
     _storyTimer?.cancel();
