@@ -54,7 +54,7 @@ void main() {
   });
 
   test('리포트 상세 더미가 5단 구조를 갖춘다', () async {
-    final ReportDetail? report = await repositoryOf().getReportDetail(104);
+    final ReportDetail? report = await repositoryOf().getReportDetail('104');
 
     expect(report, isNotNull);
     expect(report!.summary, isNotEmpty);
@@ -70,7 +70,7 @@ void main() {
   });
 
   test('리포트 텍스트에 내부 태그가 새어 나오지 않는다', () async {
-    final ReportDetail report = (await repositoryOf().getReportDetail(104))!;
+    final ReportDetail report = (await repositoryOf().getReportDetail('104'))!;
     // PRD F-09 — DECISION·REASON 같은 내부 태그가 보호자에게 보이면 실패입니다.
     const List<String> forbidden = <String>[
       'DECISION',
@@ -96,7 +96,7 @@ void main() {
   });
 
   test('보완할 부분은 권유형 문장이다', () async {
-    final ReportDetail report = (await repositoryOf().getReportDetail(104))!;
+    final ReportDetail report = (await repositoryOf().getReportDetail('104'))!;
     for (final SkillReport skill in report.skills) {
       // 단정적 부정("부족합니다", "못합니다")을 쓰지 않기로 했습니다.
       expect(skill.improvement.contains('부족'), isFalse);
@@ -105,7 +105,7 @@ void main() {
   });
 
   test('없는 세션은 예외가 아니라 null 이다', () async {
-    expect(await repositoryOf().getReportDetail(999999), isNull);
+    expect(await repositoryOf().getReportDetail('999999'), isNull);
   });
 
   test('설정 토글이 다음 조회에 반영된다', () async {

@@ -28,7 +28,10 @@ PlayTurnResult _turn({
   characterAudioUrl: null,
   mission: null,
   sceneTransition: transition,
-  analysis: PlayAnalysis(detectedElements: detected, utteranceValidity: validity),
+  analysis: PlayAnalysis(
+    detectedElements: detected,
+    utteranceValidity: validity,
+  ),
   progress: PlayProgress(mode: mode, accumulatedElements: accumulated),
 );
 
@@ -44,11 +47,20 @@ void main() {
   group('매니페스트', () {
     test('네 장면이 모두 있고 에셋 파일이 실재한다', () {
       final Map<String, dynamic> json =
-          jsonDecode(File('assets/images/dialogue/banggui/states.json').readAsStringSync())
+          jsonDecode(
+                File(
+                  'assets/images/dialogue/banggui/states.json',
+                ).readAsStringSync(),
+              )
               as Map<String, dynamic>;
       final DialogueCharacterManifest manifest = _manifest();
 
-      for (final String sceneId in <String>[_scene03, _scene05, _scene07, _scene09]) {
+      for (final String sceneId in <String>[
+        _scene03,
+        _scene05,
+        _scene07,
+        _scene09,
+      ]) {
         final DialogueSceneStates scene = manifest.sceneFor(sceneId: sceneId)!;
         for (final String asset in scene.allAssets) {
           expect(File(asset).existsSync(), isTrue, reason: '없는 에셋: $asset');
@@ -80,7 +92,10 @@ void main() {
 
     test('대화2의 PERSPECTIVE와 REASON은 같은 considering으로 묶인다', () {
       final DialogueCharacterStateMachine m = _machineFor(_scene05);
-      expect(m.apply(_turn(accumulated: <String>['PERSPECTIVE']))?.state, 'considering');
+      expect(
+        m.apply(_turn(accumulated: <String>['PERSPECTIVE']))?.state,
+        'considering',
+      );
       expect(
         m.apply(_turn(accumulated: <String>['PERSPECTIVE', 'REASON']))?.state,
         isNull,
@@ -102,7 +117,11 @@ void main() {
       // 대화3 우선순위: safety_planning > result_hopeful > feasibility_considering > idea_interested
       final DialogueCharacterStateMachine m = _machineFor(_scene07);
       expect(
-        m.apply(_turn(accumulated: <String>['SOLUTION', 'REASON', 'REQUEST']))?.state,
+        m
+            .apply(
+              _turn(accumulated: <String>['SOLUTION', 'REASON', 'REQUEST']),
+            )
+            ?.state,
         'safety_planning',
       );
 
@@ -127,9 +146,17 @@ void main() {
 
     test('놀림·주제 이탈·불명확은 당황 표정으로 간다', () {
       final DialogueCharacterStateMachine m = _machineFor(_scene07);
-      for (final String validity in <String>['PLAYFUL', 'OFF_TOPIC', 'UNCLEAR']) {
+      for (final String validity in <String>[
+        'PLAYFUL',
+        'OFF_TOPIC',
+        'UNCLEAR',
+      ]) {
         m.moveTo('opening');
-        expect(m.apply(_turn(validity: validity))?.state, 'hurt_confused', reason: validity);
+        expect(
+          m.apply(_turn(validity: validity))?.state,
+          'hurt_confused',
+          reason: validity,
+        );
       }
     });
 
@@ -150,7 +177,10 @@ void main() {
     test('진전이 없는 턴은 표정을 유지한다', () {
       final DialogueCharacterStateMachine m = _machineFor(_scene05);
       m.apply(_turn(accumulated: <String>['EMPATHY']));
-      expect(m.apply(_turn(accumulated: <String>['EMPATHY'], validity: 'VALID')), isNull);
+      expect(
+        m.apply(_turn(accumulated: <String>['EMPATHY'], validity: 'VALID')),
+        isNull,
+      );
       expect(m.current, 'softened');
     });
   });
@@ -172,7 +202,9 @@ void main() {
       final DialogueCharacterStateMachine m = _machineFor(_scene07);
       final DialogueStateTransition? t = m.apply(
         _turn(
-          transition: const PlaySceneTransition(next: PlayTransitionTarget.scene),
+          transition: const PlaySceneTransition(
+            next: PlayTransitionTarget.scene,
+          ),
         ),
       );
       expect(t?.state, 'closing');
@@ -184,7 +216,10 @@ void main() {
       m.apply(_turn(accumulated: <String>['EMPATHY']));
       expect(m.current, 'softened');
       final DialogueStateTransition? t = m.apply(
-        _turn(accumulated: <String>['EMPATHY', 'REQUEST'], mode: PlayResponseMode.closing),
+        _turn(
+          accumulated: <String>['EMPATHY', 'REQUEST'],
+          mode: PlayResponseMode.closing,
+        ),
       );
       expect(t?.state, 'closing');
       expect(t?.via, isNull);
@@ -195,10 +230,19 @@ void main() {
     test('primeAccumulated로 넘긴 요소는 새 충족으로 치지 않는다', () {
       final DialogueCharacterStateMachine m = _machineFor(_scene05);
       m.primeAccumulated(<String>['EMPATHY', 'PERSPECTIVE']);
-      expect(m.apply(_turn(accumulated: <String>['EMPATHY', 'PERSPECTIVE'])), isNull);
+      expect(
+        m.apply(_turn(accumulated: <String>['EMPATHY', 'PERSPECTIVE'])),
+        isNull,
+      );
       expect(m.current, 'opening');
-      expect(m.apply(_turn(accumulated: <String>['EMPATHY', 'PERSPECTIVE', 'REQUEST']))?.state,
-          'reluctant');
+      expect(
+        m
+            .apply(
+              _turn(accumulated: <String>['EMPATHY', 'PERSPECTIVE', 'REQUEST']),
+            )
+            ?.state,
+        'reluctant',
+      );
     });
 
     test('reset하면 opening으로 돌아간다', () {
@@ -206,7 +250,10 @@ void main() {
       m.apply(_turn(accumulated: <String>['EMPATHY']));
       m.reset();
       expect(m.current, 'opening');
-      expect(m.apply(_turn(accumulated: <String>['EMPATHY']))?.state, 'softened');
+      expect(
+        m.apply(_turn(accumulated: <String>['EMPATHY']))?.state,
+        'softened',
+      );
     });
   });
 
@@ -246,7 +293,10 @@ void main() {
     test('장면에 없는 요소가 와도 무시한다', () {
       final DialogueCharacterStateMachine m = _machineFor(_scene05);
       // 대화1에서 뺀 REASON이 대화3에 오는 식의 어긋남을 흘려보낸다.
-      expect(m.apply(_turn(accumulated: <String>['DECISION', 'RESULT'])), isNull);
+      expect(
+        m.apply(_turn(accumulated: <String>['DECISION', 'RESULT'])),
+        isNull,
+      );
       expect(m.current, 'opening');
     });
   });

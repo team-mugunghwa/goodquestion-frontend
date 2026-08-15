@@ -10,7 +10,7 @@ class ReportDetailViewModel extends BaseViewModel {
   ReportDetailViewModel(this._getReportDetail, {required this.sessionId});
 
   final GetReportDetailUseCase _getReportDetail;
-  final int sessionId;
+  final String sessionId;
 
   ReportDetail? _report;
 
