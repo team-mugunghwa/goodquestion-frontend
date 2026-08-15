@@ -5,6 +5,15 @@ import 'package:audioplayers/audioplayers.dart';
 abstract interface class StoryAudioPlayer {
   Future<void> playUrl(String url);
 
+  /// 지금 재생 중인 오디오의 위치. 파일 하나에 문장 여러 개가 들어 있을 때
+  /// 자막을 문장별 실측 시각(audioTimings)에 맞춰 넘기는 데 씁니다.
+  ///
+  /// **자막 시계는 반드시 이 위치에 묶습니다 — 벽시계 타이머가 아니라.**
+  /// [pause] 하면 위치 이벤트가 멈춰 자막도 함께 멈추고, [resume] 하면
+  /// 이어집니다. 별도 상태 저장이 필요 없습니다. 위치를 못 주는 구현은
+  /// 빈 스트림이면 됩니다 — 자막이 첫 문장에 머물 뿐 소리는 정상입니다.
+  Stream<Duration> get onPosition;
+
   /// 재생 위치를 그대로 둔 채 소리만 멈춥니다. [stop] 과 달리 [playUrl] 의
   /// 기다림을 풀지 않습니다 - 풀어 버리면 부르는 쪽이 "이 문장 다 들었다"로
   /// 보고 다음 문장으로 넘어가 버립니다.
@@ -32,6 +41,13 @@ class DeviceStoryAudioPlayer implements StoryAudioPlayer {
 
   AudioPlayer? _player;
 
+  /// 재생기를 문장마다 새로 만들기 때문에([playUrl]) 위치 스트림도 재생기의
+  /// 것을 그대로 노출할 수 없습니다 — 구독자가 옛 재생기에 매달려 있게 됩니다.
+  /// 브로드캐스트 컨트롤러 하나로 중계하고, 재생기가 바뀔 때 전달만 갈아 끼웁니다.
+  final StreamController<Duration> _positions =
+      StreamController<Duration>.broadcast();
+  StreamSubscription<Duration>? _positionForward;
+
   /// 지금 재생 중인 [playUrl] 이 기다리고 있는 완료 신호. [stop] 이 이걸 직접
   /// 완료시킵니다 - audioplayers 의 `stop()` 은 `onPlayerComplete` 를 쏘지
   /// 않아서, 풀어 주지 않으면 소리를 끊어도 호출한 쪽이 45초 타임아웃까지
@@ -55,6 +71,9 @@ class DeviceStoryAudioPlayer implements StoryAudioPlayer {
   static const Duration _watchdogTimeout = Duration(seconds: 45);
 
   double get _volume => _muted ? 0 : 1;
+
+  @override
+  Stream<Duration> get onPosition => _positions.stream;
 
   @override
   bool get canResume => _paused && _player != null && _pending != null;
@@ -86,6 +105,8 @@ class DeviceStoryAudioPlayer implements StoryAudioPlayer {
     }
     final Completer<void> completer = Completer<void>();
     _pending = completer;
+    unawaited(_positionForward?.cancel());
+    _positionForward = player.onPositionChanged.listen(_positions.add);
     late final StreamSubscription<void> subscription;
     subscription = player.onPlayerComplete.listen((_) {
       if (!completer.isCompleted) completer.complete();
@@ -183,6 +204,9 @@ class DeviceStoryAudioPlayer implements StoryAudioPlayer {
     _watchdog?.cancel();
     _watchdog = null;
     _releasePending();
+    await _positionForward?.cancel();
+    _positionForward = null;
+    await _positions.close();
     await _player?.dispose();
     _player = null;
   }

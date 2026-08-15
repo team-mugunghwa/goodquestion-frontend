@@ -189,6 +189,9 @@ class _PreviewAudioPlayer implements StoryAudioPlayer {
   }
 
   @override
+  Stream<Duration> get onPosition => _device.onPosition;
+
+  @override
   bool get canResume => _device.canResume;
 
   @override

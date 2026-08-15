@@ -9,6 +9,7 @@ import 'package:goodquestion/core/widgets/app_bottom_nav.dart';
 import 'package:goodquestion/features/home/data/datasources/home_local_data_source.dart';
 import 'package:goodquestion/features/home/data/repositories/home_repository_mock.dart';
 import 'package:goodquestion/features/home/domain/repositories/home_repository.dart';
+import 'package:goodquestion/features/planet/presentation/views/planet_view.dart';
 import 'package:goodquestion/features/play/presentation/views/play_recap_view.dart';
 import 'package:goodquestion/features/play/presentation/views/play_view.dart';
 import 'package:goodquestion/features/story/data/datasources/story_local_data_source.dart';
@@ -218,24 +219,13 @@ void main() {
   final Map<String, Type> expectedPage = <String, Type>{
     AppRoutes.playOf('abc'): PlayPage,
     AppRoutes.playRecapOf('abc'): PlayRecapPage,
+    AppRoutes.planet: PlanetPage,
   };
 
   expectedPage.forEach((String location, Type page) {
     testWidgets('$location 로 들어가면 $page 가 뜬다', (WidgetTester tester) async {
       await pumpAt(tester, location);
       expect(find.byType(page), findsOneWidget);
-    });
-  });
-
-  // 경로 → 아직 자리 표시자인 화면에 보여야 하는 문구.
-  final Map<String, String> expectedText = <String, String>{
-    AppRoutes.planet: '/planet - 내 행성',
-  };
-
-  expectedText.forEach((String location, String text) {
-    testWidgets('$location 로 들어가면 "$text" 가 보인다', (WidgetTester tester) async {
-      await pumpAt(tester, location);
-      expect(find.text(text), findsOneWidget);
     });
   });
 

@@ -24,16 +24,37 @@ class PlayMessage {
   final bool sttLowConfidence;
 }
 
+/// 사전 렌더 음성 안에서 문장 하나가 차지하는 구간(초).
+///
+/// 서버가 문장마다 따로 합성해 이어 붙이며 잰 **실측값**이다 — 글자수 비례
+/// 추정이 아니다. 파일 하나를 재생하면서 재생 위치가 [start]를 지날 때 자막을
+/// [index] 문장으로 넘긴다.
+class PlayAudioTiming {
+  const PlayAudioTiming({
+    required this.index,
+    required this.start,
+    required this.end,
+  });
+
+  final int index;
+  final double start;
+  final double end;
+}
+
 class PlayOpeningMessage {
   const PlayOpeningMessage({
     required this.text,
     required this.audioUrl,
     required this.alreadyOpened,
+    this.audioTimings = const <PlayAudioTiming>[],
   });
 
   final String text;
   final String? audioUrl;
   final bool alreadyOpened;
+
+  /// [audioUrl]의 문장별 실측 구간. 비어 있으면 문장별 합성으로 폴백한다.
+  final List<PlayAudioTiming> audioTimings;
 }
 
 class PlaySpeechAudio {
@@ -47,9 +68,17 @@ class PlayTranscription {
     required this.text,
     required this.confidence,
     required this.lowConfidence,
-  });
+    String? rawText,
+  }) : rawText = rawText ?? text;
 
   final String text;
+
+  /// 벤더가 돌려준 원문. 서버가 이야기 어휘 오인식을 교정해 내려주므로([text]),
+  /// 발화 제출의 sttRawText에는 **이 값을** 되올린다 - text를 되올리면 교정
+  /// 전에 실제로 무엇이 인식됐는지가 유실된다. 서버가 아직 rawText를 안 주면
+  /// text와 같다.
+  final String rawText;
+
   final double? confidence;
   final bool lowConfidence;
 }
@@ -166,6 +195,8 @@ class PlayTurnResult {
     required this.sceneTransition,
     this.closingReactionText,
     this.closingReactionAudioUrl,
+    this.characterAudioTimings = const <PlayAudioTiming>[],
+    this.closingReactionAudioTimings = const <PlayAudioTiming>[],
     this.analysis,
     this.progress,
   });
@@ -176,6 +207,8 @@ class PlayTurnResult {
   final PlaySceneTransition? sceneTransition;
   final String? closingReactionText;
   final String? closingReactionAudioUrl;
+  final List<PlayAudioTiming> characterAudioTimings;
+  final List<PlayAudioTiming> closingReactionAudioTimings;
 
   /// 표정 연출 입력. 서버가 항상 내려주지만, 안전 개입 턴 등에서 비어 올 수 있어 nullable로 둔다.
   final PlayAnalysis? analysis;
@@ -193,6 +226,8 @@ class PlayScene {
     this.imageUrl,
     this.characterName,
     this.maxTurns,
+    this.narrationAudioUrl,
+    this.narrationTimings = const <PlayAudioTiming>[],
   });
 
   final String sceneId;
@@ -202,6 +237,10 @@ class PlayScene {
   final String? imageUrl;
   final String? characterName;
   final int? maxTurns;
+
+  /// 사전 렌더 내레이션. null이면 지금처럼 문장별 실시간 합성으로 읽는다.
+  final String? narrationAudioUrl;
+  final List<PlayAudioTiming> narrationTimings;
 }
 
 class PlaySessionSnapshot {
@@ -210,6 +249,7 @@ class PlaySessionSnapshot {
     required this.currentScene,
     this.openingText,
     this.openingAudioUrl,
+    this.openingAudioTimings = const <PlayAudioTiming>[],
     this.mission,
     this.messages = const <PlayMessage>[],
   });
@@ -218,6 +258,7 @@ class PlaySessionSnapshot {
   final PlayScene? currentScene;
   final String? openingText;
   final String? openingAudioUrl;
+  final List<PlayAudioTiming> openingAudioTimings;
   final PlayMission? mission;
   final List<PlayMessage> messages;
 }

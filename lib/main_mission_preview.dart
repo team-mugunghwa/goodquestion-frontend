@@ -229,6 +229,9 @@ class _MissionPreviewRepository implements PlayRepository {
 }
 
 class _PreviewAudioPlayer implements StoryAudioPlayer {
+  @override
+  Stream<Duration> get onPosition => const Stream<Duration>.empty();
+
   const _PreviewAudioPlayer();
 
   @override

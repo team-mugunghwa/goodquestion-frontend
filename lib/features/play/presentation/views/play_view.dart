@@ -105,6 +105,11 @@ class _PlayPageState extends State<PlayPage> {
   /// 곧바로 풀어 주려고 들고 있습니다. → [_waitForSpeech] · [_waitForNarration]
   Completer<void>? _speechWait;
   Completer<void>? _narrationWait;
+
+  /// 파일 하나로 여러 문장을 읽는 동안 자막을 넘기는 구독. **재생 위치에
+  /// 묶여 있어** 일시정지하면 자막도 함께 멈춘다 — 벽시계 타이머로 만들면
+  /// 멈춘 사이에도 자막이 넘어간다.
+  StreamSubscription<Duration>? _timingSub;
   String? _lastChildText;
   bool _lastSttLowConfidence = false;
 
@@ -140,14 +145,24 @@ class _PlayPageState extends State<PlayPage> {
   bool _guideSpeaking = false;
 
   /// 아이의 확인을 기다리는 변환 결과. null 이 아니면 확인 화면이 뜨고
-  /// 마이크는 잠깁니다 - "맞아요"를 눌러야 비로소 턴이 제출됩니다.
+  /// 마이크는 잠깁니다.
   ///
   /// 변환 결과를 받자마자 제출하면 오인식을 되돌릴 방법이 없습니다. 턴이
   /// 처리되고 캐릭터가 대답한 뒤라, 아이가 하지 않은 말이 저장되고 보호자
   /// 리포트 대표 발화 후보에도 오릅니다. 저신뢰 안내가 의미 있는 유일한
   /// 시점도 제출 전이라 여기서 한 번 끊습니다. → 백엔드
   /// `docs/트러블슈팅_STT_신뢰도_산출.md` 3절
+  ///
+  /// 다만 **서버가 저신뢰로 표시한 결과에만** 띄웁니다. 매 턴 "맞아요"를
+  /// 받으면 5-7세에게는 대화 리듬이 끊기고, 잘 알아들은 턴까지 탭이 하나씩
+  /// 늘어납니다. 확인이 값을 하는 곳은 서버가 스스로 미덥지 않다고 말한
+  /// 순간뿐입니다.
   PlayTranscription? _pendingTranscription;
+
+  /// 확인 화면 무반응 시계. 아이가 자리를 뜨거나 버튼을 못 찾아도 이야기가
+  /// 멈추지 않게 6초 뒤 그대로 제출합니다 - 시험이 아니라 놀이라서 막히지
+  /// 않는 쪽이 낫습니다.
+  Timer? _confirmTimer;
   String? _retainedStoryImageUrl;
 
   /// 지금 화면이 붙잡고 있는 장면. 장면이 바뀌는 순간을 [_activateSnapshot]
@@ -247,11 +262,13 @@ class _PlayPageState extends State<PlayPage> {
     _questionTimer?.cancel();
     _listeningTimer?.cancel();
     _storyTimer?.cancel();
+    _confirmTimer?.cancel();
     // 화면을 떠나면 기다리던 발화 루프들도 풀어 줍니다 - 안 풀면 취소된
     // 타이머·닫힌 문 앞에서 영영 매달린 채로 남습니다.
     _releaseSpeechWait();
     _releaseNarrationWait();
     _openPauseGate();
+    _stopFollowingTimings();
     unawaited(_voiceRecorder.dispose());
     unawaited(_audioPlayer.dispose());
     super.dispose();
@@ -374,6 +391,7 @@ class _PlayPageState extends State<PlayPage> {
         _playCharacterMessage(
           snapshot.openingText!,
           audioUrl: snapshot.openingAudioUrl,
+          audioTimings: snapshot.openingAudioTimings,
           onComplete: _startListening,
         ),
       );
@@ -397,6 +415,7 @@ class _PlayPageState extends State<PlayPage> {
       await _playCharacterMessage(
         opening.text,
         audioUrl: opening.audioUrl,
+        audioTimings: opening.audioTimings,
         onComplete: _startListening,
       );
     } on Failure catch (error) {
@@ -468,6 +487,18 @@ class _PlayPageState extends State<PlayPage> {
         setState(() {
           _submittingUtterance = false;
           _transcribingVoice = false;
+        });
+        return;
+      }
+      // 벤더 계열 실패는 발화 제출에서도 화면을 갈아엎지 않습니다. 듣기
+      // 상태로 돌려 아이가 다시 말할 수 있게 둡니다.
+      final String? voiceHint = _voiceRetryHint(error);
+      if (voiceHint != null) {
+        setState(() {
+          _submittingUtterance = false;
+          _transcribingVoice = false;
+          _phase = _DialoguePhase.listening;
+          _sttHint = voiceHint;
         });
         return;
       }
@@ -543,11 +574,12 @@ class _PlayPageState extends State<PlayPage> {
   /// 서버 메시지를 그대로 씁니다. → `docs/이야기_전개_가이드.md` 6장
   String _describeFailure(Failure error) {
     if (error is ServerFailure) {
+      // 목소리 관련 코드는 마이크 옆 안내와 **같은 문구를 씁니다**. 두 벌로
+      // 두면 같은 상황에서 화면마다 다른 말이 떠서, 아이는 다른 일이 난 줄
+      // 압니다.
+      final String? voiceHint = _voiceRetryHint(error);
+      if (voiceHint != null) return voiceHint;
       switch (error.code) {
-        case 'STT_EMPTY_TEXT':
-          return '잘 못 들었어요. 다시 말해 볼까?';
-        case 'AUDIO_TOO_LARGE':
-          return '조금만 짧게 말해 줄래?';
         case 'MISSION_NOT_EXPOSED':
           return '미션을 다시 확인하고 있어요.';
         case 'SESSION_NOT_IN_PROGRESS':
@@ -640,8 +672,9 @@ class _PlayPageState extends State<PlayPage> {
         _listeningTimer = Timer.periodic(const Duration(seconds: 1), (_) {
           if (mounted && _recordingVoice) {
             setState(() => _listeningSeconds++);
-            // 업로드 한도에 닿기 전에 여기까지 말한 것을 보낸다. 상한을 넘겨
-            // 두면 통째로 413이 나서 아이가 말한 전부를 잃는다.
+            // 업로드 한도(10MB, 웹 48kHz 기준 109초)에 닿기 전에 여기까지
+            // 말한 것을 보낸다. 상한을 넘겨 두면 통째로 413이 나서 아이가
+            // 말한 전부를 잃는다.
             if (_listeningSeconds >= maxRecordingSeconds) {
               unawaited(_toggleVoiceAnswer());
             }
@@ -664,31 +697,47 @@ class _PlayPageState extends State<PlayPage> {
       final PlayTranscription transcription = await widget.repository!
           .transcribeAudio(audio);
       if (!mounted) return;
-      // 바로 제출하지 않습니다. 아이가 변환 결과를 보고 "맞아요"를 눌러야
-      // 턴이 나갑니다 - 오인식을 되돌릴 수 있는 유일한 시점입니다.
-      setState(() {
-        _transcribingVoice = false;
-        _pendingTranscription = transcription;
-        // 선택지 판은 말풍선 자리를 대신 쓰므로, 떠 있는 채로 두면 확인
-        // 화면이 그 밑에 가려집니다. 목소리로 말하는 데 성공한 참이니
-        // 카드는 접습니다 - 다시 못 알아들으면 3회째에 다시 내려옵니다.
-        _closeChoicesState();
-      });
+      if (transcription.lowConfidence) {
+        // 서버가 "잘못 들었을 수 있다"고 표시한 결과입니다. 바로 제출하지 않고
+        // 아이에게 보여 줍니다 - 재발화 한 번이 오인식을 정인식으로 바꾸는
+        // 가장 값싼 개입이고, 오인식을 되돌릴 수 있는 유일한 시점입니다.
+        // 무반응이면 6초 뒤 그대로 제출합니다.
+        setState(() {
+          _transcribingVoice = false;
+          _pendingTranscription = transcription;
+          // 선택지 판은 말풍선 자리를 대신 쓰므로, 떠 있는 채로 두면 확인
+          // 화면이 그 밑에 가려집니다. 목소리로 말하는 데 성공한 참이니
+          // 카드는 접습니다 - 다시 못 알아들으면 3회째에 다시 내려옵니다.
+          _closeChoicesState();
+        });
+        _confirmTimer?.cancel();
+        _confirmTimer = Timer(
+          const Duration(seconds: 6),
+          () => unawaited(_confirmTranscription()),
+        );
+        return;
+      }
+      // 잘 알아들은 턴은 확인 없이 흘려보냅니다. 다만 선택지 판은 접습니다 -
+      // 목소리로 말하는 데 성공한 참이라 카드가 남아 있을 이유가 없습니다.
+      if (_choiceCards.isNotEmpty) setState(_closeChoicesState);
+      await _submitDialogue(
+        transcription.text,
+        sttRawText: transcription.rawText,
+        sttConfidence: transcription.confidence,
+        lowConfidence: transcription.lowConfidence,
+      );
     } on Failure catch (error) {
       // 무음이거나 인식 실패 - 흔히 겪는 상황이라 화면을 통째로 에러로
       // 바꾸지 않고 마이크 옆에 짧게 안내한 뒤 바로 다시 녹음할 수 있게
       // 둡니다. → `docs/이야기_전개_가이드.md` 3.4, 6장
-      if (error is ServerFailure && error.code == 'STT_EMPTY_TEXT') {
-        _recordFailedSttAttempt('잘 못 들었어요. 다시 말해 볼까?');
-        return;
-      }
-      // 녹음이 서버 한도를 넘은 경우(413)도 같은 자리입니다. 실서버에서
+      // 녹음이 서버 한도를 넘은 경우(413)도 이 자리입니다. 실서버에서
       // 확인해 보니 전면 에러 화면이 떠서 아이가 대화 중간에 통째로 튕겼는데,
       // 이건 이야기가 깨진 게 아니라 "이번에 말한 게 너무 길었다"일 뿐입니다.
       // 다시 녹음하면 그만이라 자리를 지키고 안내만 바꿉니다.
       // → `docs/이야기_전개_가이드.md` 6장
-      if (error is ServerFailure && error.code == 'AUDIO_TOO_LARGE') {
-        _recordFailedSttAttempt('조금만 짧게 말해 줄래?');
+      final String? voiceHint = _voiceRetryHint(error);
+      if (voiceHint != null) {
+        _recordFailedSttAttempt(voiceHint, codeSpecific: true);
         return;
       }
       if (!mounted) return;
@@ -707,6 +756,27 @@ class _PlayPageState extends State<PlayPage> {
     }
   }
 
+  /// 마이크 옆 안내로 처리할 실패인지 판별하고, 맞으면 아이가 읽을 문구를
+  /// 돌려줍니다. 화면 전체를 에러로 바꾸지 않는 것이 요점입니다 - 아이는
+  /// 대화 중이고, 이 부류는 다시 말하거나 잠시 뒤 하면 풀립니다.
+  ///
+  /// 안내가 갈리는 이유: `AUDIO_TOO_LARGE`는 **같은 녹음을 다시 보내면 또
+  /// 실패**하므로 "짧게"라고 해야 하고, 벤더 계열은 그대로 다시 하면 되는
+  /// 부류라 기다리라고 해야 합니다. 둘을 같은 문구로 묶으면 아이가 계속
+  /// 막히거나 그냥 포기합니다. → 명세 1장 에러 표
+  String? _voiceRetryHint(Failure error) {
+    if (error is! ServerFailure) return null;
+    return switch (error.code) {
+      'STT_EMPTY_TEXT' => '잘 못 들었어요. 다시 말해 볼까?',
+      'AUDIO_TOO_LARGE' => '조금만 짧게 말해 줄래?',
+      // 서버 원문("서버 오류가 발생했습니다")은 아이가 읽을 말이 아닙니다.
+      'AI_RATE_LIMITED' ||
+      'AI_UPSTREAM_ERROR' ||
+      'AI_UNAVAILABLE' => '지금은 잘 안 들려요. 잠시 뒤에 다시 해볼까?',
+      _ => null,
+    };
+  }
+
   /// STT 가 텍스트를 못 만들어 다시 녹음해야 할 때 공통으로 부릅니다.
   ///
   /// 화면을 에러로 바꾸지 않는 것은 그대로고, 재시도 횟수를 세어 뒀다가
@@ -717,7 +787,7 @@ class _PlayPageState extends State<PlayPage> {
   ///
   /// 안내 음성이 없는 장면(3·5·7·9 밖)이나 내려놓을 카드를 한 장도 만들 수
   /// 없을 때는 예전처럼 [hint] 만 답니다 - 빈 선택지 판은 띄우지 않습니다.
-  void _recordFailedSttAttempt(String hint) {
+  void _recordFailedSttAttempt(String hint, {bool codeSpecific = false}) {
     if (!mounted) return;
     final int attempt = _sttRetryCount + 1;
     final int? sceneOrder = _snapshot?.currentScene?.sceneOrder;
@@ -738,7 +808,12 @@ class _PlayPageState extends State<PlayPage> {
       _sttRetryCount = attempt;
       // 들려줄 말이 있으면 자막은 캐릭터 말풍선이 맡습니다. 작은 글씨 안내를
       // 겹쳐 두면 같은 말이 두 번 뜹니다.
-      _sttHint = guide == null ? hint : null;
+      //
+      // 다만 **원인이 분명한 안내는 남깁니다**([codeSpecific]). 캐릭터가 하는
+      // 말은 어느 실패에나 같은 "다시 한 번 말해 줄래?"라서, 이걸로 덮으면
+      // 413에 걸린 아이가 또 길게 말해 또 413을 받습니다. 원인별로 갈라 준
+      // 코드(백엔드 #68)가 화면까지 오지 못하면 갈라 준 의미가 없습니다.
+      _sttHint = (guide == null || codeSpecific) ? hint : null;
       if (cards.isNotEmpty) _choiceCards = cards;
     });
     if (guide != null) unawaited(_speakGuide(guide));
@@ -812,14 +887,19 @@ class _PlayPageState extends State<PlayPage> {
     _guideSpeaking = false;
   }
 
-  /// 아이가 변환 결과를 맞다고 확인했습니다. 이제서야 턴을 보냅니다.
+  /// 아이가 변환 결과를 맞다고 확인했습니다(또는 6초 무반응). 이제서야 턴을
+  /// 보냅니다.
   Future<void> _confirmTranscription() async {
     final PlayTranscription? pending = _pendingTranscription;
-    if (pending == null || _submittingUtterance) return;
+    _confirmTimer?.cancel();
+    _confirmTimer = null;
+    if (!mounted || pending == null || _submittingUtterance) return;
     setState(() => _pendingTranscription = null);
     await _submitDialogue(
       pending.text,
-      sttRawText: pending.text,
+      // 화면에 보인 텍스트가 아니라 **STT 원문**을 보냅니다. 서버는 이 값으로
+      // 인식 품질을 재는데, 다듬은 텍스트를 보내면 그 신호가 지워집니다.
+      sttRawText: pending.rawText,
       sttConfidence: pending.confidence,
       lowConfidence: pending.lowConfidence,
     );
@@ -833,7 +913,11 @@ class _PlayPageState extends State<PlayPage> {
   /// (`STT_EMPTY_TEXT`) 내려놓는 것이고, 여기는 알아듣긴 했는데 아이가 아니라고
   /// 한 자리라 [_recordFailedSttAttempt] 를 타지 않습니다.
   Future<void> _retryTranscription() async {
-    if (_pendingTranscription == null || _submittingUtterance) return;
+    _confirmTimer?.cancel();
+    _confirmTimer = null;
+    if (!mounted || _pendingTranscription == null || _submittingUtterance) {
+      return;
+    }
     setState(() {
       _pendingTranscription = null;
       _sttRetryCount++;
@@ -877,11 +961,16 @@ class _PlayPageState extends State<PlayPage> {
       await _playCharacterMessage(
         reaction,
         audioUrl: result.closingReactionAudioUrl,
+        audioTimings: result.closingReactionAudioTimings,
       );
     }
     final String? reply = result.characterText;
     if (reply != null && reply.trim().isNotEmpty) {
-      await _playCharacterMessage(reply, audioUrl: result.characterAudioUrl);
+      await _playCharacterMessage(
+        reply,
+        audioUrl: result.characterAudioUrl,
+        audioTimings: result.characterAudioTimings,
+      );
     }
     if (!mounted) return;
 
@@ -974,6 +1063,25 @@ class _PlayPageState extends State<PlayPage> {
         unawaited(_completeStoryScene());
       });
       return;
+    }
+    final PlayScene? scene = _snapshot?.currentScene;
+    if (_narrationIndex == 0 &&
+        scene != null &&
+        scene.narrationAudioUrl != null &&
+        scene.narrationTimings.isNotEmpty) {
+      final bool playedFromFile = await _playNarrationFromFile(
+        scene,
+        sentences.length,
+        token: token,
+      );
+      if (!mounted || token != _speechToken) return;
+      if (_storyPaused) return;
+      if (playedFromFile) {
+        setState(() => _narrationIndex = sentences.length);
+        _scheduleCurrentNarration();
+        return;
+      }
+      // 재생 실패 - 아래 문장별 합성으로 그대로 폴백한다.
     }
     final String sentence = sentences[_narrationIndex];
     bool played = false;
@@ -1167,6 +1275,7 @@ class _PlayPageState extends State<PlayPage> {
   Future<void> _playCharacterMessage(
     String text, {
     String? audioUrl,
+    List<PlayAudioTiming> audioTimings = const <PlayAudioTiming>[],
     VoidCallback? onComplete,
   }) async {
     final int token = ++_speechToken;
@@ -1189,11 +1298,111 @@ class _PlayPageState extends State<PlayPage> {
 
     _speaking = true;
     try {
-      await _speakSentences(sentences, token: token, audioUrl: audioUrl);
+      // 사전 렌더 음성이 실측 구간과 함께 오면 **문장 수와 무관하게** 그 파일
+      // 하나를 재생한다. 예전에는 한 문장짜리만 썼는데, 그러면 두 문장 이상인
+      // 고정 대사 4개가 매번 다시 합성됐다(왕복 비용 + 벤더가 갈리면 딴 목소리).
+      bool playedFromFile = false;
+      if (audioUrl != null && audioTimings.isNotEmpty) {
+        playedFromFile = await _speakFromFile(
+          audioUrl,
+          audioTimings,
+          sentences.length,
+          token: token,
+        );
+      }
+      if (!playedFromFile) {
+        await _speakSentences(sentences, token: token, audioUrl: audioUrl);
+      }
     } finally {
       if (token == _speechToken) _speaking = false;
     }
     if (mounted && token == _speechToken) onComplete?.call();
+  }
+
+  /// 상대 경로(`/tts/...`)를 백엔드 origin 기준 절대 URL로 바꾼다.
+  /// data URL과 절대 URL은 그대로 통과한다.
+  String _resolveMediaUrl(String source) => source.startsWith('/')
+      ? Uri.parse(AppConfig.apiBaseUrl).resolve(source).toString()
+      : source;
+
+  /// 재생 위치가 문장 실측 구간을 지날 때마다 [apply]에 문장 인덱스를 준다.
+  void _followTimings(
+    List<PlayAudioTiming> timings,
+    int sentenceCount,
+    void Function(int index) apply,
+  ) {
+    unawaited(_timingSub?.cancel());
+    _timingSub = _audioPlayer.onPosition.listen((Duration position) {
+      final double seconds = position.inMilliseconds / 1000.0;
+      int index = 0;
+      for (final PlayAudioTiming timing in timings) {
+        if (seconds >= timing.start) index = timing.index;
+      }
+      if (sentenceCount > 0 && index >= sentenceCount) {
+        index = sentenceCount - 1;
+      }
+      apply(index);
+    });
+  }
+
+  void _stopFollowingTimings() {
+    unawaited(_timingSub?.cancel());
+    _timingSub = null;
+  }
+
+  /// 사전 렌더 파일 하나로 대사 전체를 읽는다. 자막은 실측 구간을 따른다.
+  ///
+  /// 실패하면 false - 호출자가 문장별 합성으로 폴백한다. 토큰이 바뀌었으면
+  /// true를 돌려 폴백까지 막는다(이미 다른 발화로 넘어갔다).
+  Future<bool> _speakFromFile(
+    String audioUrl,
+    List<PlayAudioTiming> timings,
+    int sentenceCount, {
+    required int token,
+  }) async {
+    await _awaitResume(token);
+    if (!mounted || token != _speechToken) return true;
+    _followTimings(timings, sentenceCount, (int index) {
+      if (!mounted || token != _speechToken) return;
+      if (_characterSentenceIndex != index) {
+        setState(() => _characterSentenceIndex = index);
+      }
+    });
+    try {
+      await _audioPlayer.playUrl(_resolveMediaUrl(audioUrl));
+      return true;
+    } on Object catch (error) {
+      debugPrint('[dialogue] prerendered play FAILED: $error');
+      return false;
+    } finally {
+      _stopFollowingTimings();
+    }
+  }
+
+  /// 사전 렌더 내레이션 파일 하나로 장면 전체를 읽는다. 문장마다 /api/tts를
+  /// 부르던 왕복(장면당 2~4회)이 사라지고, 화자도 사전 렌더와 같아진다.
+  Future<bool> _playNarrationFromFile(
+    PlayScene scene,
+    int sentenceCount, {
+    required int token,
+  }) async {
+    final String? audioUrl = scene.narrationAudioUrl;
+    if (audioUrl == null) return false;
+    _followTimings(scene.narrationTimings, sentenceCount, (int index) {
+      if (!mounted || token != _speechToken) return;
+      if (_narrationIndex != index) {
+        setState(() => _narrationIndex = index);
+      }
+    });
+    try {
+      await _audioPlayer.playUrl(_resolveMediaUrl(audioUrl));
+      return true;
+    } on Object catch (error) {
+      debugPrint('[narration] prerendered play FAILED: $error');
+      return false;
+    } finally {
+      _stopFollowingTimings();
+    }
   }
 
   Future<void> _speakSentences(
@@ -1227,10 +1436,7 @@ class _PlayPageState extends State<PlayPage> {
           // 내레이션과 같은 규칙입니다 - 합성을 기다리는 사이에 일시정지를
           // 눌렀으면 틀지 않습니다(멈춘 뒤에 소리가 새로 나오면 안 됩니다).
           if (source.isNotEmpty && _phase != _DialoguePhase.paused) {
-            final String resolvedSource = source.startsWith('/')
-                ? Uri.parse(AppConfig.apiBaseUrl).resolve(source).toString()
-                : source;
-            await _audioPlayer.playUrl(resolvedSource);
+            await _audioPlayer.playUrl(_resolveMediaUrl(source));
             played = true;
           }
         } on Object {
@@ -1411,6 +1617,7 @@ class _PlayPageState extends State<PlayPage> {
   /// 지금 나오고 있는 말과 예약된 다음 문장을 모두 끊습니다.
   void _stopSpeaking() {
     _speechToken++;
+    _stopFollowingTimings();
     _questionTimer?.cancel();
     _listeningTimer?.cancel();
     _storyTimer?.cancel();
