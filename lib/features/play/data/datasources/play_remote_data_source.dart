@@ -46,6 +46,9 @@ class PlayRemoteDataSource {
                 return PlayOpeningMessage(
                   text: text.trim(),
                   audioUrl: messageValue['audioUrl'] as String?,
+                  audioTimings: PlaySessionDto.audioTimings(
+                    messageValue['audioTimings'],
+                  ),
                   alreadyOpened: data['alreadyOpened'] as bool? ?? false,
                 );
               }
