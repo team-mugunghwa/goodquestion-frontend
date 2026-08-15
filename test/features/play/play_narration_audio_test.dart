@@ -93,9 +93,7 @@ void main() {
     );
   });
 
-  testWidgets('사전 렌더 음성이 없으면 기존 문장별 합성 경로를 쓴다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('사전 렌더 음성이 없으면 기존 문장별 합성 경로를 쓴다', (WidgetTester tester) async {
     final _NarrationRepository repository = _NarrationRepository(
       withAudio: false,
     );
@@ -107,9 +105,7 @@ void main() {
     expect(repository.synthesizedTexts, contains('짧은 첫 문장.'));
   });
 
-  testWidgets('녹음이 너무 길면 짧게 말하라고 안내하고 화면은 그대로 둔다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('녹음이 너무 길면 짧게 말하라고 안내하고 화면은 그대로 둔다', (WidgetTester tester) async {
     final _SttFailureRepository repository = _SttFailureRepository(
       const ServerFailure(message: '서버 오류가 발생했습니다.', code: 'AUDIO_TOO_LARGE'),
     );
@@ -198,7 +194,9 @@ class _NarrationRepository implements PlayRepository {
           sceneOrder: 1,
           sceneType: PlaySceneType.story,
           narrationSentences: const <String>['짧은 첫 문장.', '두 번째 문장이에요.'],
-          narrationAudioUrl: withAudio ? '/tts/banggui/sc_banggui_01.mp3' : null,
+          narrationAudioUrl: withAudio
+              ? '/tts/banggui/sc_banggui_01.mp3'
+              : null,
           narrationTimings: withAudio
               ? const <PlayNarrationTiming>[
                   PlayNarrationTiming(index: 0, start: 0, end: 6),
