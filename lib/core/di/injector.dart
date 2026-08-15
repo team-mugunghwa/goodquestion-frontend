@@ -300,35 +300,36 @@ Future<bool> _refreshTokens() =>
 ///
 /// 응답은 `AuthResponse` 의 `tokens` 처럼 감싸져 있지 않고 `TokenResponse`
 /// 를 그대로 돌려줍니다 — `{accessToken, refreshToken, accessTokenExpiresIn}`.
+///
+/// **`DioException`(타임아웃·연결 끊김)은 여기서 삼키지 않고 그대로
+/// 던집니다.** 이 함수는 `DioClient._request` 의 같은 try 블록 안에서
+/// 호출되므로, 그대로 두면 그 블록의 `on DioException catch` 가 받아
+/// `NetworkException` 으로 바뀝니다 - "리프레시 토큰이 서버에서 거절됨"과
+/// "네트워크가 잠깐 끊겨서 물어보지도 못함"을 같은 실패로 묶어서 매번
+/// 로그아웃시키면 안 됩니다. 후자는 토큰을 그대로 두고 이 요청 한 번만
+/// 실패시켜야, 네트워크가 돌아왔을 때 같은 토큰으로 다시 시도할 수 있습니다.
+/// 서버가 실제로 401/400 을 준 경우만 `false` 를 돌려줍니다.
 Future<bool> _doRefreshTokens() async {
   final AuthTokenStore tokens = getIt<AuthTokenStore>();
   final String? refreshToken = await tokens.readRefresh();
   if (refreshToken == null || refreshToken.isEmpty) return false;
-  try {
-    final Response<dynamic> response = await getIt<DioClient>().raw
-        .post<dynamic>(
-          '/auth/refresh',
-          data: <String, dynamic>{'refreshToken': refreshToken},
-        );
-    if ((response.statusCode ?? 0) != 200) return false;
-    final Object? body = response.data;
-    final Map<String, dynamic>? map = body is Map<String, dynamic>
-        ? body
-        : null;
-    final String? newAccess = map?['accessToken'] as String?;
-    final String? newRefresh = map?['refreshToken'] as String?;
-    if (newAccess == null ||
-        newAccess.isEmpty ||
-        newRefresh == null ||
-        newRefresh.isEmpty) {
-      return false;
-    }
-    await tokens.saveRefreshed(
-      accessToken: newAccess,
-      refreshToken: newRefresh,
-    );
-    return true;
-  } on DioException {
+  final Response<dynamic> response = await getIt<DioClient>().raw.post<dynamic>(
+    '/auth/refresh',
+    data: <String, dynamic>{'refreshToken': refreshToken},
+  );
+  if ((response.statusCode ?? 0) != 200) return false;
+  final Object? body = response.data;
+  final Map<String, dynamic>? map = body is Map<String, dynamic>
+      ? body
+      : null;
+  final String? newAccess = map?['accessToken'] as String?;
+  final String? newRefresh = map?['refreshToken'] as String?;
+  if (newAccess == null ||
+      newAccess.isEmpty ||
+      newRefresh == null ||
+      newRefresh.isEmpty) {
     return false;
   }
+  await tokens.saveRefreshed(accessToken: newAccess, refreshToken: newRefresh);
+  return true;
 }
