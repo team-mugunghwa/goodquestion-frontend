@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -87,7 +88,73 @@ class DeviceMissionVoiceRecorder implements MissionVoiceRecorder {
     final Uint8List pcm = _audioBytes?.takeBytes() ?? Uint8List(0);
     _clearStream();
     if (pcm.isEmpty) return null;
-    return _withWavHeader(pcm);
+    // 서버가 실측으로 문서화한 환각 트리거(무음·뭉개진 입력)를 발생원에서
+    // 없앤다. 자동 녹음 시작 구조라 선행 무음이 항상 실리는데, 무음 구간은
+    // 인식에 보태는 것 없이 환각 확률과 업로드 크기만 키운다.
+    final Uint8List? gated = trimSilence(pcm, _sampleRate);
+    if (gated == null) return null;
+    return _withWavHeader(gated);
+  }
+
+  /// 앞뒤 무음을 걷어내고, 걷어낸 뒤 목소리가 사실상 없으면 null.
+  ///
+  /// 창 20ms RMS로 훑는다. 임계는 **절대치(풀스케일 1.5%)와 상대치(클립 최대
+  /// RMS의 15%) 중 낮은 쪽** - autoGain이 켜져 있어 무음 구간 레벨이 떠
+  /// 있을 수 있고, 속삭이는 아이를 절대치 하나로 자르면 안 된다.
+  /// 목소리 앞뒤로 250ms 여유를 남긴다(어두 자음이 잘리면 오인식이 는다).
+  static Uint8List? trimSilence(Uint8List pcm, int sampleRate) {
+    final Int16List samples = pcm.buffer.asInt16List(
+      pcm.offsetInBytes,
+      pcm.lengthInBytes ~/ 2,
+    );
+    if (samples.isEmpty) return null;
+    final int window = sampleRate ~/ 50; // 20ms
+    if (window == 0) return pcm;
+
+    final List<double> rms = <double>[];
+    for (int start = 0; start < samples.length; start += window) {
+      final int end = (start + window < samples.length)
+          ? start + window
+          : samples.length;
+      double sum = 0;
+      for (int i = start; i < end; i++) {
+        final double v = samples[i].toDouble();
+        sum += v * v;
+      }
+      rms.add(math.sqrt(sum / (end - start)));
+    }
+    double maxRms = 0;
+    for (final double value in rms) {
+      if (value > maxRms) maxRms = value;
+    }
+    const double absoluteFloor = 32768 * 0.015;
+    final double threshold = math.min(absoluteFloor, maxRms * 0.15);
+
+    int? firstVoiced;
+    int? lastVoiced;
+    for (int i = 0; i < rms.length; i++) {
+      if (rms[i] > threshold) {
+        firstVoiced ??= i;
+        lastVoiced = i;
+      }
+    }
+    if (firstVoiced == null || lastVoiced == null) return null; // 전체 무음
+
+    // 목소리 구간 자체가 0.3초 미만이면 말이라기보다 잡음(마이크 부딪힘 등)이다.
+    // 패딩을 더한 **뒤에** 재면 짧은 툭 소리도 길어 보여서 통과해 버린다.
+    if ((lastVoiced + 1 - firstVoiced) * window < sampleRate * 0.3) {
+      return null;
+    }
+
+    final int pad = sampleRate ~/ 4; // 250ms - 어두 자음이 잘리면 오인식이 는다
+    final int from = math.max(0, firstVoiced * window - pad);
+    final int to = math.min(samples.length, (lastVoiced + 1) * window + pad);
+
+    final Int16List trimmed = samples.sublist(from, to);
+    return trimmed.buffer.asUint8List(
+      trimmed.offsetInBytes,
+      trimmed.lengthInBytes,
+    );
   }
 
   @override
