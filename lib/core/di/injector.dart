@@ -26,6 +26,7 @@ import '../../features/mypage/domain/guardian_gate.dart';
 import '../../features/mypage/domain/repositories/my_page_repository.dart';
 import '../../features/mypage/domain/usecases/my_page_use_cases.dart';
 import '../../features/play/data/datasources/play_remote_data_source.dart';
+import '../../features/play/data/dialogue_word_capture.dart';
 import '../../features/play/data/repositories/play_repository_impl.dart';
 import '../../features/play/domain/repositories/play_repository.dart';
 import '../../features/question/data/datasources/question_remote_data_source.dart';
@@ -182,6 +183,14 @@ Future<void> configureDependencies() async {
     )
     ..registerLazySingleton<PlayRepository>(
       () => PlayRepositoryImpl(getIt<PlayRemoteDataSource>()),
+    )
+    // 재생 화면에서 고른 단어를 단어장에 담는 통로. 단어장 화면의 실서버
+    // 연동(#32)과 계층이 겹치지 않게 자족적으로 둡니다.
+    ..registerLazySingleton<DialogueWordCapture>(
+      () => RemoteDialogueWordCapture(
+        getIt<DioClient>(),
+        getIt<ChildProfileRepository>(),
+      ),
     );
 
   // ---- word ----
