@@ -60,6 +60,50 @@ void main() {
     expect(submitted, contains('어떤 일이 생길까요?: 음성 대답 4'));
   });
 
+  testWidgets('미션 녹음도 상한에 닿으면 자동으로 멈추고 변환을 요청한다', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1280, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    int transcribeCalls = 0;
+    const PlayMission mission = PlayMission(
+      missionId: 'mission_1',
+      missionType: PlayMissionType.problemSolving,
+      title: '배를 안전하게 받아요',
+      description: '생각을 말해 보세요.',
+      questions: <PlayMissionQuestion>[
+        PlayMissionQuestion(key: 'tool', label: '어떤 도구가 필요할까요?'),
+      ],
+      cards: <PlayMissionCard>[],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MissionOverlay(
+          mission: mission,
+          recorder: _FakeVoiceRecorder(),
+          transcribeAudio: (_) async {
+            transcribeCalls++;
+            return '길게 말한 대답';
+          },
+          onSubmit: (_) {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.bySemanticsLabel('눌러서 말하기'));
+    await tester.pump();
+    expect(find.bySemanticsLabel('말하기 완료'), findsOneWidget);
+
+    // 완료를 누르지 않은 채 상한까지 시간이 흐릅니다.
+    await tester.pump(const Duration(seconds: maxRecordingSeconds));
+    await tester.pumpAndSettle();
+
+    expect(transcribeCalls, 1, reason: '상한에서 자동으로 멈추고 변환을 요청해야 합니다');
+    expect(find.text('길게 말한 대답'), findsOneWidget);
+  });
+
   testWidgets('관점 전환 미션은 대표 이미지와 서버 문장 틀을 표시한다', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1280, 720);
     tester.view.devicePixelRatio = 1;

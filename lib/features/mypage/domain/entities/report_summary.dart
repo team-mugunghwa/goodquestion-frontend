@@ -10,7 +10,8 @@ class ReportSummary {
     this.storyImage,
   });
 
-  final int sessionId;
+  /// 백엔드 세션 UUID. 숫자로 바꾸면 UUID 라우트가 손실됩니다.
+  final String sessionId;
   final String storyTitle;
   final String? storyImage;
   final DateTime? completedAt;

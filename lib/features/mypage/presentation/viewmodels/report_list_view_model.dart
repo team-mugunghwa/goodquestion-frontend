@@ -23,7 +23,7 @@ class ReportListViewModel extends BaseViewModel {
 
   /// 카드를 눌러 상세로 들어가는 순간. **배지를 먼저 지우고** 이동합니다 —
   /// 상세를 보고 돌아왔는데 NEW 가 그대로면 읽은 건지 알 수 없습니다.
-  Future<void> markAsRead(int sessionId) async {
+  Future<void> markAsRead(String sessionId) async {
     await _markAsRead(sessionId);
     final ReportList? current = _list;
     if (current == null) return;

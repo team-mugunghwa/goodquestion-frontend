@@ -116,7 +116,7 @@ class ReportSummaryDto {
 
   factory ReportSummaryDto.fromJson(Map<String, dynamic> json) =>
       ReportSummaryDto(
-        sessionId: json['sessionId'] as int? ?? 0,
+        sessionId: json['sessionId']?.toString() ?? '',
         storyTitle: json['storyTitle'] as String? ?? '',
         storyImage: json['storyImage'] as String?,
         completedAt: json['completedAt'] as String?,
@@ -125,7 +125,7 @@ class ReportSummaryDto {
         highlightUtterance: json['highlightUtterance'] as String? ?? '',
       );
 
-  final int sessionId;
+  final String sessionId;
   final String storyTitle;
   final String? storyImage;
   final String? completedAt;
@@ -159,7 +159,7 @@ class ReportDetailDto {
 
   factory ReportDetailDto.fromJson(Map<String, dynamic> json) =>
       ReportDetailDto(
-        sessionId: json['sessionId'] as int? ?? 0,
+        sessionId: json['sessionId']?.toString() ?? '',
         childName: json['childName'] as String? ?? '',
         storyTitle: json['storyTitle'] as String? ?? '',
         storyImage: json['storyImage'] as String?,
@@ -179,7 +179,7 @@ class ReportDetailDto {
                 .toList(growable: false),
       );
 
-  final int sessionId;
+  final String sessionId;
   final String childName;
   final String storyTitle;
   final String? storyImage;

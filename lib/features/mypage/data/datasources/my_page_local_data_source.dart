@@ -23,11 +23,11 @@ class MyPageLocalDataSource {
       ReportListDto.fromJson(await _readObject(AppAssets.reportListDummy));
 
   /// 없는 세션이면 `null`.
-  Future<ReportDetailDto?> fetchReportDetail(int sessionId) async {
+  Future<ReportDetailDto?> fetchReportDetail(String sessionId) async {
     final Map<String, dynamic> all = await _readObject(
       AppAssets.reportDetailsDummy,
     );
-    final Object? entry = all['$sessionId'];
+    final Object? entry = all[sessionId];
     if (entry is! Map<String, dynamic>) return null;
     return ReportDetailDto.fromJson(entry);
   }
