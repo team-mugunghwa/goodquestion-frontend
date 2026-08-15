@@ -22,7 +22,10 @@ void main() {
     final store = AuthTokenStore();
     await store.save('access-1', 'refresh-1', persistent: false);
 
-    await store.saveRefreshed(accessToken: 'access-2', refreshToken: 'refresh-2');
+    await store.saveRefreshed(
+      accessToken: 'access-2',
+      refreshToken: 'refresh-2',
+    );
 
     expect(await store.read(), 'access-2');
     expect(
