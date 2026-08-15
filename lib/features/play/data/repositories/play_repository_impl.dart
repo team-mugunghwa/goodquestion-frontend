@@ -28,13 +28,19 @@ class PlayRepositoryImpl implements PlayRepository {
       _guard(() => _remote.currentMission(sessionId));
 
   @override
+  Future<List<PlayMessage>> sceneMessages(
+    String sessionId, {
+    required String sceneId,
+  }) => _guard(() => _remote.sceneMessages(sessionId, sceneId: sceneId));
+
+  @override
   Future<PlayTranscription> transcribeAudio(Uint8List wavBytes) =>
       _guard(() => _remote.transcribeAudio(wavBytes));
 
   @override
   Future<PlaySpeechAudio> synthesizeSpeech({
     required String text,
-    required String characterName,
+    String? characterName,
   }) => _guard(
     () => _remote.synthesizeSpeech(text: text, characterName: characterName),
   );
@@ -47,6 +53,7 @@ class PlayRepositoryImpl implements PlayRepository {
     String? sttRawText,
     double? sttConfidence,
     int sttRetryCount = 0,
+    String? idempotencyKey,
   }) => _guard(
     () => _remote.submitUtterance(
       sessionId,
@@ -55,8 +62,12 @@ class PlayRepositoryImpl implements PlayRepository {
       sttRawText: sttRawText,
       sttConfidence: sttConfidence,
       sttRetryCount: sttRetryCount,
+      idempotencyKey: idempotencyKey,
     ),
   );
+
+  @override
+  Future<void> stop(String sessionId) => _guard(() => _remote.stop(sessionId));
 
   Future<T> _guard<T>(Future<T> Function() action) async {
     try {

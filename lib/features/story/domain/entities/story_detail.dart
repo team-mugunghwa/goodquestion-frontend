@@ -9,6 +9,7 @@ class StoryDetail {
     required this.introText,
     required this.situationText,
     required this.role,
+    this.sceneCount = 0,
     this.coverImage,
     this.introAudio,
   });
@@ -17,6 +18,13 @@ class StoryDetail {
   final String title;
   final String? coverImage;
   final int estimatedMinutes;
+
+  /// 이 이야기의 전체 장면 수(서버 `StoryDetailResponse.sceneCount`).
+  ///
+  /// 상세 화면은 안 쓰지만, **시작하기로 넘어가는 재생 화면의 진행바**가
+  /// 이 값을 씁니다 - 세션 API 는 총 장면 수를 안 내려줍니다.
+  /// 값을 모르면 `0` 입니다. → `AppRoutes.playOf`
+  final int sceneCount;
 
   /// "쉬움" · "보통" — 숫자가 아니라 말입니다. 보호자가 함께 볼 때의 판단 정보.
   final String difficulty;

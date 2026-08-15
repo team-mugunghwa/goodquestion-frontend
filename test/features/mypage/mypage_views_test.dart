@@ -87,13 +87,13 @@ class _Stub
   }
 
   @override
-  Future<ReportDetail?> getReportDetail(int sessionId) async {
+  Future<ReportDetail?> getReportDetail(String sessionId) async {
     if (error != null) throw error!;
     return detail;
   }
 
   @override
-  Future<void> markAsRead(int sessionId) async {}
+  Future<void> markAsRead(String sessionId) async {}
 
   @override
   Future<AppSettings> getSettings() async {
@@ -147,7 +147,7 @@ const ReportList _list = ReportList(
   newCount: 1,
   reports: <ReportSummary>[
     ReportSummary(
-      sessionId: 104,
+      sessionId: '104',
       storyTitle: '방귀 뀌는 며느리',
       completedAt: null,
       isNew: true,
@@ -158,7 +158,7 @@ const ReportList _list = ReportList(
 );
 
 const ReportDetail _detail = ReportDetail(
-  sessionId: 104,
+  sessionId: '104',
   childName: '하늘이',
   storyTitle: '방귀 뀌는 며느리',
   summary: '자기 생각을 이유와 함께 말하는 힘이 돋보인 세션이었어요.',
@@ -347,7 +347,7 @@ void main() {
   });
 
   group('리포트 상세', () {
-    Widget under(_Stub stub, {int sessionId = 104}) =>
+    Widget under(_Stub stub, {String sessionId = '104'}) =>
         ChangeNotifierProvider<ReportDetailViewModel>(
           create: (_) => ReportDetailViewModel(
             GetReportDetailUseCase(stub),
@@ -400,7 +400,7 @@ void main() {
     });
 
     testWidgets('아직 분석 중이면 목록으로 가는 문을 준다', (WidgetTester tester) async {
-      await pump(tester, under(_Stub(), sessionId: 999));
+      await pump(tester, under(_Stub(), sessionId: '999'));
 
       expect(find.text(ReportDetailStrings.pending), findsOneWidget);
       expect(find.text(ReportDetailStrings.goToList), findsWidgets);

@@ -24,10 +24,10 @@ abstract class ReportRepository {
 
   /// 없는 sessionId 면 `null` — 예외가 아닙니다.
   /// (아직 분석이 안 끝난 세션과 로드 실패는 화면이 다릅니다)
-  Future<ReportDetail?> getReportDetail(int sessionId);
+  Future<ReportDetail?> getReportDetail(String sessionId);
 
   /// 열람 처리. NEW 배지를 지웁니다.
-  Future<void> markAsRead(int sessionId);
+  Future<void> markAsRead(String sessionId);
 }
 
 /// 알림·계정 설정.

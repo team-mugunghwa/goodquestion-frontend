@@ -36,6 +36,18 @@ class _SilentPlayer implements StoryAudioPlayer {
   Future<void> playUrl(String url) async {}
 
   @override
+  bool get canResume => false;
+
+  @override
+  Future<void> setMuted(bool muted) async {}
+
+  @override
+  Future<void> pause() async {}
+
+  @override
+  Future<void> resume() async {}
+
+  @override
   Future<void> stop() async {}
 
   @override
@@ -161,10 +173,20 @@ class _StubRepository implements PlayRepository {
     String? sttRawText,
     double? sttConfidence,
     int sttRetryCount = 0,
+    String? idempotencyKey,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
     return next.build();
   }
+
+  @override
+  Future<void> stop(String sessionId) async {}
+
+  @override
+  Future<List<PlayMessage>> sceneMessages(
+    String sessionId, {
+    required String sceneId,
+  }) async => const <PlayMessage>[];
 
   @override
   Future<PlayMission?> currentMission(String sessionId) async => null;
@@ -192,7 +214,7 @@ class _StubRepository implements PlayRepository {
   @override
   Future<PlaySpeechAudio> synthesizeSpeech({
     required String text,
-    required String characterName,
+    String? characterName,
   }) async => throw UnimplementedError('프리뷰에서는 음성을 쓰지 않는다');
 }
 

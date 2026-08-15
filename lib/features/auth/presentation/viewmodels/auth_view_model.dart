@@ -311,6 +311,14 @@ class AuthViewModel extends BaseViewModel {
     safeNotify();
   }
 
-  String _messageOf(Object error) =>
-      error is Failure ? error.message : Failure.fromException(error).message;
+  String _messageOf(Object error) {
+    final Failure failure = error is Failure
+        ? error
+        : Failure.fromException(error);
+    // 코드로 분기합니다 — 서버 메시지 문자열에 의존하지 않습니다.
+    if (failure is ServerFailure && failure.code == 'ACCOUNT_LOCKED') {
+      return AuthStrings.accountLocked;
+    }
+    return failure.message;
+  }
 }

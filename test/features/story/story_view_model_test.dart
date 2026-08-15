@@ -1,6 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:goodquestion/core/error/failure.dart';
 import 'package:goodquestion/core/state/view_state.dart';
+import 'package:goodquestion/features/home/domain/entities/home_summary.dart';
+import 'package:goodquestion/features/home/domain/entities/in_progress_session.dart';
+import 'package:goodquestion/features/home/domain/entities/planet_summary.dart';
+import 'package:goodquestion/features/home/domain/entities/recommended_story.dart';
+import 'package:goodquestion/features/home/domain/repositories/home_repository.dart';
 import 'package:goodquestion/features/story/domain/entities/story_catalog.dart';
 import 'package:goodquestion/features/story/domain/entities/story_detail.dart';
 import 'package:goodquestion/features/story/domain/entities/story_summary.dart';
@@ -31,8 +36,33 @@ class _StubRepository implements StoryRepository {
     return detail;
   }
 
+  /// 새 세션을 몇 번 만들었는지. "이어받아야 할 때 새로 만들지 않는지"를
+  /// 보려면 호출 여부 자체를 세야 합니다.
+  int startCalls = 0;
+
   @override
-  Future<String> startSession(String storyId) async => '9000-$storyId';
+  Future<String> startSession(String storyId) async {
+    startCalls++;
+    return '9000-$storyId';
+  }
+}
+
+/// 홈이 돌려주는 "진행 중 세션" 만 흉내 냅니다.
+class _StubHomeRepository implements HomeRepository {
+  _StubHomeRepository({this.inProgressSession, this.error});
+
+  final InProgressSession? inProgressSession;
+  final Object? error;
+
+  @override
+  Future<HomeSummary> getHomeSummary() async {
+    if (error != null) throw error!;
+    return HomeSummary(
+      inProgressSession: inProgressSession,
+      recommendedStories: const <RecommendedStory>[],
+      planet: const PlanetSummary(stardustBalance: 0),
+    );
+  }
 }
 
 const StoryCatalog _catalog = StoryCatalog(
@@ -141,7 +171,7 @@ void main() {
     StoryDetailViewModel viewModelOf(StoryRepository repository, String id) =>
         StoryDetailViewModel(
           GetStoryDetailUseCase(repository),
-          StartStorySessionUseCase(repository),
+          StartStorySessionUseCase(repository, _StubHomeRepository()),
           storyId: id,
         );
 
@@ -180,6 +210,64 @@ void main() {
       final vm = viewModelOf(_StubRepository(detail: _detail), '11');
 
       expect(await vm.start(), isNull);
+    });
+  });
+
+  group('StartStorySessionUseCase', () {
+    InProgressSession sessionOf(String storyId) => InProgressSession(
+      sessionId: 'session-$storyId',
+      storyId: storyId,
+      storyTitle: '방귀 뀌는 며느리',
+      lastCompletedScene: 2,
+      totalScenes: 6,
+    );
+
+    test('같은 이야기를 진행 중이면 새로 만들지 않고 그 세션으로 이어간다', () async {
+      final _StubRepository repository = _StubRepository();
+      final useCase = StartStorySessionUseCase(
+        repository,
+        _StubHomeRepository(inProgressSession: sessionOf('11')),
+      );
+
+      expect(await useCase('11'), 'session-11');
+      expect(
+        repository.startCalls,
+        0,
+        reason: 'startSession 은 부를 때마다 새 세션을 만듭니다 - 이어할 때는 부르면 안 됩니다',
+      );
+    });
+
+    test('다른 이야기를 진행 중이면 새로 시작한다', () async {
+      final _StubRepository repository = _StubRepository();
+      final useCase = StartStorySessionUseCase(
+        repository,
+        _StubHomeRepository(inProgressSession: sessionOf('21')),
+      );
+
+      expect(await useCase('11'), '9000-11');
+      expect(repository.startCalls, 1);
+    });
+
+    test('진행 중 세션이 없으면 새로 시작한다', () async {
+      final _StubRepository repository = _StubRepository();
+      final useCase = StartStorySessionUseCase(
+        repository,
+        _StubHomeRepository(),
+      );
+
+      expect(await useCase('11'), '9000-11');
+      expect(repository.startCalls, 1);
+    });
+
+    test('진행 중 세션 확인이 실패해도 시작하기를 막지 않는다', () async {
+      final _StubRepository repository = _StubRepository();
+      final useCase = StartStorySessionUseCase(
+        repository,
+        _StubHomeRepository(error: const NetworkFailure('연결이 끊겼습니다.')),
+      );
+
+      expect(await useCase('11'), '9000-11');
+      expect(repository.startCalls, 1);
     });
   });
 }

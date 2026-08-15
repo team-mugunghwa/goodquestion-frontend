@@ -15,7 +15,7 @@ class PlaySessionDto {
       openingText: _messageText(json['lastCharacterMessage']),
       openingAudioUrl: _messageAudioUrl(json['lastCharacterMessage']),
       mission: mission(json['exposedMission']),
-      messages: _messages(json['messages']),
+      messages: messages(json['messages']),
     );
   }
 
@@ -103,7 +103,10 @@ class PlaySessionDto {
       ? value.whereType<String>().toList(growable: false)
       : const <String>[];
 
-  static List<PlayMessage> _messages(Object? value) => value is List
+  /// `GET /api/sessions/{id}/messages` 는 목록을 그대로 내려주고,
+  /// `SessionResumeResponse` 는 `messages` 로 품고 있습니다 - 같은
+  /// `MessageResponse` 라 파서를 나눠 쓰지 않습니다.
+  static List<PlayMessage> messages(Object? value) => value is List
       ? value
             .whereType<Map<String, dynamic>>()
             .map((item) {

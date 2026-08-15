@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../features/auth/data/datasources/account_recovery_remote_data_source.dart';
@@ -16,9 +17,10 @@ import '../../features/home/domain/repositories/home_repository.dart';
 import '../../features/home/domain/usecases/get_home_summary_use_case.dart';
 import '../../features/mypage/data/datasources/child_profile_remote_data_source.dart';
 import '../../features/mypage/data/datasources/my_page_local_data_source.dart';
+import '../../features/mypage/data/datasources/report_remote_data_source.dart';
 import '../../features/mypage/data/datasources/settings_remote_data_source.dart';
 import '../../features/mypage/data/repositories/my_page_repository_impl.dart';
-import '../../features/mypage/data/repositories/my_page_repository_mock.dart';
+import '../../features/mypage/data/repositories/report_repository_impl.dart';
 import '../../features/mypage/data/repositories/settings_repository_impl.dart';
 import '../../features/mypage/domain/guardian_gate.dart';
 import '../../features/mypage/domain/repositories/my_page_repository.dart';
@@ -69,6 +71,7 @@ Future<void> configureDependencies() async {
     ..registerLazySingleton<DioClient>(
       () => DioClient(
         tokenProvider: getIt<AuthTokenStore>().read,
+        tokenRefresher: _refreshTokens,
         onUnauthorized: _handleUnauthorized,
       ),
     );
@@ -165,7 +168,11 @@ Future<void> configureDependencies() async {
       () => GetStoryDetailUseCase(getIt<StoryRepository>()),
     )
     ..registerLazySingleton<StartStorySessionUseCase>(
-      () => StartStorySessionUseCase(getIt<StoryRepository>()),
+      // 진행 중 세션은 홈 응답에만 있어서 HomeRepository 를 함께 봅니다.
+      () => StartStorySessionUseCase(
+        getIt<StoryRepository>(),
+        getIt<HomeRepository>(),
+      ),
     );
 
   // ---- play ----
@@ -194,14 +201,6 @@ Future<void> configureDependencies() async {
 
   // ---- mypage (마이페이지 · 리포트 · 설정) ----
   //
-  // Mock 하나가 세 Repository 를 구현합니다. 열람 처리·토글 상태를 한 곳에서
-  // 들고 있어야 화면 간에 어긋나지 않기 때문입니다. 서버가 붙으면 셋으로
-  // 쪼개도 화면 코드는 그대로입니다.
-  // 세 인터페이스가 **같은 인스턴스**를 가리켜야 합니다. 각각 새로 만들면
-  // 리포트를 읽어도 마이페이지의 빨간 점이 안 사라집니다.
-  final MyPageRepositoryMock myPageMock = MyPageRepositoryMock(
-    const MyPageLocalDataSource(),
-  );
   final ChildProfileRemoteDataSource childProfileRemote =
       ChildProfileRemoteDataSource(getIt<DioClient>());
   final MyPageRepositoryImpl myPageRepository = MyPageRepositoryImpl(
@@ -215,12 +214,20 @@ Future<void> configureDependencies() async {
     settingsRemote,
     myPageRepository,
   );
+  final ReportRemoteDataSource reportRemote = ReportRemoteDataSource(
+    getIt<DioClient>(),
+  );
+  final ReportRepositoryImpl reportRepository = ReportRepositoryImpl(
+    reportRemote,
+    myPageRepository,
+  );
   getIt
     ..registerLazySingleton<GuardianGate>(GuardianGate.new)
     ..registerSingleton<ChildProfileRemoteDataSource>(childProfileRemote)
     ..registerSingleton<MyPageRepository>(myPageRepository)
     ..registerSingleton<ChildProfileRepository>(myPageRepository)
-    ..registerSingleton<ReportRepository>(myPageMock)
+    ..registerSingleton<ReportRemoteDataSource>(reportRemote)
+    ..registerSingleton<ReportRepository>(reportRepository)
     ..registerSingleton<SettingsRemoteDataSource>(settingsRemote)
     ..registerSingleton<SettingsRepository>(settingsRepository)
     ..registerLazySingleton<GetMyPageSummaryUseCase>(
@@ -281,4 +288,49 @@ Future<void> _signOutAndRedirectToLogin() async {
   } finally {
     _redirectingToLogin = false;
   }
+}
+
+/// 진행 중인 재발급. 여러 요청이 동시에 401 을 받아도 실제 `/auth/refresh`
+/// 호출은 한 번만 나가야 합니다 — 리프레시 토큰은 1회용으로 회전되므로,
+/// 두 번째 호출은 이미 못 쓰게 된 토큰으로 보내 실패합니다. 진행 중인
+/// Future 가 있으면 새로 호출하지 않고 그 결과를 같이 기다립니다.
+Future<bool>? _refreshFuture;
+
+Future<bool> _refreshTokens() => _refreshFuture ??= _doRefreshTokens()
+    .whenComplete(() => _refreshFuture = null);
+
+/// `POST /auth/refresh` 로 액세스·리프레시 토큰을 재발급합니다.
+///
+/// 응답은 `AuthResponse` 의 `tokens` 처럼 감싸져 있지 않고 `TokenResponse`
+/// 를 그대로 돌려줍니다 — `{accessToken, refreshToken, accessTokenExpiresIn}`.
+///
+/// **`DioException`(타임아웃·연결 끊김)은 여기서 삼키지 않고 그대로
+/// 던집니다.** 이 함수는 `DioClient._request` 의 같은 try 블록 안에서
+/// 호출되므로, 그대로 두면 그 블록의 `on DioException catch` 가 받아
+/// `NetworkException` 으로 바뀝니다 - "리프레시 토큰이 서버에서 거절됨"과
+/// "네트워크가 잠깐 끊겨서 물어보지도 못함"을 같은 실패로 묶어서 매번
+/// 로그아웃시키면 안 됩니다. 후자는 토큰을 그대로 두고 이 요청 한 번만
+/// 실패시켜야, 네트워크가 돌아왔을 때 같은 토큰으로 다시 시도할 수 있습니다.
+/// 서버가 실제로 401/400 을 준 경우만 `false` 를 돌려줍니다.
+Future<bool> _doRefreshTokens() async {
+  final AuthTokenStore tokens = getIt<AuthTokenStore>();
+  final String? refreshToken = await tokens.readRefresh();
+  if (refreshToken == null || refreshToken.isEmpty) return false;
+  final Response<dynamic> response = await getIt<DioClient>().raw.post<dynamic>(
+    '/auth/refresh',
+    data: <String, dynamic>{'refreshToken': refreshToken},
+  );
+  if ((response.statusCode ?? 0) != 200) return false;
+  final Object? body = response.data;
+  final Map<String, dynamic>? map = body is Map<String, dynamic> ? body : null;
+  final String? newAccess = map?['accessToken'] as String?;
+  final String? newRefresh = map?['refreshToken'] as String?;
+  if (newAccess == null ||
+      newAccess.isEmpty ||
+      newRefresh == null ||
+      newRefresh.isEmpty) {
+    return false;
+  }
+  await tokens.saveRefreshed(accessToken: newAccess, refreshToken: newRefresh);
+  return true;
 }
