@@ -16,6 +16,9 @@ void main() {
     PlayRepository? repository,
     StoryAudioPlayer audioPlayer = const _FakeAudioPlayer(),
     bool settle = true,
+    int? totalScenes,
+    String question = '친구가 속상해할 때는 어떻게 하면 좋을까?',
+    Size size = const Size(1280, 720),
   }) async {
     tester.view.physicalSize = const Size(1280, 720);
     tester.view.devicePixelRatio = 1;
@@ -27,7 +30,8 @@ void main() {
         home: PlayPage(
           sessionId: 'preview-session',
           characterName: '토리',
-          question: '친구가 속상해할 때는 어떻게 하면 좋을까?',
+          question: question,
+          totalScenes: totalScenes,
           repository: repository,
           voiceRecorder: const _FakeVoiceRecorder(),
           audioPlayer: audioPlayer,
@@ -370,6 +374,74 @@ void main() {
       isNot(contains('첫 문장이에요.')),
       reason: '이어 재생이 첫 문장 음성을 다시 부르면 장면을 처음부터 다시 읽는 것입니다',
     );
+  });
+
+  testWidgets('상단 진행바는 장면이 넘어갈 때마다 전체 장면 대비 위치를 그린다', (
+    WidgetTester tester,
+  ) async {
+    final _StoryNarrationSpyRepository repository =
+        _StoryNarrationSpyRepository()
+          ..nextSceneOnComplete = const PlaySessionSnapshot(
+            phase: PlayPhase.story,
+            currentScene: PlayScene(
+              sceneId: 'scene-2',
+              sceneOrder: 2,
+              sceneType: PlaySceneType.story,
+              narrationSentences: <String>['그래서 며느리는 이렇게 말했어요.'],
+            ),
+          );
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      totalScenes: 5,
+      settle: false,
+    );
+
+    double widthFactor() => tester
+        .widget<AnimatedFractionallySizedBox>(
+          find.byType(AnimatedFractionallySizedBox),
+        )
+        .widthFactor!;
+
+    Future<void> settleFrames() async {
+      for (int i = 0; i < 6; i++) {
+        await tester.pump();
+      }
+    }
+
+    // 1번째 장면 / 전체 5장면.
+    await settleFrames();
+    expect(widthFactor(), closeTo(0.2, 0.001));
+
+    // 문장이 넘어가는 것만으로는 움직이지 않습니다 - 장면 단위입니다.
+    audioPlayer.finishPlayback();
+    await settleFrames();
+    expect(find.text('두 번째 문장이에요.'), findsOneWidget);
+    expect(widthFactor(), closeTo(0.2, 0.001));
+
+    // 장면이 끝나 다음 장면으로 넘어가면 2/5 가 됩니다.
+    audioPlayer.finishPlayback();
+    await settleFrames();
+    await tester.pump(const Duration(milliseconds: 750));
+    await settleFrames();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(
+      widthFactor(),
+      closeTo(0.4, 0.001),
+      reason: '장면이 넘어갔는데 진행바가 그대로면 아이는 얼마나 남았는지 알 수 없습니다',
+    );
+  });
+
+  testWidgets('전체 장면 수를 모르면 진행바는 눈금 없이 비워 둔다', (WidgetTester tester) async {
+    await pumpPlay(tester);
+
+    final AnimatedFractionallySizedBox bar = tester
+        .widget<AnimatedFractionallySizedBox>(
+          find.byType(AnimatedFractionallySizedBox),
+        );
+    expect(bar.widthFactor, 0, reason: '모르는 값을 아는 척 그리는 것보다 비워 두는 편이 낫습니다');
   });
 
   testWidgets('1280x720 범용 대화 템플릿 골든', (WidgetTester tester) async {

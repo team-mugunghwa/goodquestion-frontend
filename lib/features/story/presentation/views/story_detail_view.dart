@@ -134,7 +134,10 @@ class StoryDetailView extends StatelessWidget {
     if (sessionId == null || !context.mounted) return;
     // go 입니다 — 세션이 시작된 뒤 뒤로가기로 상세에 돌아오면
     // "시작하기"를 또 누를 수 있게 됩니다.
-    context.go(AppRoutes.playOf(sessionId));
+    //
+    // 전체 장면 수는 세션 API 가 안 내려줘서 이 화면이 실어 보냅니다
+    // (재생 화면 상단 진행바가 씁니다). → [AppRoutes.playOf]
+    context.go(AppRoutes.playOf(sessionId, totalScenes: vm.story?.sceneCount));
   }
 }
 
