@@ -45,8 +45,17 @@ abstract final class SttChoiceSelector {
   ///
   /// - 음성이 없는 장면이면 비어 있습니다.
   /// - [lastProgress] 가 없으면 이 장면의 첫 발화 턴이라 정해진 3문장을 줍니다.
-  /// - 있으면 아직 못 채운 요소(`missingElements`)에 해당하는 문장만,
-  ///   그 장면에 실제로 녹음된 것만 골라 최대 [maxCards] 장을 줍니다.
+  /// - 있으면 아직 못 채운 요소(`missingElements`)를 보고 고릅니다. **남은
+  ///   요소를 둘 다 덮는 조합 문장을 앞에 놓고**, 남은 자리를 요소별 낱장으로
+  ///   메워 최대 [maxCards] 장을 줍니다.
+  ///
+  /// 조합 문장을 앞세우는 이유는 그 한 장으로 장면이 닫히기 때문입니다.
+  /// 낱장만 주면 요소를 하나씩만 채워서 턴이 한 번 더 듭니다 - 장면당 턴이
+  /// 4~5회뿐이라 세 번이나 못 알아들은 아이에게는 그 한 턴이 큽니다.
+  ///
+  /// **직전에 아이가 무엇을 골랐는지 기억하지 않습니다.** 남은 요소만 보고
+  /// 고르므로 1턴차를 목소리로 말한 아이(카드를 안 거친 경우)에게도 같은
+  /// 규칙이 그대로 맞습니다.
   static List<SttChoiceSentence> cardsFor({
     required int? sceneOrder,
     PlayProgress? lastProgress,
@@ -61,23 +70,53 @@ abstract final class SttChoiceSelector {
           ? first
           : first.sublist(0, maxCards).toList(growable: false);
     }
+
+    // 서버에 새 요소가 생겨도 화면이 죽지 않게, 모르는 코드는 조용히 버립니다.
+    final List<SttChoiceElement> missing = <SttChoiceElement>[];
+    for (final String code in lastProgress.missingElements) {
+      final SttChoiceElement? element = SttChoiceElement.fromCode(code);
+      if (element != null && !missing.contains(element)) missing.add(element);
+    }
+    if (missing.isEmpty) return const <SttChoiceSentence>[];
+
+    final List<SttChoiceSentence> picked = <SttChoiceSentence>[];
+
+    // 1) 남은 요소를 두 개 이상 한 번에 채우는 조합 문장. 많이 덮는 순서로,
+    //    같으면 id 순으로 - 같은 상황에서 늘 같은 카드가 나와야 합니다.
+    final List<SttChoiceSentence> combos =
+        (SttChoiceCatalog.secondTurnCombos[sceneOrder] ??
+                const <SttChoiceSentence>[])
+            .where((SttChoiceSentence item) => _covered(item, missing) >= 2)
+            .toList()
+          ..sort((SttChoiceSentence a, SttChoiceSentence b) {
+            final int byCover = _covered(b, missing) - _covered(a, missing);
+            return byCover != 0 ? byCover : a.id.compareTo(b.id);
+          });
+    // 조합 문장은 **한 장만** 놓습니다. 서로 비슷한 문장 세 장을 늘어놓는 것보다
+    // "한 번에 끝나는 것 하나 + 낱장"이 고르는 의미가 살아 있습니다.
+    if (combos.isNotEmpty) picked.add(combos.first);
+
+    // 2) 남은 자리는 요소별 낱장으로. 녹음이 없는 요소는 건너뜁니다.
     final Map<SttChoiceElement, SttChoiceSentence> byElement =
         SttChoiceCatalog.byElement[sceneOrder] ??
         const <SttChoiceElement, SttChoiceSentence>{};
-    final List<SttChoiceSentence> picked = <SttChoiceSentence>[];
-    for (final String code in lastProgress.missingElements) {
-      // 서버에 새 요소가 생겨도 화면이 죽지 않게, 모르는 코드와 녹음이 없는
-      // 요소는 조용히 건너뜁니다.
-      final SttChoiceElement? element = SttChoiceElement.fromCode(code);
-      if (element == null) continue;
+    for (final SttChoiceElement element in missing) {
+      if (picked.length == maxCards) break;
       final SttChoiceSentence? sentence = byElement[element];
       if (sentence == null) continue;
       if (picked.any((SttChoiceSentence item) => item.id == sentence.id)) {
         continue;
       }
       picked.add(sentence);
-      if (picked.length == maxCards) break;
     }
     return List<SttChoiceSentence>.unmodifiable(picked);
   }
+
+  /// [sentence] 가 [missing] 중 몇 개를 덮는지.
+  static int _covered(
+    SttChoiceSentence sentence,
+    List<SttChoiceElement> missing,
+  ) => sentence.elements
+      .where((SttChoiceElement element) => missing.contains(element))
+      .length;
 }

@@ -18,6 +18,7 @@ def ms(d):
     return int(round(float(d) * 1000))
 
 first_turn = collections.defaultdict(list)   # scene -> [item]
+combos = collections.defaultdict(list)       # scene -> [item]  (2턴차 조합)
 by_element = collections.defaultdict(dict)   # scene -> element -> item
 retry1, retry2, intro = {}, {}, {}
 
@@ -26,6 +27,8 @@ for it in items:
     sc = int(it["scene"])
     if re.fullmatch(r"c\d+_t1_[123]", i):
         first_turn[sc].append(it)
+    elif re.fullmatch(r"c\d+_t2_[123]", i):
+        combos[sc].append(it)
     elif re.fullmatch(r"c\d+_(" + "|".join(ELEMENTS) + r")", i):
         by_element[sc][i.split("_", 1)[1]] = it
     elif i.startswith("retry_1_"):
@@ -39,7 +42,12 @@ for it in items:
 
 for sc in SCENES:
     first_turn[sc].sort(key=lambda x: x["id"])
+    combos[sc].sort(key=lambda x: x["id"])
     assert len(first_turn[sc]) == 3, (sc, first_turn[sc])
+    assert len(combos[sc]) == 3, (sc, combos[sc])
+    # 조합 문장은 두 요소를 한 번에 채워야 2턴에 장면이 닫힌다.
+    for it in combos[sc]:
+        assert len(it["elements"]) == 2, (sc, it["id"], it["elements"])
     assert sc in retry1 and sc in retry2 and sc in intro, sc
 
 def sentence(it, indent):
@@ -172,7 +180,19 @@ for sc in SCENES:
     w("        ],")
 w("      };")
 
-w("\n  /// 두 번째 턴부터 쓰는, 요소별 문장 한 개씩.")
+w("\n  /// 두 번째 턴에 쓰는 조합 문장. 한 장이 요소 두 개를 채웁니다 -")
+w("  /// 1턴차에 무엇을 골랐든 남은 요소를 덮는 문장이 이 안에 있어서,")
+w("  /// 아이가 한 장만 더 고르면 장면이 2턴에 닫힙니다.")
+w("  static const Map<int, List<SttChoiceSentence>> secondTurnCombos =")
+w("      <int, List<SttChoiceSentence>>{")
+for sc in SCENES:
+    w(f"        {sc}: <SttChoiceSentence>[")
+    for it in combos[sc]:
+        w(sentence(it, 10) + ",")
+    w("        ],")
+w("      };")
+
+w("\n  /// 조합 문장으로 못 채운 자리를 메우는, 요소별 문장 한 개씩.")
 w("  static const Map<int, Map<SttChoiceElement, SttChoiceSentence>> byElement =")
 w("      <int, Map<SttChoiceElement, SttChoiceSentence>>{")
 for sc in SCENES:

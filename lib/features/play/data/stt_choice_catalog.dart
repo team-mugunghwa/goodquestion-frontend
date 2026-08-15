@@ -235,7 +235,154 @@ class SttChoiceCatalog {
         ],
       };
 
-  /// 두 번째 턴부터 쓰는, 요소별 문장 한 개씩.
+  /// 두 번째 턴에 쓰는 조합 문장. 한 장이 요소 두 개를 채웁니다 -
+  /// 1턴차에 무엇을 골랐든 남은 요소를 덮는 문장이 이 안에 있어서,
+  /// 아이가 한 장만 더 고르면 장면이 2턴에 닫힙니다.
+  static const Map<int, List<SttChoiceSentence>> secondTurnCombos =
+      <int, List<SttChoiceSentence>>{
+        3: <SttChoiceSentence>[
+          SttChoiceSentence(
+            id: 'c3_t2_1',
+            text: '오래 참으면 몸이 아프니까, 밥 먹고 나서 조용할 때 이야기해 보세요.',
+            elements: <SttChoiceElement>[
+              SttChoiceElement.reason,
+              SttChoiceElement.solution,
+            ],
+            sceneOrder: 3,
+            assetPath: 'assets/audio/choices/c3_t2_1.mp3',
+            duration: Duration(milliseconds: 7251),
+          ),
+          SttChoiceSentence(
+            id: 'c3_t2_2',
+            text: '혼자 참고 있으면 많이 속상할 거예요. 가족들도 놀라기는 하겠지만 미워하지는 않을 거예요.',
+            elements: <SttChoiceElement>[
+              SttChoiceElement.emotion,
+              SttChoiceElement.perspective,
+            ],
+            sceneOrder: 3,
+            assetPath: 'assets/audio/choices/c3_t2_2.mp3',
+            duration: Duration(milliseconds: 9131),
+          ),
+          SttChoiceSentence(
+            id: 'c3_t2_3',
+            text: '가족들도 곧 이해해 줄 거예요. 오래 참으면 몸이 아프니까 말하는 게 좋아요.',
+            elements: <SttChoiceElement>[
+              SttChoiceElement.perspective,
+              SttChoiceElement.reason,
+            ],
+            sceneOrder: 3,
+            assetPath: 'assets/audio/choices/c3_t2_3.mp3',
+            duration: Duration(milliseconds: 9291),
+          ),
+        ],
+        5: <SttChoiceSentence>[
+          SttChoiceSentence(
+            id: 'c5_t2_1',
+            text: '며느리도 지금 제일 놀라고 부끄러울 거예요. 왜 그랬는지 한 번만 물어봐 주세요.',
+            elements: <SttChoiceElement>[
+              SttChoiceElement.empathy,
+              SttChoiceElement.request,
+            ],
+            sceneOrder: 5,
+            assetPath: 'assets/audio/choices/c5_t2_1.mp3',
+            duration: Duration(milliseconds: 8011),
+          ),
+          SttChoiceSentence(
+            id: 'c5_t2_2',
+            text: '며느리는 그동안 눈치 보면서 참기만 했을 거예요. 너무 오래 참아서 한 번에 크게 터진 거예요.',
+            elements: <SttChoiceElement>[
+              SttChoiceElement.perspective,
+              SttChoiceElement.reason,
+            ],
+            sceneOrder: 5,
+            assetPath: 'assets/audio/choices/c5_t2_2.mp3',
+            duration: Duration(milliseconds: 9931),
+          ),
+          SttChoiceSentence(
+            id: 'c5_t2_3',
+            text: '너무 오래 참아서 크게 나온 거예요. 보내지 마시고 한 번만 이야기를 들어 주세요.',
+            elements: <SttChoiceElement>[
+              SttChoiceElement.reason,
+              SttChoiceElement.request,
+            ],
+            sceneOrder: 5,
+            assetPath: 'assets/audio/choices/c5_t2_3.mp3',
+            duration: Duration(milliseconds: 7411),
+          ),
+        ],
+        7: <SttChoiceSentence>[
+          SttChoiceSentence(
+            id: 'c7_t2_1',
+            text: '며느리한테 부탁하고 사람들은 옆으로 피하면, 배가 떨어져서 다 같이 나눠 먹을 수 있어요.',
+            elements: <SttChoiceElement>[
+              SttChoiceElement.request,
+              SttChoiceElement.result,
+            ],
+            sceneOrder: 7,
+            assetPath: 'assets/audio/choices/c7_t2_1.mp3',
+            duration: Duration(milliseconds: 8171),
+          ),
+          SttChoiceSentence(
+            id: 'c7_t2_2',
+            text: '며느리 방귀는 기왓장도 날릴 만큼 세니까, 배가 우수수 떨어질 거예요.',
+            elements: <SttChoiceElement>[
+              SttChoiceElement.reason,
+              SttChoiceElement.result,
+            ],
+            sceneOrder: 7,
+            assetPath: 'assets/audio/choices/c7_t2_2.mp3',
+            duration: Duration(milliseconds: 7251),
+          ),
+          SttChoiceSentence(
+            id: 'c7_t2_3',
+            text: '며느리 방귀는 지붕도 흔들 만큼 세요. 한 번만 도와달라고 부탁해 봐요.',
+            elements: <SttChoiceElement>[
+              SttChoiceElement.reason,
+              SttChoiceElement.request,
+            ],
+            sceneOrder: 7,
+            assetPath: 'assets/audio/choices/c7_t2_3.mp3',
+            duration: Duration(milliseconds: 6571),
+          ),
+        ],
+        9: <SttChoiceSentence>[
+          SttChoiceSentence(
+            id: 'c9_t2_1',
+            text: '미리 알려 주고 사람 없는 쪽에서 뀌면, 높은 나무 열매를 딸 때 도와줄 수 있어요.',
+            elements: <SttChoiceElement>[
+              SttChoiceElement.solution,
+              SttChoiceElement.result,
+            ],
+            sceneOrder: 9,
+            assetPath: 'assets/audio/choices/c9_t2_1.mp3',
+            duration: Duration(milliseconds: 8091),
+          ),
+          SttChoiceSentence(
+            id: 'c9_t2_2',
+            text: '웃는 걸 보니까 저도 기뻐요. 남들과 다른 건 이상한 게 아니라 특별한 거예요.',
+            elements: <SttChoiceElement>[
+              SttChoiceElement.emotion,
+              SttChoiceElement.perspective,
+            ],
+            sceneOrder: 9,
+            assetPath: 'assets/audio/choices/c9_t2_2.mp3',
+            duration: Duration(milliseconds: 9931),
+          ),
+          SttChoiceSentence(
+            id: 'c9_t2_3',
+            text: '이제 마음이 놓여서 기뻐요. 뀌기 전에 미리 말해 주면 돼요.',
+            elements: <SttChoiceElement>[
+              SttChoiceElement.emotion,
+              SttChoiceElement.solution,
+            ],
+            sceneOrder: 9,
+            assetPath: 'assets/audio/choices/c9_t2_3.mp3',
+            duration: Duration(milliseconds: 6251),
+          ),
+        ],
+      };
+
+  /// 조합 문장으로 못 채운 자리를 메우는, 요소별 문장 한 개씩.
   static const Map<int, Map<SttChoiceElement, SttChoiceSentence>> byElement =
       <int, Map<SttChoiceElement, SttChoiceSentence>>{
         3: <SttChoiceElement, SttChoiceSentence>{
