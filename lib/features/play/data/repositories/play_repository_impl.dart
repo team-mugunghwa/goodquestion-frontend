@@ -47,6 +47,7 @@ class PlayRepositoryImpl implements PlayRepository {
     String? sttRawText,
     double? sttConfidence,
     int sttRetryCount = 0,
+    String? idempotencyKey,
   }) => _guard(
     () => _remote.submitUtterance(
       sessionId,
@@ -55,8 +56,12 @@ class PlayRepositoryImpl implements PlayRepository {
       sttRawText: sttRawText,
       sttConfidence: sttConfidence,
       sttRetryCount: sttRetryCount,
+      idempotencyKey: idempotencyKey,
     ),
   );
+
+  @override
+  Future<void> stop(String sessionId) => _guard(() => _remote.stop(sessionId));
 
   Future<T> _guard<T>(Future<T> Function() action) async {
     try {
