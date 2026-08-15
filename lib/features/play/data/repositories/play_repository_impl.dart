@@ -34,7 +34,7 @@ class PlayRepositoryImpl implements PlayRepository {
   @override
   Future<PlaySpeechAudio> synthesizeSpeech({
     required String text,
-    required String characterName,
+    String? characterName,
   }) => _guard(
     () => _remote.synthesizeSpeech(text: text, characterName: characterName),
   );

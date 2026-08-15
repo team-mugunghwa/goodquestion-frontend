@@ -13,9 +13,11 @@ abstract interface class PlayRepository {
 
   Future<PlayTranscription> transcribeAudio(Uint8List wavBytes);
 
+  /// [characterName] 이 있으면 캐릭터 보이스로, 없으면(null) 내레이션
+  /// 보이스로 합성합니다. → `docs/이야기_전개_가이드.md` 3.2
   Future<PlaySpeechAudio> synthesizeSpeech({
     required String text,
-    required String characterName,
+    String? characterName,
   });
 
   Future<PlayTurnResult> submitUtterance(

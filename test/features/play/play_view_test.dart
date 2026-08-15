@@ -10,7 +10,11 @@ import 'package:goodquestion/features/play/presentation/voice/mission_voice_reco
 import 'package:goodquestion/features/play/presentation/voice/story_audio_player.dart';
 
 void main() {
-  Future<void> pumpPlay(WidgetTester tester, {PlayRepository? repository}) async {
+  Future<void> pumpPlay(
+    WidgetTester tester, {
+    PlayRepository? repository,
+    bool settle = true,
+  }) async {
     tester.view.physicalSize = const Size(1280, 720);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -30,7 +34,9 @@ void main() {
     );
     // repository 가 있으면 resume() 이 끝날 때까지 한 프레임 더 필요합니다.
     // 데모 모드(테스트 대부분)는 동기 경로라 pump() 로 충분합니다.
-    if (repository != null) await tester.pumpAndSettle();
+    // STORY 내레이션처럼 스스로 다음 장면을 계속 부르는 반복 흐름은
+    // settle: false 로 받아 호출부가 직접 pump 횟수를 제어합니다.
+    if (repository != null && settle) await tester.pumpAndSettle();
   }
 
   testWidgets('좌측 캐릭터와 머리 우측의 한 문장 질문을 보여준다', (WidgetTester tester) async {
@@ -130,6 +136,35 @@ void main() {
     },
   );
 
+  testWidgets('STORY(전개) 장면은 문장마다 내레이션 음성을 실제로 요청한다', (
+    WidgetTester tester,
+  ) async {
+    final _StoryNarrationSpyRepository repository =
+        _StoryNarrationSpyRepository();
+    // 이 가짜는 장면이 끝나면 같은 장면을 또 돌려줘서 계속 내레이션합니다
+    // (진짜 서버라면 다음 장면으로 넘어가겠지만, 여기서는 TTS 호출 자체만
+    // 확인하면 되므로) - pumpAndSettle 을 쓰면 끝없이 돕니다. 필요한
+    // 만큼만 직접 pump 합니다.
+    await pumpPlay(tester, repository: repository, settle: false);
+
+    // 첫 문장의 합성이 끝날 때까지 - 진짜 타이머(700ms 장면 종료 대기)는
+    // 건드리지 않을 만큼만 마이크로태스크를 흘려보냅니다.
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+
+    expect(
+      repository.synthesizedTexts,
+      contains('첫 문장이에요.'),
+      reason: '전개 장면도 대사처럼 문장마다 TTS를 실제로 불러야 합니다',
+    );
+    expect(
+      repository.synthesizedCharacterNames.first,
+      isNull,
+      reason: '내레이션은 characterName 없이 불러야 내레이션 보이스가 나옵니다',
+    );
+  });
+
   testWidgets('1280x720 범용 대화 템플릿 골든', (WidgetTester tester) async {
     await pumpPlay(tester);
     await tester.pump();
@@ -213,7 +248,7 @@ class _StopSpyRepository implements PlayRepository {
   @override
   Future<PlaySpeechAudio> synthesizeSpeech({
     required String text,
-    required String characterName,
+    String? characterName,
   }) async => const PlaySpeechAudio(audioUrl: 'stub://audio');
 
   @override
@@ -290,7 +325,7 @@ class _SttRetrySpyRepository implements PlayRepository {
   @override
   Future<PlaySpeechAudio> synthesizeSpeech({
     required String text,
-    required String characterName,
+    String? characterName,
   }) async => const PlaySpeechAudio(audioUrl: 'stub://audio');
 
   @override
@@ -311,6 +346,68 @@ class _SttRetrySpyRepository implements PlayRepository {
       sceneTransition: null,
     );
   }
+
+  @override
+  Future<void> stop(String sessionId) async {}
+}
+
+/// STORY(전개) 장면으로 들어가서 문장별 `synthesizeSpeech` 호출을 기록합니다.
+class _StoryNarrationSpyRepository implements PlayRepository {
+  final List<String> synthesizedTexts = <String>[];
+  final List<String?> synthesizedCharacterNames = <String?>[];
+
+  @override
+  Future<PlaySessionSnapshot> resume(String sessionId) async =>
+      const PlaySessionSnapshot(
+        phase: PlayPhase.story,
+        currentScene: PlayScene(
+          sceneId: 'scene-1',
+          sceneOrder: 1,
+          sceneType: PlaySceneType.story,
+          narrationSentences: <String>['첫 문장이에요.', '두 번째 문장이에요.'],
+        ),
+      );
+
+  @override
+  Future<PlaySessionSnapshot> completeStoryScene(String sessionId) =>
+      resume(sessionId);
+
+  @override
+  Future<PlayOpeningMessage> openCurrentScene(String sessionId) async =>
+      const PlayOpeningMessage(text: '', audioUrl: null, alreadyOpened: true);
+
+  @override
+  Future<PlayMission?> currentMission(String sessionId) async => null;
+
+  @override
+  Future<PlayTranscription> transcribeAudio(Uint8List wavBytes) async =>
+      const PlayTranscription(text: '', confidence: null, lowConfidence: false);
+
+  @override
+  Future<PlaySpeechAudio> synthesizeSpeech({
+    required String text,
+    String? characterName,
+  }) async {
+    synthesizedTexts.add(text);
+    synthesizedCharacterNames.add(characterName);
+    return const PlaySpeechAudio(audioUrl: 'stub://narration');
+  }
+
+  @override
+  Future<PlayTurnResult> submitUtterance(
+    String sessionId, {
+    required String text,
+    String? missionId,
+    String? sttRawText,
+    double? sttConfidence,
+    int sttRetryCount = 0,
+    String? idempotencyKey,
+  }) async => const PlayTurnResult(
+    characterText: null,
+    characterAudioUrl: null,
+    mission: null,
+    sceneTransition: null,
+  );
 
   @override
   Future<void> stop(String sessionId) async {}

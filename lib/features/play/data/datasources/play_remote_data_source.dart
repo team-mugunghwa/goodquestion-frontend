@@ -93,7 +93,7 @@ class PlayRemoteDataSource {
 
   Future<PlaySpeechAudio> synthesizeSpeech({
     required String text,
-    required String characterName,
+    String? characterName,
   }) => _client.post<PlaySpeechAudio>(
     '/tts',
     body: <String, Object?>{'text': text, 'characterName': characterName},

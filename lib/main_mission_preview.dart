@@ -168,7 +168,7 @@ class _MissionPreviewRepository implements PlayRepository {
   @override
   Future<PlaySpeechAudio> synthesizeSpeech({
     required String text,
-    required String characterName,
+    String? characterName,
   }) async => const PlaySpeechAudio(audioUrl: 'preview://speech');
 
   @override
