@@ -138,6 +138,16 @@ class _PlayPageState extends State<PlayPage> {
   /// 안내 음성이 나오는 중. 이때는 마이크를 못 누르게 막습니다 - 안 막으면
   /// 캐릭터 목소리가 그대로 녹음됩니다.
   bool _guideSpeaking = false;
+
+  /// 아이의 확인을 기다리는 변환 결과. null 이 아니면 확인 화면이 뜨고
+  /// 마이크는 잠깁니다 - "맞아요"를 눌러야 비로소 턴이 제출됩니다.
+  ///
+  /// 변환 결과를 받자마자 제출하면 오인식을 되돌릴 방법이 없습니다. 턴이
+  /// 처리되고 캐릭터가 대답한 뒤라, 아이가 하지 않은 말이 저장되고 보호자
+  /// 리포트 대표 발화 후보에도 오릅니다. 저신뢰 안내가 의미 있는 유일한
+  /// 시점도 제출 전이라 여기서 한 번 끊습니다. → 백엔드
+  /// `docs/트러블슈팅_STT_신뢰도_산출.md` 3절
+  PlayTranscription? _pendingTranscription;
   String? _retainedStoryImageUrl;
 
   /// 지금 화면이 붙잡고 있는 장면. 장면이 바뀌는 순간을 [_activateSnapshot]
@@ -603,6 +613,9 @@ class _PlayPageState extends State<PlayPage> {
         _submittingUtterance) {
       return;
     }
+    // 확인을 기다리는 결과가 있으면 마이크는 움직이지 않습니다.
+    // "맞아요"와 "다시 말할래요" 둘 중 하나로만 진행합니다.
+    if (_pendingTranscription != null) return;
     if (!_recordingVoice) {
       // 카드 미리듣기가 나오는 중이면 소리부터 끕니다(같은 이유).
       if (_playingChoiceId != null) {
@@ -625,6 +638,11 @@ class _PlayPageState extends State<PlayPage> {
         _listeningTimer = Timer.periodic(const Duration(seconds: 1), (_) {
           if (mounted && _recordingVoice) {
             setState(() => _listeningSeconds++);
+            // 업로드 한도에 닿기 전에 여기까지 말한 것을 보낸다. 상한을 넘겨
+            // 두면 통째로 413이 나서 아이가 말한 전부를 잃는다.
+            if (_listeningSeconds >= maxRecordingSeconds) {
+              unawaited(_toggleVoiceAnswer());
+            }
           }
         });
       } on Object {
@@ -644,12 +662,16 @@ class _PlayPageState extends State<PlayPage> {
       final PlayTranscription transcription = await widget.repository!
           .transcribeAudio(audio);
       if (!mounted) return;
-      await _submitDialogue(
-        transcription.text,
-        sttRawText: transcription.text,
-        sttConfidence: transcription.confidence,
-        lowConfidence: transcription.lowConfidence,
-      );
+      // 바로 제출하지 않습니다. 아이가 변환 결과를 보고 "맞아요"를 눌러야
+      // 턴이 나갑니다 - 오인식을 되돌릴 수 있는 유일한 시점입니다.
+      setState(() {
+        _transcribingVoice = false;
+        _pendingTranscription = transcription;
+        // 선택지 판은 말풍선 자리를 대신 쓰므로, 떠 있는 채로 두면 확인
+        // 화면이 그 밑에 가려집니다. 목소리로 말하는 데 성공한 참이니
+        // 카드는 접습니다 - 다시 못 알아들으면 3회째에 다시 내려옵니다.
+        _closeChoicesState();
+      });
     } on Failure catch (error) {
       // 무음이거나 인식 실패 - 흔히 겪는 상황이라 화면을 통째로 에러로
       // 바꾸지 않고 마이크 옆에 짧게 안내한 뒤 바로 다시 녹음할 수 있게
@@ -777,6 +799,36 @@ class _PlayPageState extends State<PlayPage> {
     _choiceCards = const <SttChoiceSentence>[];
     _playingChoiceId = null;
     _guideSpeaking = false;
+  }
+
+  /// 아이가 변환 결과를 맞다고 확인했습니다. 이제서야 턴을 보냅니다.
+  Future<void> _confirmTranscription() async {
+    final PlayTranscription? pending = _pendingTranscription;
+    if (pending == null || _submittingUtterance) return;
+    setState(() => _pendingTranscription = null);
+    await _submitDialogue(
+      pending.text,
+      sttRawText: pending.text,
+      sttConfidence: pending.confidence,
+      lowConfidence: pending.lowConfidence,
+    );
+  }
+
+  /// 아이가 다르게 들렸다고 했습니다. 결과를 버리고 곧바로 다시 녹음합니다 -
+  /// 마이크를 한 번 더 누르게 하면 아이가 흐름을 놓칩니다. 다시 말한 횟수는
+  /// [_sttRetryCount] 로 세어 뒀다가 결국 제출될 때 함께 보냅니다.
+  ///
+  /// 다시 말하기는 **선택지를 부르지 않습니다**. 카드는 못 알아들었을 때
+  /// (`STT_EMPTY_TEXT`) 내려놓는 것이고, 여기는 알아듣긴 했는데 아이가 아니라고
+  /// 한 자리라 [_recordFailedSttAttempt] 를 타지 않습니다.
+  Future<void> _retryTranscription() async {
+    if (_pendingTranscription == null || _submittingUtterance) return;
+    setState(() {
+      _pendingTranscription = null;
+      _sttRetryCount++;
+      _sttHint = null;
+    });
+    await _toggleVoiceAnswer();
   }
 
   /// 턴 결과로 표정을 옮긴다. 캐릭터 대사를 재생하기 **전에** 부른다 - 아이 말에 대한 반응이
@@ -1250,6 +1302,7 @@ class _PlayPageState extends State<PlayPage> {
       _sttHint = null;
       _lastChildText = null;
       _lastSttLowConfidence = false;
+      _pendingTranscription = null;
       // 새 차례에는 지난 차례의 선택지를 들고 오지 않습니다.
       _closeChoicesState();
     });
@@ -1281,9 +1334,11 @@ class _PlayPageState extends State<PlayPage> {
           // 루프가 이미 끝난 뒤에 멈춘 경우에만 다시 들려줍니다.
           unawaited(_playQuestion());
         }
-      } else {
+      } else if (_pendingTranscription == null) {
         _startListening();
       }
+      // 확인 대기 중에 멈췄다면 결과를 지우지 않고 확인 화면으로 되돌아갑니다 -
+      // _startListening 을 타면 아이가 말해 둔 답이 사라집니다.
       return;
     }
 
@@ -1446,8 +1501,13 @@ class _PlayPageState extends State<PlayPage> {
                         recording: _recordingVoice,
                         transcribing: _transcribingVoice,
                         compact: compact,
-                        onMicTap: _isListening ? _toggleVoiceAnswer : null,
+                        onMicTap: _isListening && _pendingTranscription == null
+                            ? _toggleVoiceAnswer
+                            : null,
                         guideSpeaking: _guideSpeaking,
+                        pendingTranscription: _pendingTranscription,
+                        onConfirmTranscription: _confirmTranscription,
+                        onRetryTranscription: _retryTranscription,
                         // 한 번이라도 못 알아들은 뒤로는(선택지가 떠 있을 때
                         // 포함) 녹음을 대신 켜 주지 않습니다. 제출에 성공하면
                         // 0으로 돌아가고 다음 턴은 다시 자동으로 켜집니다.
@@ -1863,6 +1923,9 @@ class _DialogueCanvas extends StatelessWidget {
     this.micNeedsTap = false,
     this.sttHint,
     this.choicePanel,
+    this.pendingTranscription,
+    this.onConfirmTranscription,
+    this.onRetryTranscription,
   });
 
   /// 제작한 표정 에셋이 있는 장면에서만 값이 있다. null이면 [characterAsset] 한 장으로 그린다.
@@ -1888,6 +1951,11 @@ class _DialogueCanvas extends StatelessWidget {
   /// 녹음을 켜지만, 다시 말하는 자리에서는 안내 음성 꼬리가 녹음되지 않도록
   /// 아이가 직접 누르게 두기 때문이다.
   final bool micNeedsTap;
+
+  /// 아이의 확인을 기다리는 변환 결과. 값이 있으면 말풍선이 확인 화면으로 바뀐다.
+  final PlayTranscription? pendingTranscription;
+  final VoidCallback? onConfirmTranscription;
+  final VoidCallback? onRetryTranscription;
 
   final bool submitting;
   final String? lastChildText;
@@ -1991,6 +2059,9 @@ class _DialogueCanvas extends StatelessWidget {
                 lowConfidence: lastSttLowConfidence,
                 sttHint: sttHint,
                 compact: compact,
+                pending: pendingTranscription,
+                onConfirm: onConfirmTranscription,
+                onRetry: onRetryTranscription,
                 maxHeight: constraints.maxHeight * (compact ? .42 : .5),
               ),
             ),
@@ -2165,6 +2236,9 @@ class _ChildVoiceBubble extends StatelessWidget {
     this.guideSpeaking = false,
     this.micNeedsTap = false,
     this.sttHint,
+    this.pending,
+    this.onConfirm,
+    this.onRetry,
   });
 
   /// 말풍선이 차지해도 되는 최대 높이. 아이가 길게 말했어도 잘라내지 않고
@@ -2189,6 +2263,11 @@ class _ChildVoiceBubble extends StatelessWidget {
 
   final String? sttHint;
 
+  /// 아이의 확인을 기다리는 변환 결과. 값이 있으면 확인 화면을 그린다.
+  final PlayTranscription? pending;
+  final VoidCallback? onConfirm;
+  final VoidCallback? onRetry;
+
   bool get listening => phase == _DialoguePhase.listening;
 
   /// 안내 음성이 나오는 동안에는 "말할 차례"가 아니다. 마이크를 켜진 모양으로
@@ -2197,6 +2276,7 @@ class _ChildVoiceBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (pending != null) return _buildConfirmView();
     final String status = transcribing
         ? '목소리를 글로 바꾸고 있어요'
         : submitting
@@ -2312,6 +2392,140 @@ class _ChildVoiceBubble extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// 변환 결과 확인 화면. "맞아요"를 눌러야 턴이 제출된다.
+  ///
+  /// 글을 못 읽는 아이도 있으므로 문구에만 기대지 않는다 - 버튼을 크게 두 개만
+  /// 두고 색과 아이콘(체크/새로고침)으로 "보내기"와 "다시 말하기"를 구분한다.
+  /// 저신뢰면 테두리와 제목을 노란색 계열로 바꿔 "확실하지 않다"는 신호를 준다.
+  ///
+  /// 아이가 한 말은 자르지 않는다. 길게 말했으면 [maxHeight] 안에서 굴리고,
+  /// 버튼 두 개는 어떤 경우에도 화면에 남는다 - 잘린 말과 사라진 버튼은
+  /// 아이에게 "여기서 뭘 해야 하는지"를 통째로 숨긴다.
+  Widget _buildConfirmView() {
+    final PlayTranscription result = pending!;
+    final Color accent = result.lowConfidence
+        ? const Color(0xFFFFD56A)
+        : const Color(0xFF77E0C4);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      constraints: BoxConstraints(
+        minHeight: compact ? 128 : 154,
+        maxHeight: maxHeight,
+      ),
+      padding: EdgeInsets.all(compact ? 15 : 20),
+      decoration: BoxDecoration(
+        color: const Color(0xF2123252),
+        borderRadius: BorderRadius.circular(compact ? 22 : 28),
+        border: Border.all(color: accent, width: 3),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            color: Color(0x66000000),
+            blurRadius: 24,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Semantics(
+        liveRegion: true,
+        label: '이렇게 들었어요: ${result.text}. 맞으면 맞아요를 누르세요.',
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              result.lowConfidence ? '이렇게 들었는데, 맞을까요?' : '이렇게 들었어요',
+              style: TextStyle(
+                color: accent,
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 9),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Text(
+                  result.text,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: compact ? 20 : 23,
+                    height: 1.35,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+            if (result.lowConfidence) ...<Widget>[
+              const SizedBox(height: 6),
+              const Text(
+                '잘 못 알아들었을 수도 있어요.',
+                style: TextStyle(
+                  color: Color(0xFFFFD56A),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+            SizedBox(height: compact ? 12 : 16),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: SizedBox(
+                    height: compact ? 48 : 54,
+                    child: FilledButton.icon(
+                      onPressed: submitting ? null : onConfirm,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF72D6B7),
+                        foregroundColor: const Color(0xFF10314A),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      icon: const Icon(Icons.check_rounded, size: 26),
+                      label: const Text(
+                        '맞아요',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: SizedBox(
+                    height: compact ? 48 : 54,
+                    child: OutlinedButton.icon(
+                      onPressed: submitting ? null : onRetry,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFFFD56A),
+                        side: const BorderSide(
+                          color: Color(0xFFFFD56A),
+                          width: 2,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      icon: const Icon(Icons.refresh_rounded, size: 26),
+                      label: const Text(
+                        '다시 말할래요',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
