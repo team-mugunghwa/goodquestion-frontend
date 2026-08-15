@@ -8,10 +8,19 @@ class InProgressSession {
     required this.storyTitle,
     required this.lastCompletedScene,
     required this.totalScenes,
+    this.storyId,
     this.storyImage,
   });
 
   final String sessionId;
+
+  /// 어떤 이야기의 세션인지. 이야기 상세의 "시작하기"가 **이 이야기를 이미
+  /// 진행 중인지** 판단하는 유일한 근거입니다. → `StartStorySessionUseCase`
+  ///
+  /// 더미 JSON(`home.json`)에는 없는 필드라 `null` 일 수 있고, 그때는
+  /// 어느 이야기와도 매칭되지 않아 새로 시작합니다.
+  final String? storyId;
+
   final String storyTitle;
 
   /// 이야기 대표 이미지. `null` 이면 화면이 브랜드 그라디언트로 대체합니다.

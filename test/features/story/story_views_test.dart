@@ -6,6 +6,10 @@ import 'package:goodquestion/core/theme/app_theme.dart';
 import 'package:goodquestion/core/widgets/app_bottom_nav.dart';
 import 'package:goodquestion/core/widgets/speaker_button.dart';
 import 'package:goodquestion/core/widgets/story_card.dart';
+import 'package:goodquestion/features/home/domain/entities/home_summary.dart';
+import 'package:goodquestion/features/home/domain/entities/planet_summary.dart';
+import 'package:goodquestion/features/home/domain/entities/recommended_story.dart';
+import 'package:goodquestion/features/home/domain/repositories/home_repository.dart';
 import 'package:goodquestion/features/story/domain/entities/story_catalog.dart';
 import 'package:goodquestion/features/story/domain/entities/story_detail.dart';
 import 'package:goodquestion/features/story/domain/entities/story_summary.dart';
@@ -19,6 +23,16 @@ import 'package:goodquestion/features/story/presentation/viewmodels/story_list_v
 import 'package:goodquestion/features/story/presentation/views/story_detail_view.dart';
 import 'package:goodquestion/features/story/presentation/views/story_list_view.dart';
 import 'package:provider/provider.dart';
+
+/// 진행 중 세션이 없는 홈. 상세 화면 테스트는 "시작하기 → 새 세션" 만
+/// 보면 되므로 홈은 빈 값으로 둡니다.
+class _StubHomeRepository implements HomeRepository {
+  @override
+  Future<HomeSummary> getHomeSummary() async => const HomeSummary(
+    recommendedStories: <RecommendedStory>[],
+    planet: PlanetSummary(stardustBalance: 0),
+  );
+}
 
 class _StubRepository implements StoryRepository {
   _StubRepository({this.catalog, this.detail, this.error});
@@ -101,7 +115,7 @@ void main() {
       ChangeNotifierProvider<StoryDetailViewModel>(
         create: (_) => StoryDetailViewModel(
           GetStoryDetailUseCase(repository),
-          StartStorySessionUseCase(repository),
+          StartStorySessionUseCase(repository, _StubHomeRepository()),
           storyId: storyId,
         )..load(),
         child: const StoryDetailView(),
