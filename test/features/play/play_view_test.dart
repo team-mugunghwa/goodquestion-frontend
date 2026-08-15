@@ -244,6 +244,95 @@ void main() {
     expect(audioPlayer.playCount, 1, reason: '소리를 끈 뒤에는 다음 문장도 재생하지 않아야 합니다');
   });
 
+  testWidgets('대화 장면도 일시정지 후 다시 재생하면 멈춘 문장부터 이어 읽는다', (
+    WidgetTester tester,
+  ) async {
+    final _DialogueSpyRepository repository = _DialogueSpyRepository();
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      settle: false,
+    );
+
+    // 첫 문장을 끝까지 듣고 두 번째 문장으로 넘어갑니다.
+    for (int i = 0; i < 6; i++) {
+      await tester.pump();
+    }
+    audioPlayer.finishPlayback();
+    for (int i = 0; i < 6; i++) {
+      await tester.pump();
+    }
+    expect(find.text('두 번째 문장이에요.'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('잠시 멈춤'));
+    await tester.pump();
+    expect(find.text('이야기를 잠시 멈췄어요'), findsOneWidget);
+
+    repository.synthesizedTexts.clear();
+    await tester.tap(find.text('계속 듣기'));
+    for (int i = 0; i < 6; i++) {
+      await tester.pump();
+    }
+
+    expect(
+      find.text('두 번째 문장이에요.'),
+      findsOneWidget,
+      reason: '멈춘 문장부터 이어져야 합니다 - 대사를 처음부터 다시 읽으면 듣던 자리를 잃습니다',
+    );
+    expect(
+      repository.synthesizedTexts,
+      isNot(contains('첫 문장이에요.')),
+      reason: '첫 문장 음성을 다시 부르면 대사를 처음부터 다시 읽는 것입니다',
+    );
+  });
+
+  testWidgets('일시정지 후 다시 재생하면 장면 처음이 아니라 멈춘 문장부터 이어진다', (
+    WidgetTester tester,
+  ) async {
+    final _StoryNarrationSpyRepository repository =
+        _StoryNarrationSpyRepository();
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      settle: false,
+    );
+
+    // 첫 문장을 끝까지 듣고 두 번째 문장으로 넘어갑니다.
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    audioPlayer.finishPlayback();
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    expect(find.text('두 번째 문장이에요.'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('잠시 멈춤'));
+    await tester.pump();
+    expect(find.text('이야기를 잠시 멈췄어요'), findsOneWidget);
+
+    repository.synthesizedTexts.clear();
+    await tester.tap(find.text('계속 듣기'));
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+
+    expect(
+      find.text('두 번째 문장이에요.'),
+      findsOneWidget,
+      reason: '다시 재생은 멈춘 문장에서 이어져야 합니다 - 장면 처음으로 돌아가면 안 됩니다',
+    );
+    expect(
+      repository.synthesizedTexts,
+      isNot(contains('첫 문장이에요.')),
+      reason: '이어 재생이 첫 문장 음성을 다시 부르면 장면을 처음부터 다시 읽는 것입니다',
+    );
+  });
+
   testWidgets('1280x720 범용 대화 템플릿 골든', (WidgetTester tester) async {
     await pumpPlay(tester);
     await tester.pump();
@@ -253,6 +342,82 @@ void main() {
       matchesGoldenFile('goldens/play_dialogue_template.png'),
     );
   });
+}
+
+/// 여러 문장짜리 캐릭터 대사로 시작하는 DIALOGUE 세션. 이어 재생·이전 발화
+/// 잔상처럼 "대사가 흘러가는 중"을 봐야 하는 테스트가 씁니다.
+class _DialogueSpyRepository implements PlayRepository {
+  final List<String> synthesizedTexts = <String>[];
+
+  /// 이어하기로 복원됐을 때 스냅샷에 들어 있는 지난 턴의 아이 발화.
+  String? restoredChildText;
+
+  @override
+  Future<PlaySessionSnapshot> resume(String sessionId) async =>
+      PlaySessionSnapshot(
+        phase: PlayPhase.dialogue,
+        currentScene: const PlayScene(
+          sceneId: 'scene-2',
+          sceneOrder: 2,
+          sceneType: PlaySceneType.dialogue,
+          narrationSentences: <String>[],
+          characterName: '토리',
+          maxTurns: 4,
+        ),
+        openingText: '첫 문장이에요. 두 번째 문장이에요. 세 번째 문장이에요.',
+        messages: <PlayMessage>[
+          if (restoredChildText != null)
+            PlayMessage(
+              messageId: 'm1',
+              speaker: PlaySpeaker.child,
+              turnOrder: 1,
+              text: restoredChildText!,
+            ),
+        ],
+      );
+
+  @override
+  Future<PlaySessionSnapshot> completeStoryScene(String sessionId) =>
+      resume(sessionId);
+
+  @override
+  Future<PlayOpeningMessage> openCurrentScene(String sessionId) async =>
+      const PlayOpeningMessage(text: '', audioUrl: null, alreadyOpened: true);
+
+  @override
+  Future<PlayMission?> currentMission(String sessionId) async => null;
+
+  @override
+  Future<PlayTranscription> transcribeAudio(Uint8List wavBytes) async =>
+      const PlayTranscription(text: '', confidence: null, lowConfidence: false);
+
+  @override
+  Future<PlaySpeechAudio> synthesizeSpeech({
+    required String text,
+    String? characterName,
+  }) async {
+    synthesizedTexts.add(text);
+    return const PlaySpeechAudio(audioUrl: 'stub://dialogue');
+  }
+
+  @override
+  Future<PlayTurnResult> submitUtterance(
+    String sessionId, {
+    required String text,
+    String? missionId,
+    String? sttRawText,
+    double? sttConfidence,
+    int sttRetryCount = 0,
+    String? idempotencyKey,
+  }) async => const PlayTurnResult(
+    characterText: null,
+    characterAudioUrl: null,
+    mission: null,
+    sceneTransition: null,
+  );
+
+  @override
+  Future<void> stop(String sessionId) async {}
 }
 
 class _FakeVoiceRecorder implements MissionVoiceRecorder {
