@@ -4,6 +4,14 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:record/record.dart';
 
+/// 한 번의 녹음 상한(초).
+///
+/// 서버 멀티파트 한도가 10MB인데 웹은 48kHz로 녹음해서(초당 약 94KB) 109초부터
+/// 업로드가 통째로 실패합니다. 길게 말한 아이일수록 실패가 아프므로 한도에 닿기
+/// 한참 전에 서버로 보내는 쪽을 택합니다 - 대화 답변은 한 문장 단위라 60초면
+/// 충분하고도 남습니다.
+const int maxRecordingSeconds = 60;
+
 abstract interface class MissionVoiceRecorder {
   Future<bool> start();
 
