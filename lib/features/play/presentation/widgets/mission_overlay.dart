@@ -104,6 +104,10 @@ class _MissionOverlayState extends State<MissionOverlay> {
       _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
         if (mounted && _stage == _VoiceStage.recording) {
           setState(() => _recordingSeconds++);
+          // 업로드 한도(10MB, 웹 48kHz 기준 109초) 전에 끊는다.
+          if (_recordingSeconds >= maxRecordingSeconds) {
+            unawaited(_stopAndTranscribe());
+          }
         }
       });
     } on Object {
