@@ -55,6 +55,15 @@ class PlayRemoteDataSource {
         },
       );
 
+  Future<List<PlayMessage>> sceneMessages(
+    String sessionId, {
+    required String sceneId,
+  }) => _client.get<List<PlayMessage>>(
+    '/sessions/$sessionId/messages',
+    queryParameters: <String, dynamic>{'sceneId': sceneId},
+    parse: PlaySessionDto.messages,
+  );
+
   Future<PlayMission?> currentMission(String sessionId) =>
       _client.get<PlayMission?>(
         '/sessions/$sessionId/missions/current',

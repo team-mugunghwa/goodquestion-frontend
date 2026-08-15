@@ -87,6 +87,11 @@ GoRouter createAppRouter({
         path: AppRoutes.playPath,
         builder: (BuildContext context, GoRouterState state) => PlayPage(
           sessionId: state.pathParameters[AppRoutes.sessionIdParam]!,
+          // 홈 이어하기·이야기 상세가 실어 보내는 전체 장면 수. 없으면 진행바만
+          // 눈금 없이 그립니다. → [AppRoutes.playOf]
+          totalScenes: int.tryParse(
+            state.uri.queryParameters[AppRoutes.totalScenesParam] ?? '',
+          ),
           repository: getIt<PlayRepository>(),
         ),
         routes: <RouteBase>[

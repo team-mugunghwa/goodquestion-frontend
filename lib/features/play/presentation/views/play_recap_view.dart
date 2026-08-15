@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_icons.dart';
+import '../../../../core/router/app_routes.dart';
 
 /// 말하기 후 활동에서 사용하는 장면 카드 데이터입니다.
 ///
@@ -187,7 +189,9 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
                 _RecapTopBar(
                   title: widget.storyTitle,
                   step: _step,
-                  onExit: () => Navigator.of(context).maybePop(),
+                  // 재생 화면이 `context.go` 로 넘겨준 화면이라 스택에
+                  // 되돌아갈 곳이 없습니다 - maybePop 은 아무 일도 안 합니다.
+                  onExit: () => context.go(AppRoutes.home),
                 ),
                 Expanded(
                   child: AnimatedSwitcher(
@@ -235,7 +239,7 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
                       ),
                       _RecapStep.completed => _CompletionStep(
                         key: const ValueKey<String>('completed'),
-                        onDone: () => Navigator.of(context).maybePop(),
+                        onDone: () => context.go(AppRoutes.home),
                       ),
                     },
                   ),

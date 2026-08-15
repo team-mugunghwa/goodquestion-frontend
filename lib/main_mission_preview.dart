@@ -129,6 +129,12 @@ class _MissionPreviewRepository implements PlayRepository {
   }
 
   @override
+  Future<List<PlayMessage>> sceneMessages(
+    String sessionId, {
+    required String sceneId,
+  }) async => const <PlayMessage>[];
+
+  @override
   Future<PlayMission?> currentMission(String sessionId) async =>
       directShowMission ? _mission : null;
 
@@ -231,6 +237,18 @@ class _PreviewAudioPlayer implements StoryAudioPlayer {
   @override
   Future<void> playUrl(String url) =>
       Future<void>.delayed(const Duration(milliseconds: 1100));
+
+  @override
+  bool get canResume => false;
+
+  @override
+  Future<void> setMuted(bool muted) async {}
+
+  @override
+  Future<void> pause() async {}
+
+  @override
+  Future<void> resume() async {}
 
   @override
   Future<void> stop() async {}

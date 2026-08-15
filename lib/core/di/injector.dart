@@ -168,7 +168,11 @@ Future<void> configureDependencies() async {
       () => GetStoryDetailUseCase(getIt<StoryRepository>()),
     )
     ..registerLazySingleton<StartStorySessionUseCase>(
-      () => StartStorySessionUseCase(getIt<StoryRepository>()),
+      // 진행 중 세션은 홈 응답에만 있어서 HomeRepository 를 함께 봅니다.
+      () => StartStorySessionUseCase(
+        getIt<StoryRepository>(),
+        getIt<HomeRepository>(),
+      ),
     );
 
   // ---- play ----
