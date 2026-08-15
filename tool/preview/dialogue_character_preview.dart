@@ -33,6 +33,8 @@ class _SilentRecorder implements MissionVoiceRecorder {
 
 class _SilentPlayer implements StoryAudioPlayer {
   @override
+  Stream<Duration> get onPosition => const Stream<Duration>.empty();
+  @override
   Future<void> playUrl(String url) async {}
 
   @override

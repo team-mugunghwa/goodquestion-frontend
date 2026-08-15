@@ -324,6 +324,111 @@ void main() {
     expect(audioPlayer.muted, isTrue, reason: '새 문장을 틀어도 음소거 상태가 유지돼야 합니다');
   });
 
+  testWidgets('사전 렌더 내레이션은 파일 하나로 재생하고 합성을 부르지 않는다', (
+    WidgetTester tester,
+  ) async {
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    final _StoryNarrationSpyRepository repository =
+        _StoryNarrationSpyRepository()
+          ..initialSnapshot = const PlaySessionSnapshot(
+            phase: PlayPhase.story,
+            currentScene: PlayScene(
+              sceneId: 'scene-1',
+              sceneOrder: 1,
+              sceneType: PlaySceneType.story,
+              narrationSentences: <String>['첫 문장이에요.', '두 번째 문장이에요.'],
+              narrationAudioUrl: '/tts/banggui/sc_banggui_01.mp3',
+              narrationTimings: <PlayAudioTiming>[
+                PlayAudioTiming(index: 0, start: 0, end: 6.2),
+                PlayAudioTiming(index: 1, start: 6.8, end: 13.2),
+              ],
+            ),
+          );
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      settle: false,
+    );
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+
+    expect(audioPlayer.playCount, 1, reason: '장면 전체가 파일 하나여야 합니다');
+    expect(
+      repository.synthesizedTexts,
+      isEmpty,
+      reason: '사전 렌더가 있는데 문장별 합성을 또 부르면 왕복 비용이 그대로 남습니다',
+    );
+    expect(find.text('첫 문장이에요.'), findsOneWidget);
+
+    // 자막 시계는 벽시계가 아니라 **재생 위치**입니다 - 위치를 흘려야 넘어갑니다.
+    audioPlayer.emitPosition(const Duration(seconds: 7));
+    for (int i = 0; i < 3; i++) {
+      await tester.pump();
+    }
+    expect(find.text('두 번째 문장이에요.'), findsOneWidget);
+
+    // 파일이 끝나면 700ms 뒤 장면 완료로 넘어갑니다(기존 규칙 그대로).
+    audioPlayer.finishPlayback();
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    await tester.pump(const Duration(milliseconds: 750));
+    expect(audioPlayer.playCount, greaterThanOrEqualTo(1));
+  });
+
+  testWidgets('사전 렌더 오프닝 대사는 문장이 여러 개여도 파일 하나로 재생한다', (
+    WidgetTester tester,
+  ) async {
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    final _StoryNarrationSpyRepository repository =
+        _StoryNarrationSpyRepository()
+          ..initialSnapshot = const PlaySessionSnapshot(
+            phase: PlayPhase.dialogue,
+            currentScene: PlayScene(
+              sceneId: 'scene-5',
+              sceneOrder: 5,
+              sceneType: PlaySceneType.dialogue,
+              narrationSentences: <String>[],
+              characterName: '시아버지',
+            ),
+            openingText: '아이고 이게 무슨 일이냐! 우리 집안이 다 흔들리는구나!',
+            openingAudioUrl: '/tts/banggui/sc_banggui_05_opening.mp3',
+            openingAudioTimings: <PlayAudioTiming>[
+              PlayAudioTiming(index: 0, start: 0, end: 3.1),
+              PlayAudioTiming(index: 1, start: 3.7, end: 7.4),
+            ],
+          );
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      settle: false,
+    );
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+
+    // 예전에는 문장이 2개 이상이면 audioUrl 을 버리고 문장마다 재합성했습니다.
+    expect(audioPlayer.playCount, 1, reason: '대사 전체가 파일 하나여야 합니다');
+    expect(repository.synthesizedTexts, isEmpty);
+    expect(find.textContaining('아이고 이게 무슨 일이냐!'), findsOneWidget);
+
+    audioPlayer.emitPosition(const Duration(seconds: 4));
+    for (int i = 0; i < 3; i++) {
+      await tester.pump();
+    }
+    expect(find.textContaining('우리 집안이 다 흔들리는구나!'), findsOneWidget);
+
+    // 파일이 끝나면 아이 차례(마이크)로 넘어갑니다.
+    audioPlayer.finishPlayback();
+    for (int i = 0; i < 6; i++) {
+      await tester.pump();
+    }
+    expect(find.bySemanticsLabel('마이크 켜짐'), findsOneWidget);
+  });
+
   testWidgets('전개 화면에서 소리를 다시 켜면 되감지 않고 그 지점부터 들린다', (
     WidgetTester tester,
   ) async {
@@ -1160,6 +1265,15 @@ class _FakeVoiceRecorder implements MissionVoiceRecorder {
 /// 기다림을 풀어 줍니다. 소리 끄기가 실제로 소리를 끊는지 보려면 이 동작이
 /// 있어야 합니다 - 곧바로 끝나 버리는 가짜로는 아무것도 확인되지 않습니다.
 class _SpyAudioPlayer implements StoryAudioPlayer {
+  /// 테스트가 재생 위치를 직접 흘려 자막 넘김(timings)을 검증한다.
+  final StreamController<Duration> positions =
+      StreamController<Duration>.broadcast();
+
+  @override
+  Stream<Duration> get onPosition => positions.stream;
+
+  void emitPosition(Duration position) => positions.add(position);
+
   int playCount = 0;
   int stopCount = 0;
   int pauseCount = 0;
@@ -1226,6 +1340,9 @@ class _SpyAudioPlayer implements StoryAudioPlayer {
 }
 
 class _FakeAudioPlayer implements StoryAudioPlayer {
+  @override
+  Stream<Duration> get onPosition => const Stream<Duration>.empty();
+
   const _FakeAudioPlayer();
 
   @override
@@ -1419,8 +1536,13 @@ class _StoryNarrationSpyRepository implements PlayRepository {
   /// 이걸 채워서 서로 다른 장면으로 실제로 넘어가게 합니다.
   PlaySessionSnapshot? nextSceneOnComplete;
 
+  /// 첫 스냅숏 교체용 - 사전 렌더 내레이션(narrationAudioUrl) 시나리오처럼
+  /// 기본 장면과 다른 모양이 필요할 때 채웁니다.
+  PlaySessionSnapshot? initialSnapshot;
+
   @override
   Future<PlaySessionSnapshot> resume(String sessionId) async =>
+      initialSnapshot ??
       const PlaySessionSnapshot(
         phase: PlayPhase.story,
         currentScene: PlayScene(
