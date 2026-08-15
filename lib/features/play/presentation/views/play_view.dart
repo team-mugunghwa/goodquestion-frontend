@@ -713,7 +713,9 @@ class _PlayPageState extends State<PlayPage> {
     }
     final String sentence = sentences[_narrationIndex];
     bool played = false;
-    if (_soundOn && widget.repository != null) {
+    // 소리를 꺼도 합성과 재생은 그대로 합니다 - 볼륨만 0입니다. 그래야 문장이
+    // 오디오 길이에 맞춰 넘어가고, 다시 켜는 순간 되감기 없이 바로 들립니다.
+    if (widget.repository != null) {
       try {
         final PlaySpeechAudio audio = await widget.repository!.synthesizeSpeech(
           text: sentence,
@@ -726,29 +728,37 @@ class _PlayPageState extends State<PlayPage> {
           );
           return;
         }
-        // 합성을 기다리는 사이에 소리를 껐을 수 있습니다 - 그러면 아예 틀지
-        // 않습니다. 재생 도중에 껐다면 문장을 끝까지 들려주지 못한 것이니
-        // 아래 무음 타이머로 읽을 시간을 줍니다.
-        if (_soundOn) {
-          await _audioPlayer.playUrl(audio.audioUrl);
-          debugPrint('[narration] playUrl finished');
+        // 합성을 기다리는 사이에 일시정지를 눌렀을 수 있습니다. 일시정지는
+        // 토큰을 올리지 않으니(그래야 재생 중이던 문장을 이어 들을 수
+        // 있습니다) 여기서 직접 물러납니다 - 안 그러면 멈춘 뒤에 소리가
+        // 새로 나옵니다. 아직 튼 것이 없어 재개할 때 이 문장을 다시
+        // 시작합니다.
+        if (_storyPaused) {
+          debugPrint('[narration] paused during tts, bailing');
+          return;
         }
-        played = _soundOn;
+        await _audioPlayer.playUrl(audio.audioUrl);
+        debugPrint('[narration] playUrl finished');
+        played = true;
       } on Object catch (error, stack) {
         debugPrint('[narration] tts/play FAILED: $error\n$stack');
         played = false;
       }
     } else {
-      debugPrint(
-        '[narration] skipped tts (soundOn=$_soundOn, '
-        'repository=${widget.repository != null})',
-      );
+      debugPrint('[narration] skipped tts (no repository)');
     }
     if (!mounted || token != _speechToken) {
       debugPrint(
         '[narration] stale before fallback check (mounted=$mounted '
         'token=$token current=$_speechToken), bailing',
       );
+      return;
+    }
+    // 멈춰 있는 사이에 재생 대기가 풀려 여기까지 내려올 수 있습니다(예:
+    // 나가기·다시 듣기가 부르는 stop). 그대로 두면 일시정지 중인데도 무음
+    // 타이머가 돌아 다음 문장으로 넘어갑니다.
+    if (_storyPaused) {
+      debugPrint('[narration] paused after playback, bailing');
       return;
     }
     if (!played) {
@@ -826,31 +836,47 @@ class _PlayPageState extends State<PlayPage> {
     if (pending != null && !pending.isCompleted) pending.complete();
   }
 
-  /// 전개 장면의 일시정지. **멈춘 문장은 그대로 둡니다** - 다시 재생하면
-  /// [_narrationIndex] 가 가리키는 그 문장부터 이어집니다(장면 처음이 아닙니다).
-  /// 장면을 처음부터 다시 읽는 것은 "다시 듣기" 버튼의 몫입니다.
+  /// 전개 장면의 일시정지. **멈춘 지점을 그대로 둡니다** - 다시 재생하면
+  /// 문장 처음이 아니라 소리가 끊긴 바로 그 자리에서 이어집니다. 장면을
+  /// 처음부터 다시 읽는 것은 "다시 듣기" 버튼의 몫입니다.
   void _toggleStoryPause() {
     _storyTimer?.cancel();
     if (!_storyPaused) {
-      // 멈추는 쪽입니다 - 재생 중이던 내레이션도 즉시 끊고, 무음으로 읽는
-      // 중이었다면 그 기다림도 풀어 그 문장 루프가 조용히 끝나게 합니다.
-      _speechToken++;
-      _releaseNarrationWait();
-      unawaited(_audioPlayer.stop());
+      // 멈추는 쪽입니다. **[_speechToken] 을 올리지 않습니다** - 올리면
+      // 재생을 기다리던 루프가 스스로 빠져나가 이어 들을 대상이 사라집니다.
+      // 소리는 stop() 이 아니라 pause() 로 멈춥니다(stop 은 위치를 0으로
+      // 되돌립니다).
+      if (_narrationWait != null) {
+        // 무음 타이머로 읽던 중이라 되돌릴 재생 위치가 없습니다 - 이때만
+        // 예전처럼 그 문장 루프를 끝내고, 재개할 때 문장을 다시 시작합니다.
+        _speechToken++;
+        _releaseNarrationWait();
+      }
+      unawaited(_audioPlayer.pause());
+      setState(() => _storyPaused = true);
+      return;
     }
-    setState(() => _storyPaused = !_storyPaused);
-    if (!_storyPaused) _scheduleCurrentNarration();
+    setState(() => _storyPaused = false);
+    // 멈춰 둔 오디오가 남아 있으면 그 지점부터, 없으면(무음 타이머·합성
+    // 대기 중에 멈춘 경우) 그 문장을 처음부터 다시 시작합니다.
+    if (_audioPlayer.canResume) {
+      unawaited(_audioPlayer.resume());
+    } else {
+      _scheduleCurrentNarration();
+    }
   }
 
-  /// 소리 끄기/켜기. 아이콘만 바꾸면 "껐는데 계속 들린다"가 됩니다 - 지금
-  /// 나오고 있는 문장도 그 자리에서 끊어야 합니다. 이야기 자체는 멈추지
-  /// 않습니다(그건 일시정지 버튼의 몫입니다). 끊긴 문장은 [_playCurrentNarration]
-  /// /[_playCharacterMessage] 의 무음 타이머가 읽을 시간만큼 잡아 주고,
-  /// 다시 켜면 다음 문장부터 목소리가 돌아옵니다.
+  /// 소리 끄기/켜기 - **음소거입니다. 재생을 끊지 않습니다.**
+  ///
+  /// 예전에는 끌 때 [StoryAudioPlayer.stop] 으로 끊고 켤 때 그 문장을 다시
+  /// 틀었는데, 지금 콘텐츠는 장면당 문장이 하나라 "이 문장 다시"가 곧
+  /// "장면 처음부터"여서 켤 때마다 이야기가 되감겼습니다. 볼륨만 0으로
+  /// 내리면 오디오가 그대로 흘러가 문장도 평소 속도로 넘어가고, 다시 켜면
+  /// 그 지점부터 들립니다. 이야기를 멈추는 것은 일시정지 버튼의 몫입니다.
   void _toggleSound() {
     final bool soundOn = !_soundOn;
     setState(() => _soundOn = soundOn);
-    if (!soundOn) unawaited(_audioPlayer.stop());
+    unawaited(_audioPlayer.setMuted(!soundOn));
   }
 
   Future<void> _playQuestion() async {
@@ -916,7 +942,9 @@ class _PlayPageState extends State<PlayPage> {
       if (!mounted || token != _speechToken) return;
       setState(() => _characterSentenceIndex = index);
       bool played = false;
-      if (_soundOn && widget.repository != null) {
+      // 소리를 꺼도 합성과 재생은 그대로 합니다 - 볼륨만 0입니다(→
+      // [_toggleSound]). 그래야 대사가 오디오 길이에 맞춰 넘어갑니다.
+      if (widget.repository != null) {
         try {
           final String source = index == 0 && sentences.length == 1
               ? (audioUrl ??
@@ -932,20 +960,24 @@ class _PlayPageState extends State<PlayPage> {
                       _snapshot?.currentScene?.characterName ??
                       widget.characterName,
                 )).audioUrl;
-          // 내레이션과 같은 규칙입니다 - 합성을 기다리는 사이에 소리를 껐으면
-          // 틀지 않고, 재생 중에 껐으면 못 들려준 것으로 쳐서 읽을 시간을 줍니다.
-          if (source.isNotEmpty && _soundOn) {
+          // 내레이션과 같은 규칙입니다 - 합성을 기다리는 사이에 일시정지를
+          // 눌렀으면 틀지 않습니다(멈춘 뒤에 소리가 새로 나오면 안 됩니다).
+          if (source.isNotEmpty && _phase != _DialoguePhase.paused) {
             final String resolvedSource = source.startsWith('/')
                 ? Uri.parse(AppConfig.apiBaseUrl).resolve(source).toString()
                 : source;
             await _audioPlayer.playUrl(resolvedSource);
-            played = _soundOn;
+            played = true;
           }
         } on Object {
           played = false;
         }
       }
-      if (!played) {
+      // 멈춰 있는 사이에 재생 대기가 풀려 못 들려준 문장으로 내려올 수
+      // 있습니다(예: 나가기가 부르는 stop). 그대로 두면 일시정지 중인데
+      // 무음 타이머가 돕니다 - 아래 index-- 로 표시해 두고 문 앞에서
+      // 기다립니다.
+      if (!played && _phase != _DialoguePhase.paused) {
         final int milliseconds = widget.repository == null
             ? 2000
             : (1200 + sentences[index].length * 55).clamp(1800, 5200).toInt();
@@ -1028,17 +1060,24 @@ class _PlayPageState extends State<PlayPage> {
 
   /// 대화 장면의 일시정지.
   ///
-  /// 멈출 때 대사 루프를 **죽이지 않습니다**. 소리만 끊고 루프를 문 앞에
-  /// 세워 뒀다가([_awaitResume]), 다시 재생하면 멈춘 문장부터 이어 읽게
-  /// 합니다 - 예전에는 [_playQuestion] 으로 대사를 처음부터 다시 틀어서
-  /// 듣던 자리를 잃었습니다.
+  /// 멈출 때 대사 루프를 **죽이지 않습니다**. 소리는 [StoryAudioPlayer.pause]
+  /// 로 그 자리에 세워 두고([StoryAudioPlayer.stop] 은 재생 위치를 0으로
+  /// 되돌립니다), 무음으로 읽던 중이었다면 루프를 문 앞에 세워 뒀다가
+  /// ([_awaitResume]) 다시 재생할 때 그 문장부터 이어 읽게 합니다.
+  /// 전개 화면의 [_toggleStoryPause] 와 같은 방식입니다.
   void _togglePause() {
     if (_phase == _DialoguePhase.paused) {
       setState(() => _phase = _phaseBeforePause);
       _openPauseGate();
       if (_phase == _DialoguePhase.characterSpeaking) {
-        // 루프가 이미 끝난 뒤에 멈춘 경우에만 다시 들려줍니다.
-        if (!_speaking) unawaited(_playQuestion());
+        // 멈춰 둔 오디오가 남아 있으면 그 지점부터 이어 갑니다. 루프는
+        // playUrl 안에서 그대로 기다리고 있어 다시 부를 것이 없습니다.
+        if (_audioPlayer.canResume) {
+          unawaited(_audioPlayer.resume());
+        } else if (!_speaking) {
+          // 루프가 이미 끝난 뒤에 멈춘 경우에만 다시 들려줍니다.
+          unawaited(_playQuestion());
+        }
       } else {
         _startListening();
       }
@@ -1049,7 +1088,9 @@ class _PlayPageState extends State<PlayPage> {
     _questionTimer?.cancel();
     _listeningTimer?.cancel();
     if (_recordingVoice) unawaited(_voiceRecorder.cancel());
-    unawaited(_audioPlayer.stop());
+    // **[_speechToken] 을 올리지 않습니다** - 올리면 재생을 기다리던 루프가
+    // 스스로 빠져나가 이어 들을 대상이 사라집니다.
+    unawaited(_audioPlayer.pause());
     // 무음으로 읽는 중이었다면 그 기다림을 깨워, 루프가 이 문장에서
     // 멈춰 서 있게 합니다(깨우지 않으면 타이머만 죽고 영영 안 깨어납니다).
     _releaseSpeechWait();

@@ -267,7 +267,7 @@ void main() {
     );
   });
 
-  testWidgets('소리 끄기를 누르면 아이콘만이 아니라 나오던 소리도 실제로 멈춘다', (
+  testWidgets('소리 끄기는 아이콘만 바꾸지 않고 실제로 소리를 죽인다 - 재생은 끊지 않습니다', (
     WidgetTester tester,
   ) async {
     final _StoryNarrationSpyRepository repository =
@@ -289,13 +289,18 @@ void main() {
     await tester.pump();
 
     expect(
+      audioPlayer.muted,
+      isTrue,
+      reason: '아이콘만 바꾸면 안 됩니다 - 나오고 있던 음성이 실제로 안 들려야 합니다',
+    );
+    expect(
       audioPlayer.stopCount,
-      greaterThan(0),
-      reason: '아이콘만 바꾸면 안 됩니다 - 나오고 있던 음성을 실제로 끊어야 합니다',
+      0,
+      reason: '끊으면 재생 위치를 잃습니다 - 볼륨만 0으로 내려야 다시 켤 때 그 지점부터 들립니다',
     );
     expect(find.byTooltip('소리 켜기'), findsOneWidget);
 
-    // 소리를 끈 뒤에도 이야기는 무음으로 계속 흐르고, 새로 재생하지는 않습니다.
+    // 소리를 꺼도 오디오는 그대로 흘러가고, 새로 틀지는 않습니다.
     for (int i = 0; i < 5; i++) {
       await tester.pump();
     }
@@ -303,7 +308,159 @@ void main() {
     for (int i = 0; i < 5; i++) {
       await tester.pump();
     }
-    expect(audioPlayer.playCount, 1, reason: '소리를 끈 뒤에는 다음 문장도 재생하지 않아야 합니다');
+    expect(audioPlayer.playCount, 1, reason: '소리를 끈다고 문장을 새로 틀면 안 됩니다');
+
+    // 음소거 중에도 문장은 오디오 길이에 맞춰 평소대로 넘어갑니다.
+    audioPlayer.finishPlayback();
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    expect(find.text('두 번째 문장이에요.'), findsOneWidget);
+    expect(
+      repository.synthesizedTexts,
+      containsAll(<String>['첫 문장이에요.', '두 번째 문장이에요.']),
+      reason: '음소거 중에도 합성은 그대로 합니다 - 켜는 순간 바로 들려야 합니다',
+    );
+    expect(audioPlayer.muted, isTrue, reason: '새 문장을 틀어도 음소거 상태가 유지돼야 합니다');
+  });
+
+  testWidgets('전개 화면에서 소리를 다시 켜면 되감지 않고 그 지점부터 들린다', (
+    WidgetTester tester,
+  ) async {
+    final _StoryNarrationSpyRepository repository =
+        _StoryNarrationSpyRepository();
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      settle: false,
+    );
+
+    // 첫 문장을 끝까지 듣고 두 번째 문장에서 소리를 껐다 켭니다.
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    audioPlayer.finishPlayback();
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    expect(find.text('두 번째 문장이에요.'), findsOneWidget);
+    await tester.tap(find.byTooltip('소리 끄기'));
+    await tester.pump();
+    final int playsWhileMuted = audioPlayer.playCount;
+
+    repository.synthesizedTexts.clear();
+    await tester.tap(find.byTooltip('소리 켜기'));
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+
+    expect(audioPlayer.muted, isFalse);
+    expect(
+      audioPlayer.playCount,
+      playsWhileMuted,
+      reason:
+          '켤 때 다시 트는 것은 되감기입니다 - 지금 콘텐츠는 장면당 문장이 하나라 '
+          '그 문장을 다시 트는 것이 곧 장면 처음으로 돌아가는 것입니다',
+    );
+    expect(
+      repository.synthesizedTexts,
+      isEmpty,
+      reason: '흘러가던 오디오를 그대로 들려주면 됩니다 - 다시 합성할 이유가 없습니다',
+    );
+    expect(find.text('두 번째 문장이에요.'), findsOneWidget);
+  });
+
+  testWidgets('일시정지 중에 소리를 켜면 멈춘 상태를 그대로 둔다', (WidgetTester tester) async {
+    final _StoryNarrationSpyRepository repository =
+        _StoryNarrationSpyRepository();
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      settle: false,
+    );
+
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    await tester.tap(find.byTooltip('소리 끄기'));
+    await tester.pump();
+    await tester.tap(find.byTooltip('잠시 멈춤'));
+    await tester.pump();
+
+    final int playsWhilePaused = audioPlayer.playCount;
+    repository.synthesizedTexts.clear();
+    await tester.tap(find.byTooltip('소리 켜기'));
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+
+    expect(find.text('이야기를 잠시 멈췄어요'), findsOneWidget);
+    expect(
+      audioPlayer.playCount,
+      playsWhilePaused,
+      reason: '소리 켜기가 멈춰 둔 이야기를 다시 굴리면 안 됩니다 - 계속 듣기의 몫입니다',
+    );
+    expect(repository.synthesizedTexts, isEmpty);
+  });
+
+  testWidgets('대화 화면에서 소리를 다시 켜면 되감지 않고 그 지점부터 들린다', (
+    WidgetTester tester,
+  ) async {
+    final _DialogueSpyRepository repository = _DialogueSpyRepository();
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      settle: false,
+    );
+
+    // 첫 문장을 끝까지 듣고 두 번째 문장에서 소리를 껐다 켭니다.
+    for (int i = 0; i < 6; i++) {
+      await tester.pump();
+    }
+    audioPlayer.finishPlayback();
+    for (int i = 0; i < 6; i++) {
+      await tester.pump();
+    }
+    expect(find.text('두 번째 문장이에요.'), findsOneWidget);
+    final int stopsBeforeMute = audioPlayer.stopCount;
+
+    await tester.tap(find.byTooltip('소리 끄기'));
+    await tester.pump();
+    expect(audioPlayer.muted, isTrue);
+    expect(
+      audioPlayer.stopCount,
+      stopsBeforeMute,
+      reason: '끊으면 재생 위치를 잃습니다 - 볼륨만 0으로 내려야 합니다',
+    );
+    final int playsWhileMuted = audioPlayer.playCount;
+
+    repository.synthesizedTexts.clear();
+    await tester.tap(find.byTooltip('소리 켜기'));
+    for (int i = 0; i < 6; i++) {
+      await tester.pump();
+    }
+
+    expect(audioPlayer.muted, isFalse);
+    expect(
+      audioPlayer.playCount,
+      playsWhileMuted,
+      reason: '켤 때 다시 트는 것은 되감기입니다 - 흘러가던 오디오를 그대로 들려주면 됩니다',
+    );
+    expect(repository.synthesizedTexts, isEmpty);
+    expect(find.text('두 번째 문장이에요.'), findsOneWidget);
+
+    // 음소거와 무관하게 대사는 오디오 길이에 맞춰 넘어갑니다.
+    audioPlayer.finishPlayback();
+    for (int i = 0; i < 6; i++) {
+      await tester.pump();
+    }
+    expect(find.text('세 번째 문장이에요.'), findsOneWidget);
   });
 
   testWidgets('대화 장면도 일시정지 후 다시 재생하면 멈춘 문장부터 이어 읽는다', (
@@ -347,6 +504,69 @@ void main() {
       repository.synthesizedTexts,
       isNot(contains('첫 문장이에요.')),
       reason: '첫 문장 음성을 다시 부르면 대사를 처음부터 다시 읽는 것입니다',
+    );
+  });
+
+  testWidgets('대화 장면의 일시정지도 재생 위치를 지켜서, 문장을 처음부터 다시 읽지 않는다', (
+    WidgetTester tester,
+  ) async {
+    final _DialogueSpyRepository repository = _DialogueSpyRepository();
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      settle: false,
+    );
+
+    // 첫 문장을 끝까지 듣고, 두 번째 문장이 재생되는 도중에 멈춥니다.
+    for (int i = 0; i < 6; i++) {
+      await tester.pump();
+    }
+    audioPlayer.finishPlayback();
+    for (int i = 0; i < 6; i++) {
+      await tester.pump();
+    }
+    expect(find.text('두 번째 문장이에요.'), findsOneWidget);
+    final int playsBeforePause = audioPlayer.playCount;
+    // 대사를 시작할 때 _playCharacterMessage 가 앞선 소리를 끊습니다 - 그
+    // 호출은 일시정지와 무관하니 여기서부터 세어야 합니다.
+    final int stopsBeforePause = audioPlayer.stopCount;
+
+    await tester.tap(find.byTooltip('잠시 멈춤'));
+    await tester.pump();
+
+    expect(
+      audioPlayer.pauseCount,
+      1,
+      reason: 'stop() 은 재생 위치를 0으로 되돌립니다 - 일시정지는 pause() 여야 합니다',
+    );
+    expect(
+      audioPlayer.stopCount,
+      stopsBeforePause,
+      reason: '멈출 때 stop() 을 부르면 되감겨서 이어 들을 지점이 사라집니다',
+    );
+
+    // 멈춘 채로 오래 두어도 제멋대로 다음 문장으로 넘어가면 안 됩니다.
+    await tester.pump(const Duration(minutes: 2));
+    expect(find.text('두 번째 문장이에요.'), findsOneWidget);
+
+    repository.synthesizedTexts.clear();
+    await tester.tap(find.text('계속 듣기'));
+    for (int i = 0; i < 6; i++) {
+      await tester.pump();
+    }
+
+    expect(audioPlayer.resumeCount, 1);
+    expect(
+      audioPlayer.playCount,
+      playsBeforePause,
+      reason: '멈춘 지점부터 이어져야 합니다 - 새로 틀면 그 문장을 처음부터 다시 읽는 것입니다',
+    );
+    expect(
+      repository.synthesizedTexts,
+      isEmpty,
+      reason: '이어 재생은 이미 받아 둔 음성을 그대로 씁니다 - 다시 합성하면 문장을 되감은 것입니다',
     );
   });
 
@@ -432,6 +652,80 @@ void main() {
       isNot(contains('첫 문장이에요.')),
       reason: '이어 재생이 첫 문장 음성을 다시 부르면 장면을 처음부터 다시 읽는 것입니다',
     );
+  });
+
+  testWidgets('일시정지는 재생 위치를 지켜서, 다시 재생하면 그 문장을 처음부터 다시 읽지 않는다', (
+    WidgetTester tester,
+  ) async {
+    final _StoryNarrationSpyRepository repository =
+        _StoryNarrationSpyRepository();
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      settle: false,
+    );
+
+    // 첫 문장을 끝까지 듣고, 두 번째 문장이 재생되는 도중에 멈춥니다.
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    audioPlayer.finishPlayback();
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    expect(find.text('두 번째 문장이에요.'), findsOneWidget);
+    final int playsBeforePause = audioPlayer.playCount;
+
+    await tester.tap(find.byTooltip('잠시 멈춤'));
+    await tester.pump();
+
+    expect(
+      audioPlayer.pauseCount,
+      1,
+      reason: 'stop() 은 재생 위치를 0으로 되돌립니다 - 일시정지는 pause() 여야 합니다',
+    );
+    expect(
+      audioPlayer.stopCount,
+      0,
+      reason: '멈출 때 stop() 을 부르면 되감겨서 재개할 지점이 사라집니다',
+    );
+
+    // 멈춘 채로 오래 두어도 제멋대로 다음 문장으로 넘어가면 안 됩니다.
+    await tester.pump(const Duration(minutes: 2));
+    expect(find.text('두 번째 문장이에요.'), findsOneWidget);
+
+    repository.synthesizedTexts.clear();
+    await tester.tap(find.text('계속 듣기'));
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+
+    expect(audioPlayer.resumeCount, 1);
+    expect(
+      audioPlayer.playCount,
+      playsBeforePause,
+      reason: '멈춘 지점부터 이어져야 합니다 - 새로 틀면 그 문장을 처음부터 다시 읽는 것입니다',
+    );
+    expect(
+      repository.synthesizedTexts,
+      isEmpty,
+      reason: '이어 재생은 이미 받아 둔 음성을 그대로 씁니다 - 다시 합성하면 문장을 되감은 것입니다',
+    );
+
+    // 이어 듣던 문장이 끝나면 평소대로 다음으로 넘어갑니다 - 일시정지가
+    // 내레이션 루프를 끊어 놓지 않았다는 뜻입니다(이 장면은 문장이 둘이라
+    // 다음은 장면 넘기기입니다).
+    audioPlayer.finishPlayback();
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    await tester.pump(const Duration(milliseconds: 700));
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    expect(find.text('첫 문장이에요.'), findsOneWidget);
   });
 
   testWidgets('상단 진행바는 장면이 넘어갈 때마다 전체 장면 대비 위치를 그린다', (
@@ -628,19 +922,50 @@ class _FakeVoiceRecorder implements MissionVoiceRecorder {
 class _SpyAudioPlayer implements StoryAudioPlayer {
   int playCount = 0;
   int stopCount = 0;
+  int pauseCount = 0;
+  int resumeCount = 0;
+  bool muted = false;
   Completer<void>? _playing;
+  bool _paused = false;
 
   @override
   Future<void> playUrl(String url) {
     playCount++;
+    _paused = false;
     final Completer<void> completer = Completer<void>();
     _playing = completer;
     return completer.future;
   }
 
+  /// 진짜 재생기처럼 기다림을 **풀지 않습니다** - 멈춘 문장을 아직 다 듣지
+  /// 않았으니, 여기서 풀어 주면 부르는 쪽이 다음 문장으로 넘어가 버립니다.
+  @override
+  Future<void> pause() async {
+    if (_playing == null || _paused) return;
+    pauseCount++;
+    _paused = true;
+  }
+
+  @override
+  Future<void> resume() async {
+    if (!_paused) return;
+    resumeCount++;
+    _paused = false;
+  }
+
+  /// 진짜 재생기처럼 소리만 죽입니다 - 재생은 그대로 흘러갑니다.
+  @override
+  Future<void> setMuted(bool value) async {
+    muted = value;
+  }
+
+  @override
+  bool get canResume => _paused && _playing != null;
+
   @override
   Future<void> stop() async {
     stopCount++;
+    _paused = false;
     _finish();
   }
 
@@ -664,10 +989,22 @@ class _FakeAudioPlayer implements StoryAudioPlayer {
   const _FakeAudioPlayer();
 
   @override
+  Future<void> setMuted(bool muted) async {}
+
+  @override
   Future<void> dispose() async {}
 
   @override
   Future<void> playUrl(String url) async {}
+
+  @override
+  bool get canResume => false;
+
+  @override
+  Future<void> pause() async {}
+
+  @override
+  Future<void> resume() async {}
 
   @override
   Future<void> stop() async {}

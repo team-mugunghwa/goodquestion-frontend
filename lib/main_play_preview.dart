@@ -140,5 +140,17 @@ class _PreviewAudioPlayer implements StoryAudioPlayer {
       Future<void>.delayed(const Duration(milliseconds: 1700));
 
   @override
+  bool get canResume => false;
+
+  @override
+  Future<void> setMuted(bool muted) async {}
+
+  @override
+  Future<void> pause() async {}
+
+  @override
+  Future<void> resume() async {}
+
+  @override
   Future<void> stop() async {}
 }
