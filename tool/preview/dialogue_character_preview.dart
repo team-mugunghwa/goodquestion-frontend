@@ -36,6 +36,18 @@ class _SilentPlayer implements StoryAudioPlayer {
   Future<void> playUrl(String url) async {}
 
   @override
+  bool get canResume => false;
+
+  @override
+  Future<void> setMuted(bool muted) async {}
+
+  @override
+  Future<void> pause() async {}
+
+  @override
+  Future<void> resume() async {}
+
+  @override
   Future<void> stop() async {}
 
   @override
