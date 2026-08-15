@@ -52,7 +52,14 @@ abstract final class AppConfig {
       _rawBaseUrl.isNotEmpty ? _rawBaseUrl : _defaultBaseUrl;
 
   static const Duration connectTimeout = Duration(seconds: 10);
-  static const Duration receiveTimeout = Duration(seconds: 15);
+
+  /// `/utterances` 한 턴은 백엔드에서 LLM을 두 번 순차 호출합니다(발화 분석 ->
+  /// 캐릭터 대사 생성). 백엔드의 외부 API 응답 타임아웃이 각 10초라 최악의
+  /// 경우 20초에 가깝습니다 - 15초로는 정상 처리 중인데도 타임아웃으로
+  /// "네트워크에 연결할 수 없습니다"가 뜨고, 이야기가 도중에 끊깁니다.
+  /// → `WebClientConfig`(backend), `application.yml`의
+  /// `external.http.response-timeout-ms`
+  static const Duration receiveTimeout = Duration(seconds: 30);
 
   /// 네트워크 로그를 콘솔에 찍을지. 릴리스 빌드에서는 자동으로 꺼집니다.
   static bool get enableNetworkLog => kDebugMode;
