@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/di/injector.dart';
+import '../../../../core/push/push_registrar.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -51,6 +52,7 @@ class AuthPage extends StatelessWidget {
         getIt<SignOutUseCase>(),
         loadCurrentChildName: () async =>
             (await getIt<GetMyPageSummaryUseCase>()()).child?.name,
+        pushRegistrar: getIt<PushRegistrar>(),
         startAtChildProfile: startAtChildProfile,
       )..load(),
       child: const AuthView(),
