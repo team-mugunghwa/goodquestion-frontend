@@ -28,6 +28,12 @@ class PlayRepositoryImpl implements PlayRepository {
       _guard(() => _remote.currentMission(sessionId));
 
   @override
+  Future<List<PlayMessage>> sceneMessages(
+    String sessionId, {
+    required String sceneId,
+  }) => _guard(() => _remote.sceneMessages(sessionId, sceneId: sceneId));
+
+  @override
   Future<PlayTranscription> transcribeAudio(Uint8List wavBytes) =>
       _guard(() => _remote.transcribeAudio(wavBytes));
 

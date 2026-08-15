@@ -115,6 +115,10 @@ class _PlayPageState extends State<PlayPage> {
   /// 겪을 수 있는 흔한 상황이라 화면이 통째로 바뀌면 매번 놀랍니다.
   String? _sttHint;
   String? _retainedStoryImageUrl;
+
+  /// 지금 화면이 붙잡고 있는 장면. 장면이 바뀌는 순간을 [_activateSnapshot]
+  /// 이 알아채고 이전 장면의 아이 발화를 지우는 데 씁니다.
+  String? _activeSceneId;
   String? _resultImageUrl;
   DialogueCharacterManifest? _characterManifest;
   DialogueCharacterStateMachine? _character;
@@ -231,18 +235,19 @@ class _PlayPageState extends State<PlayPage> {
       final PlayMission? recoveredMission =
           snapshot.mission ??
           await widget.repository!.currentMission(widget.sessionId);
-      String? recoveredChildText;
-      for (final PlayMessage message in snapshot.messages) {
-        if (message.speaker == PlaySpeaker.child) {
-          recoveredChildText = message.text;
-        }
-      }
+      final PlayMessage? recoveredChild = await _lastChildMessageOfCurrentScene(
+        snapshot,
+      );
       if (!mounted) return;
       setState(() {
         _snapshot = snapshot;
         _mission = recoveredMission;
         _characterReply = null;
-        _lastChildText = recoveredChildText;
+        _lastChildText = recoveredChild?.text;
+        _lastSttLowConfidence = recoveredChild?.sttLowConfidence ?? false;
+        // 복원한 발화는 이 장면의 것입니다 - 이어서 부르는
+        // [_activateSnapshot] 이 "장면이 바뀌었다"로 보고 지우면 안 됩니다.
+        _activeSceneId = snapshot.currentScene?.sceneId;
         _loadingSession = false;
       });
       _activateSnapshot(snapshot);
@@ -257,8 +262,54 @@ class _PlayPageState extends State<PlayPage> {
     }
   }
 
+  /// 이어하기로 들어왔을 때 화면에 되살릴 **이 장면의** 마지막 아이 발화.
+  ///
+  /// `resume` 의 `messages` 를 쓰면 안 됩니다 - 세션 전체 기록이라 이전
+  /// 장면 발화까지 들어 있고, `MessageResponse` 에는 장면 식별자가 없어
+  /// 그 목록만으로는 어디서 장면이 갈렸는지 알 수 없습니다(`turnOrder` 도
+  /// 장면을 넘어 이어집니다). "마지막 캐릭터 메시지 바로 앞이면 이번 장면"
+  /// 같은 어림짐작은 마무리 반응이 함께 저장되는 턴에서 틀립니다. 그래서
+  /// 장면으로 걸러 주는 `sceneMessages` 를 부릅니다.
+  ///
+  /// 이건 복원용 곁들이라 실패해도 이어하기를 막지 않습니다 - 발화만 비운
+  /// 채로 대화를 이어 갑니다.
+  Future<PlayMessage?> _lastChildMessageOfCurrentScene(
+    PlaySessionSnapshot snapshot,
+  ) async {
+    final String? sceneId = snapshot.currentScene?.sceneId;
+    // 전개(STORY) 장면에는 아이 발화를 띄우는 자리가 없습니다.
+    if (sceneId == null || snapshot.phase != PlayPhase.dialogue) return null;
+    try {
+      final List<PlayMessage> messages = await widget.repository!.sceneMessages(
+        widget.sessionId,
+        sceneId: sceneId,
+      );
+      PlayMessage? last;
+      for (final PlayMessage message in messages) {
+        if (message.speaker == PlaySpeaker.child) last = message;
+      }
+      return last;
+    } on Object catch (error) {
+      debugPrint('[play] sceneMessages failed, skipping restore: $error');
+      return null;
+    }
+  }
+
   void _activateSnapshot(PlaySessionSnapshot snapshot) {
     _storyTimer?.cancel();
+    // 장면이 바뀌면 이전 장면에서 아이가 한 말은 지웁니다 - 새 캐릭터가
+    // 말을 거는데 아직 하지도 않은 대답이 떠 있으면 안 됩니다. 같은 장면을
+    // 다시 활성화하는 경우(이어하기 복원)에는 그대로 둡니다.
+    final String? sceneId = snapshot.currentScene?.sceneId;
+    if (sceneId != _activeSceneId) {
+      setState(() {
+        _activeSceneId = sceneId;
+        _lastChildText = null;
+        _lastSttLowConfidence = false;
+        _sttHint = null;
+        _sttRetryCount = 0;
+      });
+    }
     _bindCharacterScene();
     if (snapshot.phase == PlayPhase.postActivity) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
