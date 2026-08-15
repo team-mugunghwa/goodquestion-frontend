@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../features/auth/data/datasources/account_recovery_remote_data_source.dart';
@@ -69,6 +70,7 @@ Future<void> configureDependencies() async {
     ..registerLazySingleton<DioClient>(
       () => DioClient(
         tokenProvider: getIt<AuthTokenStore>().read,
+        tokenRefresher: _refreshTokens,
         onUnauthorized: _handleUnauthorized,
       ),
     );
@@ -280,5 +282,53 @@ Future<void> _signOutAndRedirectToLogin() async {
     appRouter.go(AppRoutes.login);
   } finally {
     _redirectingToLogin = false;
+  }
+}
+
+/// 진행 중인 재발급. 여러 요청이 동시에 401 을 받아도 실제 `/auth/refresh`
+/// 호출은 한 번만 나가야 합니다 — 리프레시 토큰은 1회용으로 회전되므로,
+/// 두 번째 호출은 이미 못 쓰게 된 토큰으로 보내 실패합니다. 진행 중인
+/// Future 가 있으면 새로 호출하지 않고 그 결과를 같이 기다립니다.
+Future<bool>? _refreshFuture;
+
+Future<bool> _refreshTokens() =>
+    _refreshFuture ??= _doRefreshTokens().whenComplete(
+      () => _refreshFuture = null,
+    );
+
+/// `POST /auth/refresh` 로 액세스·리프레시 토큰을 재발급합니다.
+///
+/// 응답은 `AuthResponse` 의 `tokens` 처럼 감싸져 있지 않고 `TokenResponse`
+/// 를 그대로 돌려줍니다 — `{accessToken, refreshToken, accessTokenExpiresIn}`.
+Future<bool> _doRefreshTokens() async {
+  final AuthTokenStore tokens = getIt<AuthTokenStore>();
+  final String? refreshToken = await tokens.readRefresh();
+  if (refreshToken == null || refreshToken.isEmpty) return false;
+  try {
+    final Response<dynamic> response = await getIt<DioClient>().raw
+        .post<dynamic>(
+          '/auth/refresh',
+          data: <String, dynamic>{'refreshToken': refreshToken},
+        );
+    if ((response.statusCode ?? 0) != 200) return false;
+    final Object? body = response.data;
+    final Map<String, dynamic>? map = body is Map<String, dynamic>
+        ? body
+        : null;
+    final String? newAccess = map?['accessToken'] as String?;
+    final String? newRefresh = map?['refreshToken'] as String?;
+    if (newAccess == null ||
+        newAccess.isEmpty ||
+        newRefresh == null ||
+        newRefresh.isEmpty) {
+      return false;
+    }
+    await tokens.saveRefreshed(
+      accessToken: newAccess,
+      refreshToken: newRefresh,
+    );
+    return true;
+  } on DioException {
+    return false;
   }
 }
