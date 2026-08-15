@@ -18,7 +18,7 @@ class ReportDetail {
     this.completedAt,
   });
 
-  final int sessionId;
+  final String sessionId;
   final String childName;
   final String storyTitle;
   final String? storyImage;
