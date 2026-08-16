@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -49,7 +51,7 @@ void main() {
     final GoRouter r = router('/settings');
     await tester.pumpWidget(MaterialApp.router(routerConfig: r));
     await tester.pumpAndSettle();
-    r.push('/notices');
+    unawaited(r.push('/notices'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('뒤로'));
