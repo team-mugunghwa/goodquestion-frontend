@@ -3,8 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:goodquestion/core/constants/app_strings.dart';
 import 'package:goodquestion/core/di/injector.dart';
 import 'package:goodquestion/core/error/failure.dart';
+import 'package:goodquestion/core/network/dio_client.dart';
 import 'package:goodquestion/core/theme/app_theme.dart';
 import 'package:goodquestion/core/widgets/app_bottom_nav.dart';
+import 'package:goodquestion/features/mypage/data/datasources/settings_remote_data_source.dart';
 import 'package:goodquestion/features/mypage/domain/entities/app_settings.dart';
 import 'package:goodquestion/features/mypage/domain/entities/my_page_summary.dart';
 import 'package:goodquestion/features/mypage/domain/entities/report_detail.dart';
@@ -21,6 +23,20 @@ import 'package:goodquestion/features/mypage/presentation/views/report_detail_vi
 import 'package:goodquestion/features/mypage/presentation/views/report_list_view.dart';
 import 'package:goodquestion/features/mypage/presentation/views/settings_view.dart';
 import 'package:provider/provider.dart';
+
+/// 게이트가 부르는 보호자 조회. 이메일 계정(provider null)이라 비밀번호를
+/// 묻는 쪽으로 갑니다.
+class _GateRemote extends SettingsRemoteDataSource {
+  _GateRemote() : super(DioClient());
+
+  @override
+  Future<Map<String, dynamic>> getParent() async => <String, dynamic>{
+    'provider': null,
+  };
+
+  @override
+  Future<void> verifyPassword(String password) async {}
+}
 
 class _Stub
     implements
@@ -194,8 +210,12 @@ const AppSettings _settings = AppSettings(
 );
 
 void main() {
-  // 마이페이지가 게이트를 getIt 에서 꺼내 씁니다.
-  setUpAll(() => getIt.registerLazySingleton<GuardianGate>(GuardianGate.new));
+  // 마이페이지가 게이트를, 게이트가 보호자 조회를 getIt 에서 꺼내 씁니다.
+  setUpAll(() {
+    getIt
+      ..registerLazySingleton<GuardianGate>(GuardianGate.new)
+      ..registerLazySingleton<SettingsRemoteDataSource>(_GateRemote.new);
+  });
   tearDownAll(getIt.reset);
   setUp(() => getIt<GuardianGate>().reset());
 
@@ -246,6 +266,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text(MyPageStrings.gateTitle), findsOneWidget);
+      expect(find.text(MyPageStrings.gatePasswordLabel), findsOneWidget);
       // 취소하면 아무 데도 안 갑니다.
       await tester.tap(find.text(MyPageStrings.gateCancel));
       await tester.pumpAndSettle();

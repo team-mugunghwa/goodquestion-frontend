@@ -91,10 +91,19 @@ class DioClient {
     parse,
   );
 
+  /// [signOutOnUnauthorized] 를 false 로 주면 401 을 **세션 만료가 아니라
+  /// 이 요청의 실패**로 다룹니다(= 로그아웃·로그인 화면 이동을 하지 않고
+  /// [UnauthorizedException] 만 던집니다).
+  ///
+  /// 비밀번호 확인처럼 **"틀렸다"가 정상 응답인 요청**에만 쓰세요. 그런
+  /// 요청에서 기본값을 쓰면 보호자가 비밀번호를 한 번 틀렸다고 앱에서
+  /// 튕겨 나갑니다. 토큰 재발급 재시도는 그대로 둡니다 - 진짜로 토큰이
+  /// 만료된 경우에는 재발급 뒤 다시 물어 제대로 된 답을 받습니다.
   Future<T> post<T>(
     String path, {
     Object? body,
     Map<String, dynamic>? headers,
+    bool signOutOnUnauthorized = true,
     required T Function(Object? data) parse,
   }) => _request(
     path,
@@ -104,6 +113,7 @@ class DioClient {
       options: headers != null ? Options(headers: headers) : null,
     ),
     parse,
+    signOutOnUnauthorized: signOutOnUnauthorized,
   );
 
   Future<T> patch<T>(
@@ -118,8 +128,9 @@ class DioClient {
   Future<T> _request<T>(
     String path,
     Future<Response<dynamic>> Function() send,
-    T Function(Object? data) parse,
-  ) async {
+    T Function(Object? data) parse, {
+    bool signOutOnUnauthorized = true,
+  }) async {
     try {
       Response<dynamic> response = await send();
 
@@ -133,7 +144,12 @@ class DioClient {
         if (refreshed) response = await send();
       }
 
-      return _handleResponse(path, response, parse);
+      return _handleResponse(
+        path,
+        response,
+        parse,
+        signOutOnUnauthorized: signOutOnUnauthorized,
+      );
     } on DioException catch (e) {
       throw _mapDioException(e);
     }
@@ -142,8 +158,9 @@ class DioClient {
   T _handleResponse<T>(
     String path,
     Response<dynamic> response,
-    T Function(Object? data) parse,
-  ) {
+    T Function(Object? data) parse, {
+    bool signOutOnUnauthorized = true,
+  }) {
     final status = response.statusCode ?? 0;
     final body = response.data;
 
@@ -151,7 +168,9 @@ class DioClient {
       // 로그인 자체가 401 이면 "로그인 실패" 이지 "로그아웃되었다"가
       // 아닙니다. baseUrl 에 이미 /api 가 있어 실제 path 는 /auth/login 처럼
       // 옵니다 — /api/auth 가 아니라 /auth 로 판정합니다.
-      if (!path.startsWith('/auth')) onUnauthorized?.call();
+      if (signOutOnUnauthorized && !path.startsWith('/auth')) {
+        onUnauthorized?.call();
+      }
       final map = body is Map<String, dynamic> ? body : null;
       final error = map?['error'];
       final String? message = error is Map<String, dynamic>
