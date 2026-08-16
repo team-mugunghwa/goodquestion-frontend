@@ -168,7 +168,11 @@ class _CosmicBackdropState extends State<CosmicBackdrop>
   static const Duration _loop = Duration(seconds: 10);
 
   /// 달이 위아래로 떠다니는 폭(px). 크면 장난감처럼 보입니다.
-  static const double _floatAmplitude = 5;
+  static const double _floatAmplitude = 8;
+
+  /// 달이 좌우로 흔들리는 폭(px). 세로보다 작게 두어 물에 뜬 듯한
+  /// 8자 궤적을 만듭니다.
+  static const double _swayAmplitude = 4;
 
   /// 애니메이션을 껐을 때 보여 줄 프레임. 유성 구간을 피해 골랐습니다.
   static const double _staticPhase = 0.35;
@@ -219,10 +223,13 @@ class _CosmicBackdropState extends State<CosmicBackdrop>
                 animation: _controller,
                 builder: (BuildContext context, Widget? child) =>
                     Transform.translate(
+                      // 세로는 루프당 2회(5초 주기), 가로는 1회. 주기가 달라
+                      // 단순 왕복이 아니라 떠 있는 것처럼 보입니다.
                       offset: Offset(
-                        0,
-                        _floatAmplitude *
+                        _swayAmplitude *
                             math.sin(2 * math.pi * _controller.value),
+                        _floatAmplitude *
+                            math.sin(4 * math.pi * _controller.value),
                       ),
                       child: child,
                     ),
@@ -326,9 +333,10 @@ class _StarFieldPainter extends CustomPainter {
 
     final Paint dot = Paint();
     for (final _Star star in stars) {
-      // 0.6~1.0 사이를 사인으로 오가는 반짝임. 완전히 꺼지지는 않습니다.
+      // 0.1~1.0 사이를 사인으로 오가는 반짝임. 거의 꺼질 만큼 어두워졌다
+      // 다시 밝아져야 "반짝인다"고 느껴집니다.
       final double twinkle =
-          0.6 + 0.4 * math.sin(2 * math.pi * (star.speed * t + star.phase));
+          0.55 + 0.45 * math.sin(2 * math.pi * (star.speed * t + star.phase));
       final Offset center = Offset(
         star.position.dx * size.width,
         star.position.dy * size.height,
@@ -338,7 +346,7 @@ class _StarFieldPainter extends CustomPainter {
         _paintSparkle(
           canvas,
           center,
-          star.radius * (0.85 + 0.15 * twinkle),
+          star.radius * (0.7 + 0.3 * twinkle),
           palette.sparkleColor.withValues(alpha: alpha),
         );
       } else {
