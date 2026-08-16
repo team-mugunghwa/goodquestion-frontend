@@ -6,6 +6,7 @@ import '../../../../core/di/injector.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/widgets/confirm_actions.dart';
 import '../../data/datasources/settings_remote_data_source.dart';
 
 /// 보호자 확인 게이트. **통과하면 true** 입니다.
@@ -82,9 +83,10 @@ Future<bool> _showRetryDialog(BuildContext context) async {
       ),
       title: Text(MyPageStrings.gateTitle, style: text.titleLarge),
       content: Text(MyPageStrings.gateNetworkError, style: text.bodyMedium),
-      actionsPadding: _actionsPadding,
+      actionsPadding: ConfirmActions.dialogPadding,
       actions: <Widget>[
-        _GateActions(
+        ConfirmActions(
+          cancelLabel: MyPageStrings.gateCancel,
           confirmLabel: MyPageStrings.gateRetry,
           onCancel: () => Navigator.of(context).pop(false),
           onConfirm: () => Navigator.of(context).pop(true),
@@ -93,46 +95,6 @@ Future<bool> _showRetryDialog(BuildContext context) async {
     ),
   );
   return retry ?? false;
-}
-
-const EdgeInsets _actionsPadding = EdgeInsets.fromLTRB(
-  AppSpacing.md,
-  0,
-  AppSpacing.md,
-  AppSpacing.md,
-);
-
-/// 기본 actions(OverflowBar)는 취소를 왼쪽 끝에 헐겁게 띄우고 확인만 채워진
-/// 버튼으로 강조합니다 — 취소가 "잘못 놓인 것"처럼 보입니다. 두 버튼을 같은
-/// 너비로 한 줄에 묶어 대등한 선택지로 보이게 합니다.
-class _GateActions extends StatelessWidget {
-  const _GateActions({
-    required this.confirmLabel,
-    required this.onCancel,
-    required this.onConfirm,
-  });
-
-  final String confirmLabel;
-  final VoidCallback? onCancel;
-  final VoidCallback? onConfirm;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: <Widget>[
-        Expanded(
-          child: OutlinedButton(
-            onPressed: onCancel,
-            child: const Text(MyPageStrings.gateCancel),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: FilledButton(onPressed: onConfirm, child: Text(confirmLabel)),
-        ),
-      ],
-    );
-  }
 }
 
 /// 비밀번호를 받는 게이트. **틀려도 닫지 않습니다** — 안내만 이 안에 띄우고
@@ -220,9 +182,10 @@ class _PasswordGateDialogState extends State<_PasswordGateDialog> {
           ),
         ],
       ),
-      actionsPadding: _actionsPadding,
+      actionsPadding: ConfirmActions.dialogPadding,
       actions: <Widget>[
-        _GateActions(
+        ConfirmActions(
+          cancelLabel: MyPageStrings.gateCancel,
           confirmLabel: MyPageStrings.gateConfirm,
           onCancel: _verifying ? null : () => Navigator.of(context).pop(false),
           onConfirm: _verifying ? null : _verify,

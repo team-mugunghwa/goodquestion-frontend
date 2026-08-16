@@ -10,6 +10,7 @@ import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/app_canvas.dart';
 import '../../../../core/widgets/app_state_views.dart';
+import '../../../../core/widgets/confirm_actions.dart';
 import '../../../mypage/domain/usecases/my_page_use_cases.dart';
 import '../../domain/entities/auth_options.dart';
 import '../../domain/usecases/auth_use_cases.dart';
@@ -197,14 +198,13 @@ class _AuthViewState extends State<AuthView> {
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
         content: const Text(AuthStrings.signOutConfirm),
+        actionsPadding: ConfirmActions.dialogPadding,
         actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text(AuthStrings.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text(AuthStrings.signOutConfirmAction),
+          ConfirmActions(
+            cancelLabel: AuthStrings.cancel,
+            confirmLabel: AuthStrings.signOutConfirmAction,
+            onCancel: () => Navigator.of(dialogContext).pop(false),
+            onConfirm: () => Navigator.of(dialogContext).pop(true),
           ),
         ],
       ),
