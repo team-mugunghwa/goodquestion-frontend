@@ -17,7 +17,9 @@
           "sentence": "옛날에 방귀를 참는 며느리가 살았어요.",
           "audio": "assets/sounds/word_101.mp3",
           "liked": true,
-          "savedAt": "2026-08-08T11:20:00Z"
+          "savedAt": "2026-08-08T11:20:00Z",
+          "exampleSentenceDaily": "할머니는 우리 엄마를 며느리라고 불러요.",
+          "exampleSentenceAdvanced": "옆집 할아버지는 며느리가 차려 준 밥상을 동네에 자랑하곤 해요."
         },
         {
           "wordId": 102,

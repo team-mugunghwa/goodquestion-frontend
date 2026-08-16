@@ -118,6 +118,24 @@ class _WordDetailSheetState extends State<_WordDetailSheet> {
                 body: _word.sentence,
                 metrics: metrics,
               ),
+              // 예문 3종(이야기/일상/심화) - 서버 V14 이전에 담긴 단어는
+              // 일상/심화가 없어서 칸을 그리지 않습니다.
+              if (_word.sentenceDaily?.isNotEmpty == true) ...<Widget>[
+                const SizedBox(height: AppSpacing.lg),
+                _Block(
+                  title: WordStrings.exampleInDaily,
+                  body: _word.sentenceDaily!,
+                  metrics: metrics,
+                ),
+              ],
+              if (_word.sentenceAdvanced?.isNotEmpty == true) ...<Widget>[
+                const SizedBox(height: AppSpacing.lg),
+                _Block(
+                  title: WordStrings.exampleAdvanced,
+                  body: _word.sentenceAdvanced!,
+                  metrics: metrics,
+                ),
+              ],
               const SizedBox(height: AppSpacing.xl),
               KidPrimaryButton(
                 icon: AppIcons.close,
