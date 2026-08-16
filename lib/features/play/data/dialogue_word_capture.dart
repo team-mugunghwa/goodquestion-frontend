@@ -4,6 +4,16 @@ import '../../../core/network/dio_client.dart';
 import '../../mypage/domain/entities/my_page_summary.dart';
 import '../../mypage/domain/repositories/my_page_repository.dart';
 
+/// 담기 한 번의 결과. [savedWord] 는 서버가 실제로 저장한 표제어 -
+/// "기왓장이"를 눌러도 "기왓장"으로 저장되므로, 안내 문구는 이 값을 써야
+/// 아이가 단어장에서 보게 될 형태와 같다.
+class WordCaptureOutcome {
+  const WordCaptureOutcome(this.result, {this.savedWord});
+
+  final WordCaptureResult result;
+  final String? savedWord;
+}
+
 /// 담기 결과. 실패(네트워크 등)는 [Failure] 로 던져지고, 여기에는
 /// **화면이 다르게 안내해야 하는 성공 갈래**만 담습니다.
 enum WordCaptureResult {
@@ -29,7 +39,7 @@ abstract interface class DialogueWordCapture {
   /// **이야기 안에서 쓰인 뜻**으로 풀이를 만듭니다(단어-06).
   /// [exampleSentence] 는 아이가 단어를 고른 그 대사 문장 - 서버는 요청에
   /// 예문이 있으면 생성분보다 우선합니다(이야기 원문이라서).
-  Future<WordCaptureResult> save({
+  Future<WordCaptureOutcome> save({
     required String word,
     String? sourceSceneId,
     String? exampleSentence,
@@ -43,7 +53,7 @@ class RemoteDialogueWordCapture implements DialogueWordCapture {
   final ChildProfileRepository _children;
 
   @override
-  Future<WordCaptureResult> save({
+  Future<WordCaptureOutcome> save({
     required String word,
     String? sourceSceneId,
     String? exampleSentence,
@@ -53,7 +63,9 @@ class RemoteDialogueWordCapture implements DialogueWordCapture {
       if (childId == null) {
         throw const UnknownFailure('아이 정보를 찾을 수 없습니다.');
       }
-      await _client.post<void>(
+      // 서버는 표제어로 정규화해 저장한다("기왓장이" -> "기왓장"). 응답의
+      // word가 실제 저장된 형태라 안내 문구가 이 값을 쓴다.
+      final String? savedWord = await _client.post<String?>(
         '/children/$childId/words',
         body: <String, dynamic>{
           'word': word,
@@ -62,14 +74,19 @@ class RemoteDialogueWordCapture implements DialogueWordCapture {
           if (exampleSentence != null && exampleSentence.trim().isNotEmpty)
             'exampleSentence': exampleSentence.trim(),
         },
-        parse: (_) {},
+        parse: (Object? data) =>
+            data is Map<String, dynamic> ? data['word'] as String? : null,
       );
-      return WordCaptureResult.saved;
+      return WordCaptureOutcome(WordCaptureResult.saved, savedWord: savedWord);
     } on Failure catch (failure) {
-      if (_isDuplicate(failure)) return WordCaptureResult.duplicate;
+      if (_isDuplicate(failure)) {
+        return const WordCaptureOutcome(WordCaptureResult.duplicate);
+      }
       rethrow;
     } on ServerException catch (error) {
-      if (error.code == 'DUPLICATE_WORD') return WordCaptureResult.duplicate;
+      if (error.code == 'DUPLICATE_WORD') {
+        return const WordCaptureOutcome(WordCaptureResult.duplicate);
+      }
       throw Failure.fromException(error);
     } on AppException catch (error) {
       throw Failure.fromException(error);

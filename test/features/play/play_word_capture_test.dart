@@ -50,7 +50,7 @@ void main() {
   testWidgets('고정 대사의 단어를 누르면 확인 줄이 뜨고, 담기를 누르면 장면과 예문이 함께 간다', (
     WidgetTester tester,
   ) async {
-    final _SpyWordCapture capture = _SpyWordCapture();
+    final _SpyWordCapture capture = _SpyWordCapture()..lemma = '기왓장';
     await pump(tester, repository: _DialogueRepository(), wordCapture: capture);
     await settle(tester);
 
@@ -75,7 +75,8 @@ void main() {
       '기왓장이 들썩이면 어떻게 하면 좋을까?',
       reason: '예문은 아이가 단어를 고른 그 대사 문장이어야 합니다',
     );
-    expect(find.text("'기왓장이' 단어장에 담았어요"), findsOneWidget);
+    // 안내는 서버가 실제 저장한 표제어로 한다 - 단어장 화면과 같은 형태.
+    expect(find.text("'기왓장' 단어장에 담았어요"), findsOneWidget);
   });
 
   testWidgets('그냥 둘게요를 누르면 아무것도 담기지 않는다', (WidgetTester tester) async {
@@ -247,8 +248,11 @@ class _SpyWordCapture implements DialogueWordCapture {
   String? lastSourceSceneId;
   String? lastExampleSentence;
 
+  /// 서버 표제어 정규화 흉내 - 지정하면 저장 단어로 이 값을 돌려준다.
+  String? lemma;
+
   @override
-  Future<WordCaptureResult> save({
+  Future<WordCaptureOutcome> save({
     required String word,
     String? sourceSceneId,
     String? exampleSentence,
@@ -258,7 +262,7 @@ class _SpyWordCapture implements DialogueWordCapture {
     savedWords.add(word);
     lastSourceSceneId = sourceSceneId;
     lastExampleSentence = exampleSentence;
-    return result;
+    return WordCaptureOutcome(result, savedWord: lemma ?? word);
   }
 }
 

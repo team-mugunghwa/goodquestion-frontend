@@ -43,7 +43,7 @@ class _PreviewWordCapture implements DialogueWordCapture {
   final Set<String> _saved = <String>{};
 
   @override
-  Future<WordCaptureResult> save({
+  Future<WordCaptureOutcome> save({
     required String word,
     String? sourceSceneId,
     String? exampleSentence,
@@ -51,8 +51,10 @@ class _PreviewWordCapture implements DialogueWordCapture {
     // 실서버 왕복 체감을 위한 지연.
     await Future<void>.delayed(const Duration(milliseconds: 600));
     debugPrint('담기: $word / 장면 $sourceSceneId / 예문 "$exampleSentence"');
-    if (!_saved.add(word)) return WordCaptureResult.duplicate;
-    return WordCaptureResult.saved;
+    if (!_saved.add(word)) {
+      return const WordCaptureOutcome(WordCaptureResult.duplicate);
+    }
+    return WordCaptureOutcome(WordCaptureResult.saved, savedWord: word);
   }
 }
 

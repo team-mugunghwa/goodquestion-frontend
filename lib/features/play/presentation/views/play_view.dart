@@ -440,14 +440,17 @@ class _PlayPageState extends State<PlayPage> {
     final String? sentence = _pendingWordSentence;
     setState(() => _savingWord = true);
     try {
-      final WordCaptureResult result = await capture.save(
+      final WordCaptureOutcome outcome = await capture.save(
         word: word,
         sourceSceneId: _snapshot?.currentScene?.sceneId,
         exampleSentence: sentence,
       );
       if (!mounted) return;
-      _showWordNotice(switch (result) {
-        WordCaptureResult.saved => "'$word' 단어장에 담았어요",
+      // 안내는 서버가 실제 저장한 표제어로 한다("기왓장이" -> "기왓장").
+      // 아이가 단어장 화면에서 보게 될 형태와 같아야 헷갈리지 않는다.
+      final String savedWord = outcome.savedWord ?? word;
+      _showWordNotice(switch (outcome.result) {
+        WordCaptureResult.saved => "'$savedWord' 단어장에 담았어요",
         WordCaptureResult.duplicate => "'$word' 이미 담아 둔 단어예요",
       });
     } on Failure catch (error) {
