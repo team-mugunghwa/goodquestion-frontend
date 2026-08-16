@@ -199,6 +199,10 @@ class _PlayPageState extends State<PlayPage> {
   Timer? _confirmTimer;
   String? _retainedStoryImageUrl;
 
+  /// 멈춤 화면이 **나가기(X)로 떴는가.** 멈춤 버튼으로 뜬 것과 카드는 같고
+  /// 묻는 말만 다릅니다. → [_PauseOverlay.exit]
+  bool _exitPrompt = false;
+
   /// 지금 화면이 붙잡고 있는 장면. 장면이 바뀌는 순간을 [_activateSnapshot]
   /// 이 알아채고 이전 장면의 아이 발화를 지우는 데 씁니다.
   String? _activeSceneId;
@@ -1405,6 +1409,7 @@ class _PlayPageState extends State<PlayPage> {
   /// 문장 처음이 아니라 소리가 끊긴 바로 그 자리에서 이어집니다. 장면을
   /// 처음부터 다시 읽는 것은 "다시 듣기" 버튼의 몫입니다.
   void _toggleStoryPause() {
+    _exitPrompt = false;
     _storyTimer?.cancel();
     if (!_storyPaused) {
       // 멈추는 쪽입니다. **[_speechToken] 을 올리지 않습니다** - 올리면
@@ -1760,6 +1765,7 @@ class _PlayPageState extends State<PlayPage> {
   /// ([_awaitResume]) 다시 재생할 때 그 문장부터 이어 읽게 합니다.
   /// 전개 화면의 [_toggleStoryPause] 와 같은 방식입니다.
   void _togglePause() {
+    _exitPrompt = false;
     if (_phase == _DialoguePhase.paused) {
       setState(() => _phase = _phaseBeforePause);
       _openPauseGate();
@@ -1807,25 +1813,31 @@ class _PlayPageState extends State<PlayPage> {
   ///
   /// 그래도 한 번 묻습니다. 잃는 것은 없지만 화면이 통째로 바뀌는 일이라,
   /// 잘못 눌렀을 때 되돌릴 틈은 있어야 합니다.
-  Future<void> _confirmExit() async {
-    final bool? leave = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        title: const Text('이야기에서 나갈까요?'),
-        content: const Text('여기까지 들은 곳을 기억해 둘게요. 홈에서 이어 들을 수 있어요.'),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('계속 듣기'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('나가기'),
-          ),
-        ],
-      ),
-    );
-    if (leave != true || !mounted) return;
+  /// 나가기(X). **확인 창을 따로 띄우지 않고 일시정지 화면을 그대로 씁니다.**
+  ///
+  /// 그 화면에 이미 아이가 고를 두 갈래가 있습니다 - "계속 듣기"와
+  /// "이야기 나가기". 같은 물음에 생김새가 다른 창을 하나 더 두면, 아이는
+  /// 나가려다 만난 화면이 방금 멈춤 버튼으로 본 화면과 왜 다른지부터
+  /// 헷갈립니다. 소리도 함께 멈춰서 묻는 동안 이야기가 계속 들리지 않습니다
+  /// (예전 확인 창은 뒤에서 이야기가 그대로 흘렀습니다).
+  void _requestExit() {
+    if (_snapshot?.phase == PlayPhase.story) {
+      if (!_storyPaused) _toggleStoryPause();
+    } else if (_phase != _DialoguePhase.paused) {
+      _togglePause();
+    }
+    // 멈춘 뒤에 세웁니다 - 위 토글이 이 표시를 지웁니다.
+    setState(() => _exitPrompt = true);
+  }
+
+  /// 일시정지 화면의 "이야기 나가기". **다시 묻지 않습니다** - 멈춤 화면에서
+  /// 두 갈래 중 하나를 이미 고른 것이라, 여기서 또 물으면 같은 질문을 두 번
+  /// 하는 셈입니다.
+  ///
+  /// 세션은 끝내지 않습니다(`stop` 을 부르지 않습니다) - 되돌릴 수 없는
+  /// 행동에만 씁니다. 화면을 벗어나는 것은 그런 행동이 아닙니다.
+  /// → `docs/이야기_전개_가이드.md` 3.8 · 8장
+  void _leaveStory() {
     // 나가기로 마음을 정한 순간 소리부터 멈춥니다 - 화면이 바뀌는 동안에도
     // 이야기가 계속 들리면 안 나가지는 것처럼 보입니다.
     _stopSpeaking();
@@ -1877,7 +1889,9 @@ class _PlayPageState extends State<PlayPage> {
           isAdvancing: _advancingScene,
           soundOn: _soundOn,
           totalScenes: widget.totalScenes,
-          onExit: _confirmExit,
+          onExit: _requestExit,
+          onLeave: _leaveStory,
+          exitPrompt: _exitPrompt,
           onPause: _toggleStoryPause,
           // "다시 듣기"는 지금처럼 장면 처음부터입니다. 이어 재생은
           // 일시정지 버튼의 몫이라 둘을 섞지 않습니다.
@@ -1921,7 +1935,7 @@ class _PlayPageState extends State<PlayPage> {
                       soundOn: _soundOn,
                       sceneOrder: dialogueScene?.sceneOrder,
                       totalScenes: widget.totalScenes,
-                      onExit: _confirmExit,
+                      onExit: _requestExit,
                       onPause: _togglePause,
                       onReplay: _playQuestion,
                       onSound: _toggleSound,
@@ -1992,7 +2006,15 @@ class _PlayPageState extends State<PlayPage> {
                 ),
               ),
               if (_phase == _DialoguePhase.paused)
-                _PauseOverlay(onResume: _togglePause, onExit: _confirmExit),
+                (_exitPrompt
+                    ? _PauseOverlay.exit(
+                        onResume: _togglePause,
+                        onExit: _leaveStory,
+                      )
+                    : _PauseOverlay(
+                        onResume: _togglePause,
+                        onExit: _leaveStory,
+                      )),
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 430),
                 reverseDuration: const Duration(milliseconds: 320),
@@ -2054,6 +2076,8 @@ class _StorySceneView extends StatelessWidget {
     required this.soundOn,
     required this.totalScenes,
     required this.onExit,
+    required this.onLeave,
+    required this.exitPrompt,
     required this.onPause,
     required this.onReplay,
     required this.onSound,
@@ -2065,7 +2089,15 @@ class _StorySceneView extends StatelessWidget {
   final bool isAdvancing;
   final bool soundOn;
   final int? totalScenes;
+
+  /// 상단 X. 멈춤 화면을 띄웁니다.
   final VoidCallback onExit;
+
+  /// 멈춤 화면의 "이야기 나가기". 곧장 나갑니다.
+  final VoidCallback onLeave;
+
+  /// 멈춤 화면이 나가기(X)로 떴는가. 카드는 같고 문구만 다릅니다.
+  final bool exitPrompt;
   final VoidCallback onPause;
   final VoidCallback onReplay;
   final VoidCallback onSound;
@@ -2157,7 +2189,10 @@ class _StorySceneView extends StatelessWidget {
               ],
             ),
           ),
-          if (isPaused) _PauseOverlay(onResume: onPause, onExit: onExit),
+          if (isPaused)
+            exitPrompt
+                ? _PauseOverlay.exit(onResume: onPause, onExit: onLeave)
+                : _PauseOverlay(onResume: onPause, onExit: onLeave),
         ],
       ),
     );
@@ -3639,9 +3674,28 @@ class _ListeningMic extends StatelessWidget {
   }
 }
 
+/// 이야기를 멈춰 세운 카드. **멈춤 버튼과 나가기(X)가 같은 카드를 씁니다** -
+/// 생김새가 다른 창을 하나 더 두면 아이가 방금 본 화면과 왜 다른지부터
+/// 헷갈립니다. 다른 것은 묻는 말과 버튼 이름뿐입니다.
 class _PauseOverlay extends StatelessWidget {
-  const _PauseOverlay({required this.onResume, required this.onExit});
+  const _PauseOverlay({required this.onResume, required this.onExit})
+    : title = '이야기를 잠시 멈췄어요',
+      message = null,
+      exitLabel = '이야기 나가기';
 
+  /// 나가기(X)로 뜬 변형. 이야기를 멈춰 두는 것은 같고 **나갈지 묻습니다.**
+  /// 듣던 자리가 남는다는 것을 함께 말해 줍니다 - 겁주는 문구로 나가기를
+  /// 막지 않되, 잘못 눌렀을 때 되돌릴 틈은 있어야 합니다.
+  const _PauseOverlay.exit({required this.onResume, required this.onExit})
+    : title = '이야기에서 나갈까요?',
+      message = '여기까지 들은 곳을 기억해 둘게요. 홈에서 이어 들을 수 있어요.',
+      exitLabel = '나가기';
+
+  final String title;
+
+  /// 제목 아래 한 줄. 멈춤에는 없습니다 - 멈춘 것만으로는 덧붙일 말이 없습니다.
+  final String? message;
+  final String exitLabel;
   final VoidCallback onResume;
   final VoidCallback onExit;
 
@@ -3672,10 +3726,26 @@ class _PauseOverlay extends StatelessWidget {
                     size: 48,
                   ),
                   const SizedBox(height: 10),
-                  const Text(
-                    '이야기를 잠시 멈췄어요',
-                    style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
+                  if (message != null) ...<Widget>[
+                    const SizedBox(height: 8),
+                    Text(
+                      message!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        height: 1.4,
+                        color: Color(0xFF5A6B7C),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 18),
                   FilledButton.icon(
                     onPressed: onResume,
@@ -3683,10 +3753,7 @@ class _PauseOverlay extends StatelessWidget {
                     label: const Text('계속 듣기'),
                   ),
                   const SizedBox(height: 4),
-                  TextButton(
-                    onPressed: onExit,
-                    child: const Text('이야기 나가기'),
-                  ),
+                  TextButton(onPressed: onExit, child: Text(exitLabel)),
                 ],
               ),
             ),
