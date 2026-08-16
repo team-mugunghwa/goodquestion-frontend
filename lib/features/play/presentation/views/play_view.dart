@@ -422,7 +422,9 @@ class _PlayPageState extends State<PlayPage> {
     if (word.isEmpty || _savingWord) return;
     setState(() {
       _pendingWord = word;
-      _pendingWordSentence = _visibleCharacterText;
+      // 예문은 고정 대사에서만 잡는다. 동적 대사 문장은 아이 발화의 오인식
+      // 인용이 섞일 수 있어, 서버가 사전/생성 예문으로 채우게 비워 보낸다.
+      _pendingWordSentence = _fixedDialogue ? _visibleCharacterText : null;
       _wordNotice = null;
     });
   }
@@ -448,10 +450,18 @@ class _PlayPageState extends State<PlayPage> {
         WordCaptureResult.saved => "'$word' 단어장에 담았어요",
         WordCaptureResult.duplicate => "'$word' 이미 담아 둔 단어예요",
       });
-    } on Failure {
+    } on Failure catch (error) {
       if (!mounted) return;
       // 담기 실패로 이야기 흐름을 막지 않는다 - 안내만 하고 대화는 그대로.
-      _showWordNotice('지금은 담을 수 없어요. 나중에 다시 눌러 볼까?');
+      // INVALID_WORD는 실패가 아니라 판정이다 - 동적 대사의 오인식 단어를
+      // 서버가 거른 것이니 문구도 그렇게 말한다.
+      final bool notRealWord =
+          error is ServerFailure && error.code == 'INVALID_WORD';
+      _showWordNotice(
+        notRealWord
+            ? '이 말은 단어장에 담기 어려워요. 다른 단어를 골라 볼까?'
+            : '지금은 담을 수 없어요. 나중에 다시 눌러 볼까?',
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -1627,9 +1637,10 @@ class _PlayPageState extends State<PlayPage> {
                         pendingConfirmText: _pendingTranscription?.text,
                         onConfirmPending: _confirmPending,
                         onRetryPending: _retryPending,
-                        // 고정 대사 + 담기 통로가 있을 때만 단어를 누를 수
-                        // 있습니다. 동적 대사는 통짜 글로 남습니다.
-                        onWordTap: _fixedDialogue && widget.wordCapture != null
+                        // 담기 통로가 있으면 고정/동적 대사 모두 단어를
+                        // 누를 수 있습니다. 동적 대사의 오인식 단어는 서버
+                        // 유효성 관문(422 INVALID_WORD)이 걸러 줍니다.
+                        onWordTap: widget.wordCapture != null
                             ? _onDialogueWordTap
                             : null,
                         pendingWord: _pendingWord,

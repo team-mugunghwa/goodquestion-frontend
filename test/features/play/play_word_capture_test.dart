@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:goodquestion/core/error/failure.dart';
 import 'package:goodquestion/features/play/data/dialogue_word_capture.dart';
 import 'package:goodquestion/features/play/domain/entities/play_session.dart';
 import 'package:goodquestion/features/play/domain/repositories/play_repository.dart';
@@ -106,21 +107,54 @@ void main() {
     expect(find.text("'기왓장이' 이미 담아 둔 단어예요"), findsOneWidget);
   });
 
-  testWidgets('동적 대사(캐릭터 답변)는 단어를 누를 수 없다', (WidgetTester tester) async {
+  testWidgets('동적 대사(캐릭터 답변)도 단어를 담을 수 있고, 예문은 보내지 않는다', (
+    WidgetTester tester,
+  ) async {
+    // 동적 대사의 오인식 단어는 서버 유효성 관문(INVALID_WORD)이 거른다.
+    // 예문은 비워 보낸다 - 동적 문장에는 아이 발화의 오인식 인용이 섞일 수
+    // 있어 서버가 사전/생성 예문으로 채우는 쪽이 안전하다.
     final _SpyWordCapture capture = _SpyWordCapture();
-    final _DialogueRepository repository = _DialogueRepository();
-    await pump(tester, repository: repository, wordCapture: capture);
+    await pump(tester, repository: _DialogueRepository(), wordCapture: capture);
     await settle(tester);
 
     // 발화를 제출하면 동적 답변으로 바뀐다.
     await tester.tap(find.byTooltip('말하기 완료'));
     await settle(tester);
 
-    // 동적 대사는 통짜 글이라 단어 단위 위젯이 없다.
-    expect(find.textContaining('멋진 생각이야'), findsOneWidget);
-    expect(find.text('멋진'), findsNothing, reason: '동적 대사는 단어 단위로 쪼개지 않습니다');
-    expect(find.text('지붕을'), findsNothing);
-    expect(capture.savedWords, isEmpty);
+    await tester.tap(find.text('지붕을'));
+    await tester.pump();
+    await tester.tap(find.text('담기'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(capture.savedWords, <String>['지붕을']);
+    expect(
+      capture.lastExampleSentence,
+      isNull,
+      reason: '동적 대사의 문장은 예문으로 보내지 않습니다',
+    );
+    expect(capture.lastSourceSceneId, 'scene-3');
+  });
+
+  testWidgets('서버가 실제 단어가 아니라고 하면(INVALID_WORD) 안내하고 흐름은 그대로다', (
+    WidgetTester tester,
+  ) async {
+    final _SpyWordCapture capture = _SpyWordCapture()
+      ..failure = const ServerFailure(
+        message: '단어장에 담기 어려운 말입니다.',
+        code: 'INVALID_WORD',
+      );
+    await pump(tester, repository: _DialogueRepository(), wordCapture: capture);
+    await settle(tester);
+
+    await tester.tap(find.text('기왓장이'));
+    await tester.pump();
+    await tester.tap(find.text('담기'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('이 말은 단어장에 담기 어려워요. 다른 단어를 골라 볼까?'), findsOneWidget);
+    expect(find.byTooltip('나가기'), findsOneWidget, reason: '대화 화면은 그대로여야 합니다');
   });
 
   testWidgets('담기 통로가 없으면(wordCapture null) 고정 대사도 통짜 글로 그린다', (
@@ -208,6 +242,7 @@ class _DialogueRepository implements PlayRepository {
 
 class _SpyWordCapture implements DialogueWordCapture {
   WordCaptureResult result = WordCaptureResult.saved;
+  Failure? failure;
   final List<String> savedWords = <String>[];
   String? lastSourceSceneId;
   String? lastExampleSentence;
@@ -218,6 +253,8 @@ class _SpyWordCapture implements DialogueWordCapture {
     String? sourceSceneId,
     String? exampleSentence,
   }) async {
+    final Failure? pending = failure;
+    if (pending != null) throw pending;
     savedWords.add(word);
     lastSourceSceneId = sourceSceneId;
     lastExampleSentence = exampleSentence;
