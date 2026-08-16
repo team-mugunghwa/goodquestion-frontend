@@ -6,6 +6,8 @@ import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_shadows.dart';
+import '../../../../core/theme/app_spacing.dart';
 import '../../domain/entities/auth_options.dart';
 import '../viewmodels/auth_view_model.dart';
 
@@ -69,16 +71,11 @@ class _SectionCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(28),
     decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: 0.96),
-      borderRadius: BorderRadius.circular(28),
-      border: Border.all(color: const Color(0xFFE6E3EE)),
-      boxShadow: const <BoxShadow>[
-        BoxShadow(
-          color: Color(0x120D0820),
-          blurRadius: 24,
-          offset: Offset(0, 8),
-        ),
-      ],
+      // 우주 배경이 살짝 비치도록 아주 옅게 투명합니다.
+      color: AppColors.surface.withValues(alpha: 0.94),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      border: Border.all(color: AppColors.ink100),
+      boxShadow: AppShadows.lift,
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -147,9 +144,9 @@ class _SocialButton extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.onPressed,
-    this.backgroundColor = Colors.white,
-    this.foregroundColor = const Color(0xFF222222),
-    this.borderColor = const Color(0xFFD8D6E0),
+    this.backgroundColor = AppColors.surface,
+    this.foregroundColor = AppColors.ink900,
+    this.borderColor = AppColors.ink300,
   });
 
   final String label;

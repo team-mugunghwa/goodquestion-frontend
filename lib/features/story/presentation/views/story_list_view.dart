@@ -13,6 +13,7 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/app_canvas.dart';
 import '../../../../core/widgets/app_state_views.dart';
+import '../../../../core/widgets/cosmic_backdrop.dart';
 import '../../../../core/widgets/screen_metrics.dart';
 import '../../../../core/widgets/skeleton_box.dart';
 import '../../../../core/widgets/story_card.dart';
@@ -61,52 +62,63 @@ class StoryListView extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: AppCanvas.day(
-        child: SafeArea(
-          bottom: false,
-          child: LayoutBuilder(
-            builder: (BuildContext context, BoxConstraints constraints) {
-              final ScreenMetrics metrics = ScreenMetrics.of(
-                constraints.maxWidth,
-              );
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  _Header(metrics: metrics),
-                  // 칩은 로딩 중에도 즉시 보입니다. 화면이 텅 비어 보이지
-                  // 않게 하는 것도 있지만, 여기가 이 화면의 조작부입니다.
-                  if (vm.topics.isNotEmpty) ...<Widget>[
-                    TopicChipBar(
-                      topics: vm.topics,
-                      selectedId: vm.selectedTopicId,
-                      onSelected: vm.selectTopic,
-                      metrics: metrics,
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                  ],
-                  Expanded(
-                    child: AnimatedSwitcher(
-                      duration: respect(context, AppDurations.normal),
-                      switchInCurve: AppCurves.standard,
-                      switchOutCurve: AppCurves.exit,
-                      layoutBuilder: (Widget? current, List<Widget> previous) =>
-                          Stack(
-                            fit: StackFit.expand,
-                            alignment: Alignment.topCenter,
-                            children: <Widget>[
-                              ...previous,
-                              if (current != null) current,
-                            ],
-                          ),
-                      child: _body(context, vm, metrics),
-                    ),
-                  ),
-                  const AppBottomNav(current: AppNavTab.stories),
-                ],
-              );
-            },
-          ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            // 이야기 카드 그리드가 화면을 덮어도, 로딩·빈 상태에서 하늘이
+            // 비어 보이지 않게 별과 달을 깔아 둡니다.
+            const CosmicBackdrop(
+              seed: 23,
+              planetCenterX: 0.22,
+              bottomInset: AppSizes.bottomNav,
+            ),
+            SafeArea(bottom: false, child: _layout(context, vm)),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _layout(BuildContext context, StoryListViewModel vm) {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final ScreenMetrics metrics = ScreenMetrics.of(constraints.maxWidth);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            _Header(metrics: metrics),
+            // 칩은 로딩 중에도 즉시 보입니다. 화면이 텅 비어 보이지
+            // 않게 하는 것도 있지만, 여기가 이 화면의 조작부입니다.
+            if (vm.topics.isNotEmpty) ...<Widget>[
+              TopicChipBar(
+                topics: vm.topics,
+                selectedId: vm.selectedTopicId,
+                onSelected: vm.selectTopic,
+                metrics: metrics,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+            ],
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: respect(context, AppDurations.normal),
+                switchInCurve: AppCurves.standard,
+                switchOutCurve: AppCurves.exit,
+                layoutBuilder: (Widget? current, List<Widget> previous) =>
+                    Stack(
+                      fit: StackFit.expand,
+                      alignment: Alignment.topCenter,
+                      children: <Widget>[
+                        ...previous,
+                        if (current != null) current,
+                      ],
+                    ),
+                child: _body(context, vm, metrics),
+              ),
+            ),
+            const AppBottomNav(current: AppNavTab.stories),
+          ],
+        );
+      },
     );
   }
 

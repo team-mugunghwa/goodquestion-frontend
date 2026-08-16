@@ -11,6 +11,7 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/app_canvas.dart';
 import '../../../../core/widgets/app_state_views.dart';
 import '../../../../core/widgets/confirm_actions.dart';
+import '../../../../core/widgets/cosmic_backdrop.dart';
 import '../../../mypage/domain/usecases/my_page_use_cases.dart';
 import '../../domain/entities/auth_options.dart';
 import '../../domain/usecases/auth_use_cases.dart';
@@ -94,19 +95,26 @@ class _AuthViewState extends State<AuthView> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: AppCanvas.guardian(
-        child: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              // 태블릿에서 폼을 화면 끝까지 늘리면 입력 필드가 우스꽝스럽게
-              // 길어집니다. 인증 폼은 좁을수록 읽기 쉽습니다.
-              constraints: BoxConstraints(
-                maxWidth: vm.step == AuthStep.signIn
-                    ? 980
-                    : AppSizes.bubbleMaxWidth,
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            // 서비스의 첫 화면이자 "내 행성" 세계관의 예고편.
+            const CosmicBackdrop(seed: 3),
+            SafeArea(
+              child: Center(
+                child: ConstrainedBox(
+                  // 태블릿에서 폼을 화면 끝까지 늘리면 입력 필드가 우스꽝스럽게
+                  // 길어집니다. 인증 폼은 좁을수록 읽기 쉽습니다.
+                  constraints: BoxConstraints(
+                    maxWidth: vm.step == AuthStep.signIn
+                        ? 980
+                        : AppSizes.bubbleMaxWidth,
+                  ),
+                  child: _body(context, vm),
+                ),
               ),
-              child: _body(context, vm),
             ),
-          ),
+          ],
         ),
       ),
     );

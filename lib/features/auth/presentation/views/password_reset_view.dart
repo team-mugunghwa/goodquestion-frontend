@@ -8,6 +8,7 @@ import '../../../../core/error/failure.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/app_canvas.dart';
+import '../../../../core/widgets/cosmic_backdrop.dart';
 import '../../data/datasources/account_recovery_remote_data_source.dart';
 
 class PasswordResetPage extends StatefulWidget {
@@ -43,21 +44,27 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: Colors.transparent,
     body: AppCanvas.guardian(
-      child: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.xl),
-                  child: _completed ? _done() : _form(),
+      child: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          const CosmicBackdrop(seed: 5, planetCenterX: 0.38),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 520),
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpacing.xl),
+                      child: _completed ? _done() : _form(),
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     ),
   );

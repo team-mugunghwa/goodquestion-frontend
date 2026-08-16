@@ -2,10 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:goodquestion/core/widgets/cosmic_backdrop.dart';
 
 /// `test/` 아래 모든 테스트가 시작하기 전에 한 번 불립니다.
 /// (파일 이름이 `flutter_test_config.dart` 여야 flutter_test 가 찾아 씁니다)
 Future<void> testExecutable(FutureOr<void> Function() testMain) async {
+  // 우주 배경의 반짝임은 무한 반복이라 pumpAndSettle 이 끝나지 않습니다.
+  // 테스트에서는 멈춘 별만 그립니다.
+  CosmicBackdrop.animationsEnabled = false;
+
   goldenFileComparator = _TolerantGoldenComparator(
     // LocalFileComparator 는 넘긴 파일의 **디렉터리**를 기준 경로로 씁니다.
     // 골든 경로를 'goldens/x.png' 처럼 상대경로로 쓰고 있어서, 기본 비교기가

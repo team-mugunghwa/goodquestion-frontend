@@ -10,6 +10,7 @@ import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/app_canvas.dart';
+import '../../../../core/widgets/cosmic_backdrop.dart';
 import '../../data/datasources/account_recovery_remote_data_source.dart';
 
 enum AccountRecoveryMode { findId, resetPassword }
@@ -66,55 +67,57 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: Colors.transparent,
     body: AppCanvas.guardian(
-      child: SafeArea(
-        child: Column(
-          children: <Widget>[
-            _TopBar(onBack: () => context.go(AppRoutes.login)),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.md,
-                  AppSpacing.lg,
-                  AppSpacing.xxl,
-                ),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 560),
-                    child: Column(
-                      children: <Widget>[
-                        Image.asset(
-                          AppAssets.logo,
-                          height: 54,
-                          fit: BoxFit.contain,
-                        ),
-                        const SizedBox(height: AppSpacing.lg),
-                        _ModeTabs(mode: widget.mode),
-                        const SizedBox(height: AppSpacing.md),
-                        _RecoveryCard(
-                          mode: widget.mode,
-                          completed: _completed,
-                          submitting: _submitting,
-                          error: _error,
-                          nameController: _nameController,
-                          childNameController: _childNameController,
-                          childBirthYearController: _childBirthYearController,
-                          emailController: _emailController,
-                          emails: _emails,
-                          onSubmit: _submit,
-                          onReset: _reset,
-                          onLogin: () => context.go(AppRoutes.login),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          const CosmicBackdrop(seed: 5, planetCenterX: 0.62),
+          SafeArea(child: _content(context)),
+        ],
       ),
     ),
+  );
+
+  Widget _content(BuildContext context) => Column(
+    children: <Widget>[
+      _TopBar(onBack: () => context.go(AppRoutes.login)),
+      Expanded(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.md,
+            AppSpacing.lg,
+            AppSpacing.xxl,
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: Column(
+                children: <Widget>[
+                  Image.asset(AppAssets.logo, height: 54, fit: BoxFit.contain),
+                  const SizedBox(height: AppSpacing.lg),
+                  _ModeTabs(mode: widget.mode),
+                  const SizedBox(height: AppSpacing.md),
+                  _RecoveryCard(
+                    mode: widget.mode,
+                    completed: _completed,
+                    submitting: _submitting,
+                    error: _error,
+                    nameController: _nameController,
+                    childNameController: _childNameController,
+                    childBirthYearController: _childBirthYearController,
+                    emailController: _emailController,
+                    emails: _emails,
+                    onSubmit: _submit,
+                    onReset: _reset,
+                    onLogin: () => context.go(AppRoutes.login),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    ],
   );
 
   Future<void> _submit() async {

@@ -13,6 +13,7 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/app_canvas.dart';
 import '../../../../core/widgets/app_state_views.dart';
+import '../../../../core/widgets/cosmic_backdrop.dart';
 import '../../../../core/widgets/kid_chips.dart';
 import '../../../../core/widgets/screen_metrics.dart';
 import '../../../../core/widgets/skeleton_box.dart';
@@ -67,47 +68,57 @@ class WordListView extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: AppCanvas.day(
-        child: SafeArea(
-          bottom: false,
-          child: LayoutBuilder(
-            builder: (BuildContext context, BoxConstraints constraints) {
-              final ScreenMetrics metrics = ScreenMetrics.of(
-                constraints.maxWidth,
-              );
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  _Header(vm: vm, metrics: metrics),
-                  // 담은 게 하나도 없으면 필터 칩을 숨깁니다 —
-                  // 거를 것이 없는데 칩만 남으면 고장으로 보입니다.
-                  if (!vm.isEmpty && vm.allGroups.isNotEmpty) ...<Widget>[
-                    _StoryChips(vm: vm, metrics: metrics),
-                    const SizedBox(height: AppSpacing.lg),
-                  ],
-                  Expanded(
-                    child: AnimatedSwitcher(
-                      duration: respect(context, AppDurations.normal),
-                      switchInCurve: AppCurves.standard,
-                      switchOutCurve: AppCurves.exit,
-                      layoutBuilder: (Widget? current, List<Widget> previous) =>
-                          Stack(
-                            fit: StackFit.expand,
-                            alignment: Alignment.topCenter,
-                            children: <Widget>[
-                              ...previous,
-                              if (current != null) current,
-                            ],
-                          ),
-                      child: _body(context, vm, metrics),
-                    ),
-                  ),
-                  const AppBottomNav(current: AppNavTab.words),
-                ],
-              );
-            },
-          ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            // 담은 단어는 "내 행성"으로 가져가는 재산 — 배경도 같은 세계관.
+            const CosmicBackdrop(
+              seed: 11,
+              planetCenterX: 0.78,
+              bottomInset: AppSizes.bottomNav,
+            ),
+            SafeArea(bottom: false, child: _layout(context, vm)),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _layout(BuildContext context, WordListViewModel vm) {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final ScreenMetrics metrics = ScreenMetrics.of(constraints.maxWidth);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            _Header(vm: vm, metrics: metrics),
+            // 담은 게 하나도 없으면 필터 칩을 숨깁니다 —
+            // 거를 것이 없는데 칩만 남으면 고장으로 보입니다.
+            if (!vm.isEmpty && vm.allGroups.isNotEmpty) ...<Widget>[
+              _StoryChips(vm: vm, metrics: metrics),
+              const SizedBox(height: AppSpacing.lg),
+            ],
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: respect(context, AppDurations.normal),
+                switchInCurve: AppCurves.standard,
+                switchOutCurve: AppCurves.exit,
+                layoutBuilder: (Widget? current, List<Widget> previous) =>
+                    Stack(
+                      fit: StackFit.expand,
+                      alignment: Alignment.topCenter,
+                      children: <Widget>[
+                        ...previous,
+                        if (current != null) current,
+                      ],
+                    ),
+                child: _body(context, vm, metrics),
+              ),
+            ),
+            const AppBottomNav(current: AppNavTab.words),
+          ],
+        );
+      },
     );
   }
 
