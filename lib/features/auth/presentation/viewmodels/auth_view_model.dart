@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/error/failure.dart';
 import '../../../../core/presentation/base_view_model.dart';
+import '../../../../core/push/push_registrar.dart';
 import '../../domain/entities/auth_options.dart';
 import '../../domain/entities/auth_outcome.dart';
 import '../../domain/usecases/auth_use_cases.dart';
@@ -26,13 +29,20 @@ class AuthViewModel extends BaseViewModel {
     this._createChild,
     this._signOut, {
     Future<String?> Function()? loadCurrentChildName,
+    PushRegistrar? pushRegistrar,
     bool startAtChildProfile = false,
   }) : _step = startAtChildProfile ? AuthStep.childProfile : AuthStep.signIn,
        _enteredAtChildProfile = startAtChildProfile,
        // named 파라미터라 초기화 형식(this._loadCurrentChildName)으로 못 바꿉니다
        // — Dart 는 밑줄로 시작하는 named 인자를 허용하지 않습니다.
        // ignore: prefer_initializing_formals
-       _loadCurrentChildName = loadCurrentChildName;
+       _loadCurrentChildName = loadCurrentChildName,
+       // ignore: prefer_initializing_formals
+       _pushRegistrar = pushRegistrar;
+
+  /// 로그인 뒤 기기 토큰을 등록합니다. 넘기지 않으면 등록을 건너뜁니다 —
+  /// 단위 테스트가 푸시까지 준비하지 않아도 되게 하려는 것입니다.
+  final PushRegistrar? _pushRegistrar;
 
   final GetAuthOptionsUseCase _getOptions;
   final SignInWithSocialUseCase _signInWithSocial;
@@ -293,6 +303,11 @@ class AuthViewModel extends BaseViewModel {
           // 로그인은 이미 완료되었습니다. 프로필 이름 조회 실패가
           // 인증 성공 자체를 취소하지 않도록 기본 환영 문구로 진행합니다.
         }
+        // 기기 토큰 등록은 로그인 뒤에 합니다. 등록 API 가 인증을 요구하고
+        // 서버가 토큰을 보호자에 묶어 저장하기 때문입니다.
+        // 실패해도 로그인은 그대로 진행합니다 - 푸시가 안 갈 뿐, 알림은
+        // 서버에 쌓여 알림함에서 볼 수 있습니다.
+        if (_pushRegistrar != null) unawaited(_pushRegistrar.start());
         _completed = true;
       }
     } catch (e) {

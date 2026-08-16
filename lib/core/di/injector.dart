@@ -11,6 +11,10 @@ import '../../features/auth/data/datasources/oauth_code_provider.dart';
 import '../../features/auth/data/repositories/auth_repository_impl.dart';
 import '../../features/auth/domain/repositories/auth_repository.dart';
 import '../../features/auth/domain/usecases/auth_use_cases.dart';
+import '../../features/helpdesk/data/datasources/helpdesk_remote_data_source.dart';
+import '../../features/helpdesk/data/repositories/helpdesk_repository_impl.dart';
+import '../../features/helpdesk/domain/repositories/helpdesk_repository.dart';
+import '../../features/helpdesk/domain/usecases/helpdesk_use_cases.dart';
 import '../../features/home/data/datasources/home_remote_data_source.dart';
 import '../../features/home/data/repositories/home_repository_impl.dart';
 import '../../features/home/domain/repositories/home_repository.dart';
@@ -46,6 +50,9 @@ import '../../features/word/domain/repositories/word_repository.dart';
 import '../../features/word/domain/usecases/get_word_book_use_case.dart';
 import '../../features/word/domain/usecases/toggle_word_like_use_case.dart';
 import '../network/dio_client.dart';
+import '../push/fcm_push_service.dart';
+import '../push/push_registrar.dart';
+import '../push/push_service.dart';
 import '../router/app_router.dart';
 import '../router/app_routes.dart';
 
@@ -211,6 +218,70 @@ Future<void> configureDependencies() async {
     )
     ..registerLazySingleton<ToggleWordLikeUseCase>(
       () => ToggleWordLikeUseCase(getIt<WordRepository>()),
+    );
+
+  // ---- helpdesk (공지 · 이용 안내 · 문의 · 알림) ----
+  //
+  // 목업 저장소가 없습니다. 이 데이터는 관리자 콘솔이 만들고 서버가 내려주는
+  // 것이라 화면만 먼저 만들 이유가 없었습니다.
+  getIt
+    ..registerLazySingleton<HelpdeskRemoteDataSource>(
+      () => HelpdeskRemoteDataSource(getIt<DioClient>()),
+    )
+    ..registerLazySingleton<HelpdeskRepository>(
+      () => HelpdeskRepositoryImpl(getIt<HelpdeskRemoteDataSource>()),
+    )
+    ..registerLazySingleton<GetNoticesUseCase>(
+      () => GetNoticesUseCase(getIt<HelpdeskRepository>()),
+    )
+    ..registerLazySingleton<GetNoticeUseCase>(
+      () => GetNoticeUseCase(getIt<HelpdeskRepository>()),
+    )
+    ..registerLazySingleton<GetGuidesUseCase>(
+      () => GetGuidesUseCase(getIt<HelpdeskRepository>()),
+    )
+    ..registerLazySingleton<GetInquiriesUseCase>(
+      () => GetInquiriesUseCase(getIt<HelpdeskRepository>()),
+    )
+    ..registerLazySingleton<GetInquiryUseCase>(
+      () => GetInquiryUseCase(getIt<HelpdeskRepository>()),
+    )
+    ..registerLazySingleton<CreateInquiryUseCase>(
+      () => CreateInquiryUseCase(getIt<HelpdeskRepository>()),
+    )
+    ..registerLazySingleton<GetNotificationsUseCase>(
+      () => GetNotificationsUseCase(getIt<HelpdeskRepository>()),
+    )
+    ..registerLazySingleton<GetUnreadNotificationCountUseCase>(
+      () => GetUnreadNotificationCountUseCase(getIt<HelpdeskRepository>()),
+    )
+    ..registerLazySingleton<MarkNotificationReadUseCase>(
+      () => MarkNotificationReadUseCase(getIt<HelpdeskRepository>()),
+    )
+    ..registerLazySingleton<MarkAllNotificationsReadUseCase>(
+      () => MarkAllNotificationsReadUseCase(getIt<HelpdeskRepository>()),
+    )
+    ..registerLazySingleton<RegisterDeviceUseCase>(
+      () => RegisterDeviceUseCase(getIt<HelpdeskRepository>()),
+    )
+    ..registerLazySingleton<UnregisterDeviceUseCase>(
+      () => UnregisterDeviceUseCase(getIt<HelpdeskRepository>()),
+    );
+
+  // ---- push ----
+  //
+  // Firebase 설정이 없으면 NoopPushService 가 등록됩니다. 로컬과 CI 에 키를
+  // 두지 않기 위해서이고, 그때도 알림은 서버에 쌓여 알림함에서 볼 수 있습니다.
+  final PushService pushService =
+      await FcmPushService.create() ?? const NoopPushService();
+  getIt
+    ..registerSingleton<PushService>(pushService)
+    ..registerLazySingleton<PushRegistrar>(
+      () => PushRegistrar(
+        pushService: getIt<PushService>(),
+        registerDevice: getIt<RegisterDeviceUseCase>(),
+        unregisterDevice: getIt<UnregisterDeviceUseCase>(),
+      ),
     );
 
   // ---- mypage (마이페이지 · 리포트 · 설정) ----

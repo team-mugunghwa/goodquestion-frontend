@@ -124,22 +124,25 @@ class SettingsView extends StatelessWidget {
           title: SettingsStrings.infoGroup,
           children: <Widget>[
             GuardianTile(
+              icon: AppIcons.notification,
+              label: SettingsStrings.notifications,
+              onTap: () => context.push(AppRoutes.notifications),
+            ),
+            GuardianTile(
               icon: AppIcons.notice,
               label: SettingsStrings.notice,
               showBadge: settings.hasNewNotice,
-              onTap: () => _openDocument(context, SettingsStrings.notice),
+              onTap: () => context.push(AppRoutes.notices),
             ),
             GuardianTile(
               icon: AppIcons.guide,
               label: SettingsStrings.guide,
-              onTap: () => _openDocument(context, SettingsStrings.guide),
+              onTap: () => context.push(AppRoutes.guides),
             ),
             GuardianTile(
               icon: AppIcons.support,
               label: SettingsStrings.support,
-              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text(SettingsStrings.supportToast)),
-              ),
+              onTap: () => context.push(AppRoutes.support),
             ),
           ],
         ),

@@ -331,12 +331,14 @@ abstract final class SettingsStrings {
   static const String marketingOff = '마케팅 수신 동의를 철회했어요.';
 
   static const String infoGroup = '안내';
+
+  /// 답변 알림과 공지 알림이 쌓이는 곳. 푸시를 못 받아도 여기서 확인합니다.
+  ///
+  /// 위쪽 알림 그룹(수신 토글)과 이름이 겹치지 않게 '알림함'으로 둡니다.
+  static const String notifications = '알림함';
   static const String notice = '공지사항';
   static const String guide = '이용 안내';
   static const String support = '고객센터';
-
-  /// 목업에서는 외부 채널 연결 대신 알림만 띄웁니다.
-  static const String supportToast = '고객센터로 연결됩니다. (준비 중)';
 
   static const String policyGroup = '약관·정책';
   static const String terms = '서비스 이용약관';

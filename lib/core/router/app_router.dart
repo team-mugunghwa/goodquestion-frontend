@@ -5,6 +5,13 @@ import '../../features/auth/data/datasources/auth_token_store.dart';
 import '../../features/auth/presentation/views/account_recovery_view.dart';
 import '../../features/auth/presentation/views/auth_view.dart';
 import '../../features/auth/presentation/views/password_reset_view.dart';
+import '../../features/helpdesk/presentation/views/guide_list_view.dart';
+import '../../features/helpdesk/presentation/views/inquiry_detail_view.dart';
+import '../../features/helpdesk/presentation/views/inquiry_list_view.dart';
+import '../../features/helpdesk/presentation/views/inquiry_write_view.dart';
+import '../../features/helpdesk/presentation/views/notice_detail_view.dart';
+import '../../features/helpdesk/presentation/views/notice_list_view.dart';
+import '../../features/helpdesk/presentation/views/notification_list_view.dart';
 import '../../features/home/presentation/views/home_view.dart';
 import '../../features/mypage/presentation/views/my_page_view.dart';
 import '../../features/mypage/presentation/views/report_detail_view.dart';
@@ -147,6 +154,51 @@ GoRouter createAppRouter({
         path: AppRoutes.settings,
         builder: (BuildContext context, GoRouterState state) =>
             const SettingsPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.notices,
+        builder: (BuildContext context, GoRouterState state) =>
+            const NoticeListPage(),
+        routes: <RouteBase>[
+          GoRoute(
+            path: ':${AppRoutes.noticeIdParam}',
+            builder: (BuildContext context, GoRouterState state) =>
+                NoticeDetailPage(
+                  noticeId: state.pathParameters[AppRoutes.noticeIdParam]!,
+                ),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: AppRoutes.guides,
+        builder: (BuildContext context, GoRouterState state) =>
+            const GuideListPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.support,
+        builder: (BuildContext context, GoRouterState state) =>
+            const InquiryListPage(),
+        routes: <RouteBase>[
+          // 'new' 를 :inquiryId 보다 먼저 등록해야 합니다. 순서가 반대면
+          // /support/new 가 inquiryId="new" 로 잡힙니다.
+          GoRoute(
+            path: 'new',
+            builder: (BuildContext context, GoRouterState state) =>
+                const InquiryWritePage(),
+          ),
+          GoRoute(
+            path: ':${AppRoutes.inquiryIdParam}',
+            builder: (BuildContext context, GoRouterState state) =>
+                InquiryDetailPage(
+                  inquiryId: state.pathParameters[AppRoutes.inquiryIdParam]!,
+                ),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: AppRoutes.notifications,
+        builder: (BuildContext context, GoRouterState state) =>
+            const NotificationListPage(),
       ),
       GoRoute(
         path: AppRoutes.auth,
