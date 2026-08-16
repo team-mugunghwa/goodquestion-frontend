@@ -11,6 +11,7 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/app_state_views.dart';
 import '../../../../core/widgets/guardian_list.dart';
 import '../../../../core/widgets/guardian_scaffold.dart';
+import '../../../../core/widgets/policy_document_view.dart';
 import '../../../../core/widgets/skeleton_box.dart';
 import '../../../auth/domain/usecases/auth_use_cases.dart';
 import '../../domain/entities/app_settings.dart';
@@ -209,28 +210,35 @@ class SettingsView extends StatelessWidget {
     _ => '로그인 계정',
   };
 
-  /// 약관·공지 본문은 이 화면에 담지 않습니다. 문서가 준비되면 이 시트
-  /// 안쪽만 채우면 됩니다 — 라우트를 늘리지 않는 이유는 화면 12개 지도를
-  /// 벗어나지 않기 위해서입니다. (`docs/ARCHITECTURE.md`)
+  /// 약관·정책 본문을 번들 문서(assets/policies)에서 읽어 시트로 보여줍니다.
+  /// 라우트를 늘리지 않는 이유는 화면 12개 지도를 벗어나지 않기 위해서입니다.
+  /// (`docs/ARCHITECTURE.md`)
+  ///
+  /// 문서 파일은 법무 검토 전 초안입니다 - 파일만 바꾸면 화면은 그대로
+  /// 따라갑니다.
   void _openDocument(BuildContext context, String title) {
+    final String? asset = switch (title) {
+      SettingsStrings.terms => 'assets/policies/terms.md',
+      SettingsStrings.privacy => 'assets/policies/privacy.md',
+      SettingsStrings.childPrivacy => 'assets/policies/child_privacy.md',
+      _ => null,
+    };
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (BuildContext sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Text(title, style: Theme.of(sheetContext).textTheme.titleLarge),
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                SettingsStrings.documentPlaceholder,
-                style: Theme.of(sheetContext).textTheme.bodyMedium,
-              ),
-            ],
-          ),
+        child: SizedBox(
+          height: MediaQuery.of(sheetContext).size.height * .82,
+          child: asset == null
+              ? Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Text(
+                    SettingsStrings.documentPlaceholder,
+                    style: Theme.of(sheetContext).textTheme.bodyMedium,
+                  ),
+                )
+              : PolicyDocumentView(title: title, assetPath: asset),
         ),
       ),
     );
