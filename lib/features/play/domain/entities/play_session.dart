@@ -224,6 +224,7 @@ class PlayScene {
     required this.sceneType,
     required this.narrationSentences,
     this.imageUrl,
+    this.videoUrl,
     this.characterName,
     this.maxTurns,
     this.narrationAudioUrl,
@@ -235,6 +236,12 @@ class PlayScene {
   final PlaySceneType sceneType;
   final List<String> narrationSentences;
   final String? imageUrl;
+
+  /// 장면 배경 영상(무음). 이미지를 대체하지 않고 위에 얹는다 — null이거나
+  /// 재생에 실패하면 [imageUrl]로 떨어진다. 반복 여부는 별도 플래그가 아니라
+  /// [sceneType]이 정한다(STORY 1회, DIALOGUE 반복).
+  /// → 팀원공유 `전달_장면영상과_추가요청.md` §2-1
+  final String? videoUrl;
   final String? characterName;
   final int? maxTurns;
 
