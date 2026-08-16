@@ -18,7 +18,7 @@ class CosmicPalette {
     required this.haloColor,
     required this.bodyColors,
     required this.craterColor,
-    required this.rimColor,
+    required this.limbColor,
     required this.shadeColor,
   });
 
@@ -40,11 +40,11 @@ class CosmicPalette {
   /// 행성 본체의 방사형 그라디언트. [빛 받는 면, 중간, 가장자리] 순서.
   final List<Color> bodyColors;
 
-  /// 크레이터 면.
+  /// 크레이터/바다(어두운 지형) 면.
   final Color craterColor;
 
-  /// 행성 테두리 선.
-  final Color rimColor;
+  /// 달 가장자리의 은은한 빛(림 글로우). 딱딱한 테두리 선 대신 씁니다.
+  final Color limbColor;
 
   /// 행성 아래쪽(화면 밖으로 잠기는 쪽)의 음영.
   final Color shadeColor;
@@ -66,7 +66,7 @@ class CosmicPalette {
       AppColors.brandBlue.withValues(alpha: 0.75),
     ],
     craterColor: AppColors.brandBlue.withValues(alpha: 0.16),
-    rimColor: AppColors.brandBlue.withValues(alpha: 0.38),
+    limbColor: AppColors.surface.withValues(alpha: 0.85),
     shadeColor: AppColors.brandBlueDeep.withValues(alpha: 0.08),
   );
 
@@ -83,7 +83,7 @@ class CosmicPalette {
       AppColors.brandBlue.withValues(alpha: 0.9),
     ],
     craterColor: AppColors.nightTop.withValues(alpha: 0.28),
-    rimColor: AppColors.surface.withValues(alpha: 0.25),
+    limbColor: AppColors.surface.withValues(alpha: 0.45),
     shadeColor: AppColors.nightTop.withValues(alpha: 0.30),
   );
 }
@@ -115,12 +115,14 @@ class CosmicPalette {
 /// - 순수 장식이라 [IgnorePointer] + [ExcludeSemantics] 로 감쌉니다.
 /// - 행성은 정적 레이어, 별은 애니메이션 레이어로 나누고 각각
 ///   [RepaintBoundary] 를 둡니다. 매 프레임 다시 그리는 건 별 레이어뿐이고,
-///   본문·행성의 래스터 캐시는 재사용됩니다.
+///   본문·행성의 래스터 캐시는 재사용됩니다. 달의 부유는 캐시된 레이어를
+///   Transform 으로 옮겨 붙일 뿐이라 다시 그리지 않습니다.
 /// - 반짝임은 컨트롤러 하나가 돌리고, 페인터는 `repaint` 리스너블로만
 ///   다시 그립니다. setState/rebuild 가 프레임마다 돌지 않습니다.
-/// - 흐림(MaskFilter)은 프레임마다 그리는 별 레이어에 쓰지 않습니다.
+/// - 흐림(MaskFilter)은 한 번만 페인트되는 행성 레이어에만 쓰고,
+///   프레임마다 그리는 별 레이어에는 쓰지 않습니다.
 /// - 기기의 "동작 줄이기" 설정([MediaQuery.disableAnimationsOf])이면
-///   멈춘 별만 그립니다.
+///   멈춘 별만 그리고 달도 떠다니지 않습니다.
 class CosmicBackdrop extends StatefulWidget {
   const CosmicBackdrop({
     super.key,
@@ -161,8 +163,12 @@ class CosmicBackdrop extends StatefulWidget {
 
 class _CosmicBackdropState extends State<CosmicBackdrop>
     with SingleTickerProviderStateMixin {
-  /// 반짝임 한 바퀴. 별의 반짝임 속도는 정수 배수라 루프 경계가 안 보입니다.
-  static const Duration _loop = Duration(seconds: 8);
+  /// 장식 루프 한 바퀴. 별 반짝임과 달의 부유가 모두 정수 사이클이라
+  /// 루프 경계가 안 보입니다.
+  static const Duration _loop = Duration(seconds: 10);
+
+  /// 달이 위아래로 떠다니는 폭(px). 크면 장난감처럼 보입니다.
+  static const double _floatAmplitude = 5;
 
   /// 애니메이션을 껐을 때 보여 줄 프레임. 유성 구간을 피해 골랐습니다.
   static const double _staticPhase = 0.35;
@@ -206,15 +212,30 @@ class _CosmicBackdropState extends State<CosmicBackdrop>
           fit: StackFit.expand,
           children: <Widget>[
             if (widget.showPlanet)
-              RepaintBoundary(
-                child: CustomPaint(
-                  isComplex: true,
-                  willChange: false,
-                  painter: _PlanetPainter(
-                    palette: palette,
-                    centerXFraction: widget.planetCenterX,
-                    bottomInset: widget.bottomInset,
-                    seed: widget.seed,
+              // 달은 아주 느리게 위아래로 떠다닙니다. Transform 이
+              // RepaintBoundary 바깥에 있어서 캐시된 레이어를 옮겨 붙일 뿐,
+              // 달 자체를 다시 그리지는 않습니다.
+              AnimatedBuilder(
+                animation: _controller,
+                builder: (BuildContext context, Widget? child) =>
+                    Transform.translate(
+                      offset: Offset(
+                        0,
+                        _floatAmplitude *
+                            math.sin(2 * math.pi * _controller.value),
+                      ),
+                      child: child,
+                    ),
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    isComplex: true,
+                    willChange: false,
+                    painter: _PlanetPainter(
+                      palette: palette,
+                      centerXFraction: widget.planetCenterX,
+                      bottomInset: widget.bottomInset,
+                      seed: widget.seed,
+                    ),
                   ),
                 ),
               ),
@@ -332,7 +353,7 @@ class _StarFieldPainter extends CustomPainter {
   List<_Star> _starsOf(Size size) {
     if (_stars != null && _starsFor == size) return _stars!;
     final math.Random random = math.Random(seed);
-    final int count = (size.width / 34).round().clamp(16, 44);
+    final int count = (size.width / 24).round().clamp(24, 64);
     final List<_Star> stars = <_Star>[
       for (int i = 0; i < count; i++)
         _Star(
@@ -347,7 +368,7 @@ class _StarFieldPainter extends CustomPainter {
           isSparkle: false,
         ),
       // 반짝이 별은 소수만. 많아지면 장식이 아니라 소음이 됩니다.
-      for (int i = 0; i < 5; i++)
+      for (int i = 0; i < 7; i++)
         _Star(
           position: Offset(
             0.06 + random.nextDouble() * 0.88,
@@ -473,7 +494,16 @@ class _PlanetPainter extends CustomPainter {
         ).createShader(Rect.fromCircle(center: center, radius: radius)),
     );
 
-    // 3) 아래로 잠기는 쪽 음영. 원 안에만 칠해집니다.
+    // 3) 표면 지형. 흐림이 원 밖으로 번지지 않게 원으로 잘라 놓고 그립니다.
+    //    이 레이어는 한 번만 페인트되므로 블러 비용은 최초 1회입니다.
+    canvas.save();
+    canvas.clipPath(
+      Path()..addOval(Rect.fromCircle(center: center, radius: radius)),
+    );
+    _paintMaria(canvas, center, radius, horizon);
+    _paintCraters(canvas, center, radius, horizon);
+
+    // 4) 아래로 잠기는 쪽 음영. 지형 위에 얹어 함께 어두워지게 합니다.
     canvas.drawCircle(
       center,
       radius,
@@ -487,22 +517,61 @@ class _PlanetPainter extends CustomPainter {
           ],
         ).createShader(Rect.fromCircle(center: center, radius: radius)),
     );
+    canvas.restore();
 
-    _paintCraters(canvas, center, radius, horizon);
-
-    // 5) 테두리 한 줄. 파스텔 면이 배경에 뭉개지지 않게 잡아 줍니다.
+    // 5) 가장자리의 은은한 달빛. 딱딱한 테두리 선 대신 흐린 림 글로우를
+    //    걸쳐 놓아 배경과의 경계를 부드럽게 잇습니다.
     canvas.drawCircle(
       center,
-      radius - 0.75,
+      radius,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5
-        ..color = palette.rimColor,
+        ..strokeWidth = 5
+        ..color = palette.limbColor
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
     );
   }
 
-  /// 4) 크레이터. 화면에 실제로 보이는 곡면 띠 안에만 흩어서,
-  /// 어떤 화면 비율에서도 달이 밋밋해지지 않게 합니다.
+  /// 달의 바다 — 크고 아주 옅은 얼룩. 완벽한 원과 매끈한 그라디언트가 주는
+  /// 인위적인 느낌을 이 불규칙함이 깨 줍니다.
+  void _paintMaria(
+    Canvas canvas,
+    Offset center,
+    double radius,
+    double horizon,
+  ) {
+    final double top = center.dy - radius;
+    final double band = horizon - top;
+    if (band <= 0) return;
+
+    final math.Random random = math.Random(seed * 17 + 3);
+    final Paint paint = Paint()
+      ..color = palette.craterColor.withValues(
+        alpha: palette.craterColor.a * 0.38,
+      )
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, radius * 0.055);
+
+    for (int i = 0; i < 3; i++) {
+      final double r = radius * (0.16 + random.nextDouble() * 0.15);
+      final double y = top + band * (0.15 + random.nextDouble() * 0.8);
+      final double dy = y - center.dy;
+      final double half = math.sqrt(math.max(0, radius * radius - dy * dy));
+      final double x =
+          center.dx + (random.nextDouble() * 2 - 1) * math.max(0, half - r);
+      // 얼룩 하나를 원 두세 개로 뭉쳐 비정형으로 만듭니다.
+      final Offset c = Offset(x, y);
+      canvas.drawCircle(c, r, paint);
+      canvas.drawCircle(
+        c.translate(r * (random.nextDouble() - 0.5), r * 0.5),
+        r * 0.7,
+        paint,
+      );
+    }
+  }
+
+  /// 크레이터 — 화면에 실제로 보이는 곡면 띠 안에만 흩어서, 어떤 화면
+  /// 비율에서도 달이 밋밋해지지 않게 합니다. 윤곽은 살짝 흐려 스티커처럼
+  /// 보이지 않게 합니다.
   void _paintCraters(
     Canvas canvas,
     Offset center,
@@ -516,12 +585,17 @@ class _PlanetPainter extends CustomPainter {
     final math.Random random = math.Random(seed * 31 + 7);
     final Paint outer = Paint()
       ..color = palette.craterColor.withValues(
-        alpha: palette.craterColor.a * 0.62,
-      );
-    final Paint inner = Paint()..color = palette.craterColor;
+        alpha: palette.craterColor.a * 0.55,
+      )
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
+    final Paint inner = Paint()
+      ..color = palette.craterColor.withValues(
+        alpha: palette.craterColor.a * 0.9,
+      )
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5);
 
     for (int i = 0; i < 7; i++) {
-      final double r = radius * (0.035 + random.nextDouble() * 0.055);
+      final double r = radius * (0.03 + random.nextDouble() * 0.05);
       final double y = top + band * (0.16 + random.nextDouble() * 0.72);
       if (y + r > horizon) continue;
       // 이 높이에서 원 안에 들어가는 가로 범위(현의 절반) 안에서만 고릅니다.
@@ -532,7 +606,7 @@ class _PlanetPainter extends CustomPainter {
           center.dx + (random.nextDouble() * 2 - 1) * (half - r * 2.4);
       final Offset c = Offset(x, y);
       canvas.drawCircle(c, r, outer);
-      canvas.drawCircle(c.translate(r * 0.12, r * 0.16), r * 0.66, inner);
+      canvas.drawCircle(c.translate(r * 0.14, r * 0.18), r * 0.6, inner);
     }
   }
 
