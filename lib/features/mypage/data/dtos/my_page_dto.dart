@@ -2,10 +2,42 @@
 /// → `docs/SCREEN_RECIPE.md`
 library;
 
+import '../../../../core/error/exceptions.dart';
 import '../../domain/entities/app_settings.dart';
 import '../../domain/entities/my_page_summary.dart';
 import '../../domain/entities/report_detail.dart';
 import '../../domain/entities/report_summary.dart';
+
+/// `GET /api/children/{childId}/activity` — 완주 편수와 별가루 잔액.
+///
+/// **`activity` 래퍼가 없습니다.** 두 필드가 최상위에 옵니다. 같은 이름의
+/// 묶음을 [MyPageSummaryDto] 도 들고 있지만 그건 번들 더미
+/// (`assets/dummy/mypage.json`)의 모양이라, 파서를 합치면 둘 중 하나가
+/// 깨집니다.
+class ChildActivityDto {
+  const ChildActivityDto({
+    required this.completedStories,
+    required this.stardust,
+  });
+
+  factory ChildActivityDto.fromJson(Map<String, dynamic> json) {
+    final Object? completedStories = json['completedStories'];
+    final Object? stardust = json['stardust'];
+    if (completedStories is! num || stardust is! num) {
+      throw const ParseException('활동 요약 응답 형식이 올바르지 않습니다.');
+    }
+    return ChildActivityDto(
+      completedStories: completedStories.toInt(),
+      stardust: stardust.toInt(),
+    );
+  }
+
+  /// 완주한 이야기 편수. 같은 이야기를 여러 번 완주해도 1편입니다.
+  final int completedStories;
+
+  /// 별가루 **현재 잔액**.
+  final int stardust;
+}
 
 class MyPageSummaryDto {
   const MyPageSummaryDto({
