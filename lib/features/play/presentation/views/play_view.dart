@@ -176,15 +176,16 @@ class _PlayPageState extends State<PlayPage> {
   /// 시점도 제출 전이라 여기서 한 번 끊습니다. → 백엔드
   /// `docs/트러블슈팅_STT_신뢰도_산출.md` 3절
   ///
-  /// 다만 **서버가 저신뢰로 표시한 결과에만** 띄웁니다. 매 턴 "맞아요"를
-  /// 받으면 5-7세에게는 대화 리듬이 끊기고, 잘 알아들은 턴까지 탭이 하나씩
-  /// 늘어납니다. 확인이 값을 하는 곳은 서버가 스스로 미덥지 않다고 말한
-  /// 순간뿐입니다.
+  /// **모든 발화에** 띄웁니다. 서버 신뢰도는 아이가 실제로 무슨 말을 했는지
+  /// 알지 못합니다 - 또박또박 말한 문장을 자신 있게 다른 말로 옮겨 놓는 일이
+  /// 흔하고, 그런 턴일수록 확인 없이 그대로 저장됩니다. 미션 화면이 이미
+  /// "말한다 → 내 말을 본다 → 보낸다"로 동작하고 있어, 대화만 다른 리듬을
+  /// 쓰면 아이가 화면마다 다른 규칙을 배워야 합니다.
   PlayTranscription? _pendingTranscription;
 
-  /// 확인 화면 무반응 시계. 아이가 자리를 뜨거나 버튼을 못 찾아도 이야기가
-  /// 멈추지 않게 6초 뒤 그대로 제출합니다 - 시험이 아니라 놀이라서 막히지
-  /// 않는 쪽이 낫습니다.
+  /// 확인 화면 무반응 시계. **저신뢰 결과에만** 겁니다 - "맞을까요?"라고
+  /// 물어 놓고 아이가 답을 못 찾으면 이야기가 멈추므로, 6초 뒤 그대로
+  /// 제출합니다. 잘 알아들은 턴은 시계를 걸지 않고 아이의 탭을 기다립니다.
   Timer? _confirmTimer;
   String? _retainedStoryImageUrl;
 
@@ -808,35 +809,31 @@ class _PlayPageState extends State<PlayPage> {
       final PlayTranscription transcription = await widget.repository!
           .transcribeAudio(audio);
       if (!mounted) return;
+      // 변환 결과는 **신뢰도와 상관없이** 아이에게 먼저 보여 줍니다. 바로
+      // 제출하면 오인식을 되돌릴 방법이 없습니다 - 재발화 한 번이 오인식을
+      // 정인식으로 바꾸는 가장 값싼 개입이고, 제출 전이 그럴 수 있는 유일한
+      // 시점입니다. 미션 화면이 이미 이렇게 동작하고 있어 대화도 같은 리듬을
+      // 씁니다(말한다 → 내 말을 본다 → 보낸다).
+      setState(() {
+        _transcribingVoice = false;
+        _pendingTranscription = transcription;
+        // 선택지 판은 말풍선 자리를 대신 쓰므로, 떠 있는 채로 두면 확인
+        // 화면이 그 밑에 가려집니다. 목소리로 말하는 데 성공한 참이니
+        // 카드는 접습니다 - 다시 못 알아들으면 3회째에 다시 내려옵니다.
+        _closeChoicesState();
+      });
+      _confirmTimer?.cancel();
+      // 저신뢰일 때만 무반응 시계를 겁니다. 저신뢰 화면은 "맞을까요?"라고
+      // 물어 놓고 아이가 답을 못 찾으면 이야기가 멈춰 버리므로 안전망이
+      // 필요합니다. 반대로 잘 알아들은 턴은 아이가 눌러야만 보냅니다 -
+      // 자동으로 넘어가면 확인 화면이 "확인"이 아니라 잠깐 스쳐 가는
+      // 자막이 되고, 아이는 자기 말을 고칠 기회를 사실상 못 받습니다.
       if (transcription.lowConfidence) {
-        // 서버가 "잘못 들었을 수 있다"고 표시한 결과입니다. 바로 제출하지 않고
-        // 아이에게 보여 줍니다 - 재발화 한 번이 오인식을 정인식으로 바꾸는
-        // 가장 값싼 개입이고, 오인식을 되돌릴 수 있는 유일한 시점입니다.
-        // 무반응이면 6초 뒤 그대로 제출합니다.
-        setState(() {
-          _transcribingVoice = false;
-          _pendingTranscription = transcription;
-          // 선택지 판은 말풍선 자리를 대신 쓰므로, 떠 있는 채로 두면 확인
-          // 화면이 그 밑에 가려집니다. 목소리로 말하는 데 성공한 참이니
-          // 카드는 접습니다 - 다시 못 알아들으면 3회째에 다시 내려옵니다.
-          _closeChoicesState();
-        });
-        _confirmTimer?.cancel();
         _confirmTimer = Timer(
           const Duration(seconds: 6),
           () => unawaited(_confirmTranscription()),
         );
-        return;
       }
-      // 잘 알아들은 턴은 확인 없이 흘려보냅니다. 다만 선택지 판은 접습니다 -
-      // 목소리로 말하는 데 성공한 참이라 카드가 남아 있을 이유가 없습니다.
-      if (_choiceCards.isNotEmpty) setState(_closeChoicesState);
-      await _submitDialogue(
-        transcription.text,
-        sttRawText: transcription.rawText,
-        sttConfidence: transcription.confidence,
-        lowConfidence: transcription.lowConfidence,
-      );
     } on Failure catch (error) {
       // 무음이거나 인식 실패 - 흔히 겪는 상황이라 화면을 통째로 에러로
       // 바꾸지 않고 마이크 옆에 짧게 안내한 뒤 바로 다시 녹음할 수 있게

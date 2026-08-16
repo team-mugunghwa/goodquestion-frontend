@@ -118,8 +118,10 @@ void main() {
     await pump(tester, repository: _DialogueRepository(), wordCapture: capture);
     await settle(tester);
 
-    // 발화를 제출하면 동적 답변으로 바뀐다.
+    // 발화를 확인하고 제출하면 동적 답변으로 바뀐다.
     await tester.tap(find.byTooltip('말하기 완료'));
+    await settle(tester);
+    await tester.tap(find.text('맞아요'));
     await settle(tester);
 
     await tester.tap(find.text('지붕을'));

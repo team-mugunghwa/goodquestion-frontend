@@ -28,7 +28,7 @@ class MissionOverlay extends StatefulWidget {
   State<MissionOverlay> createState() => _MissionOverlayState();
 }
 
-enum _VoiceStage { ready, recording, transcribing, error }
+enum _VoiceStage { ready, recording, transcribing, confirming, error }
 
 class _MissionOverlayState extends State<MissionOverlay> {
   late final MissionVoiceRecorder _recorder;
@@ -38,6 +38,15 @@ class _MissionOverlayState extends State<MissionOverlay> {
   int _recordingSeconds = 0;
   _VoiceStage _stage = _VoiceStage.ready;
   String? _errorMessage;
+
+  /// 아이의 확인을 기다리는 변환 결과. 확인 전에는 [_answers] 에 넣지 않습니다 -
+  /// 넣어 버리면 진행 눈금이 먼저 차오르고, 다음 생각으로 넘어간 뒤라 아이가
+  /// 방금 무엇이 저장됐는지 볼 자리가 사라집니다.
+  ///
+  /// 대화 화면과 같은 규칙입니다: 말한다 → 내 말을 본다 → 보낸다.
+  /// 여기에는 무반응 자동 확정 시계를 걸지 않습니다 - 미션은 아이가 네 번
+  /// 눌러서 쌓아 가는 화면이고, 저 혼자 넘어가면 쌓는 감각이 깨집니다.
+  String? _pendingTranscript;
 
   List<_MissionPrompt> get _prompts =>
       widget.mission.missionType == PlayMissionType.problemSolving
@@ -81,6 +90,9 @@ class _MissionOverlayState extends State<MissionOverlay> {
 
   Future<void> _toggleRecording() async {
     if (_stage == _VoiceStage.transcribing || widget.submitting) return;
+    // 확인을 기다리는 결과가 있으면 마이크는 움직이지 않습니다.
+    // "맞아요"와 "다시 말할래요" 둘 중 하나로만 진행합니다.
+    if (_stage == _VoiceStage.confirming) return;
     if (_stage == _VoiceStage.recording) {
       await _stopAndTranscribe();
       return;
@@ -127,17 +139,17 @@ class _MissionOverlayState extends State<MissionOverlay> {
       if (audio == null || audio.isEmpty) {
         throw StateError('empty audio');
       }
-      final String transcript = await widget.transcribeAudio(audio);
+      final String transcript = (await widget.transcribeAudio(audio)).trim();
       if (!mounted) return;
-      final _MissionPrompt prompt = _prompts[_activeIndex];
+      if (transcript.isEmpty) {
+        // 빈 결과를 답으로 앉히면 눈금만 차고 내용은 없습니다.
+        throw StateError('empty transcript');
+      }
+      // 아직 [_answers] 에 넣지 않습니다. 아이가 맞다고 해야 들어갑니다.
       setState(() {
-        _answers[prompt.key] = transcript.trim();
-        _stage = _VoiceStage.ready;
+        _pendingTranscript = transcript;
+        _stage = _VoiceStage.confirming;
         _errorMessage = null;
-        final int next = _prompts.indexWhere(
-          (item) => _answers[item.key]?.isNotEmpty != true,
-        );
-        if (next >= 0) _activeIndex = next;
       });
     } on Object {
       if (!mounted) return;
@@ -148,7 +160,42 @@ class _MissionOverlayState extends State<MissionOverlay> {
     }
   }
 
+  /// 아이가 "맞아요"를 눌렀습니다. 이제서야 답으로 앉히고 다음 생각으로
+  /// 넘어갑니다 - 넘어가는 것은 확인 뒤여야 합니다.
+  void _acceptTranscript() {
+    final String? pending = _pendingTranscript;
+    if (pending == null || _prompts.isEmpty || widget.submitting) return;
+    final _MissionPrompt prompt =
+        _prompts[_activeIndex.clamp(0, _prompts.length - 1)];
+    setState(() {
+      _answers[prompt.key] = pending;
+      _pendingTranscript = null;
+      _stage = _VoiceStage.ready;
+      _errorMessage = null;
+      final int next = _prompts.indexWhere(
+        (item) => _answers[item.key]?.isNotEmpty != true,
+      );
+      if (next >= 0) _activeIndex = next;
+    });
+  }
+
+  /// 아이가 다르게 들렸다고 했습니다. 결과를 버리고 **곧바로 다시 녹음**합니다 -
+  /// 마이크를 한 번 더 누르게 하면 아이가 흐름을 놓칩니다. 대화 화면의
+  /// "다시 말할래요"와 같은 동작입니다.
+  Future<void> _retryTranscript() async {
+    if (_pendingTranscript == null || widget.submitting) return;
+    setState(() {
+      _pendingTranscript = null;
+      _stage = _VoiceStage.ready;
+      _errorMessage = null;
+    });
+    await _toggleRecording();
+  }
+
   void _submit() {
+    // 확인을 기다리는 말이 남아 있으면 보내지 않습니다 - 여기서 보내면 방금
+    // 다시 말한 내용이 조용히 사라집니다.
+    if (_pendingTranscript != null) return;
     if (!_allAnswered || widget.submitting) return;
     final String result = _prompts
         .map((prompt) => '${prompt.title}: ${_answers[prompt.key]}')
@@ -184,10 +231,16 @@ class _MissionOverlayState extends State<MissionOverlay> {
                     stage: _stage,
                     recordingSeconds: _recordingSeconds,
                     errorMessage: _errorMessage,
+                    pendingTranscript: _pendingTranscript,
                     allAnswered: _allAnswered,
                     submitting: widget.submitting,
                     onPromptSelected: (int index) {
-                      if (_stage == _VoiceStage.recording) return;
+                      // 확인 중에는 생각을 갈아타지 못하게 합니다 - 갈아타면
+                      // 방금 말한 것이 엉뚱한 칸에 들어갑니다.
+                      if (_stage == _VoiceStage.recording ||
+                          _stage == _VoiceStage.confirming) {
+                        return;
+                      }
                       setState(() {
                         _activeIndex = index;
                         _stage = _VoiceStage.ready;
@@ -195,6 +248,8 @@ class _MissionOverlayState extends State<MissionOverlay> {
                       });
                     },
                     onMic: _toggleRecording,
+                    onAccept: _acceptTranscript,
+                    onRetry: _retryTranscript,
                     onSubmit: _submit,
                   ),
           ),
@@ -225,10 +280,13 @@ class _MissionBoard extends StatelessWidget {
     required this.stage,
     required this.recordingSeconds,
     required this.errorMessage,
+    required this.pendingTranscript,
     required this.allAnswered,
     required this.submitting,
     required this.onPromptSelected,
     required this.onMic,
+    required this.onAccept,
+    required this.onRetry,
     required this.onSubmit,
     super.key,
   });
@@ -240,10 +298,13 @@ class _MissionBoard extends StatelessWidget {
   final _VoiceStage stage;
   final int recordingSeconds;
   final String? errorMessage;
+  final String? pendingTranscript;
   final bool allAnswered;
   final bool submitting;
   final ValueChanged<int> onPromptSelected;
   final VoidCallback onMic;
+  final VoidCallback onAccept;
+  final VoidCallback onRetry;
   final VoidCallback onSubmit;
 
   @override
@@ -292,10 +353,13 @@ class _MissionBoard extends StatelessWidget {
                   stage: stage,
                   recordingSeconds: recordingSeconds,
                   errorMessage: errorMessage,
+                  pendingTranscript: pendingTranscript,
                   allAnswered: allAnswered,
                   submitting: submitting,
                   onPromptSelected: onPromptSelected,
                   onMic: onMic,
+                  onAccept: onAccept,
+                  onRetry: onRetry,
                   onSubmit: onSubmit,
                 );
                 if (compact) {
@@ -567,10 +631,13 @@ class _VoiceMissionPanel extends StatelessWidget {
     required this.stage,
     required this.recordingSeconds,
     required this.errorMessage,
+    required this.pendingTranscript,
     required this.allAnswered,
     required this.submitting,
     required this.onPromptSelected,
     required this.onMic,
+    required this.onAccept,
+    required this.onRetry,
     required this.onSubmit,
   });
 
@@ -581,16 +648,20 @@ class _VoiceMissionPanel extends StatelessWidget {
   final _VoiceStage stage;
   final int recordingSeconds;
   final String? errorMessage;
+  final String? pendingTranscript;
   final bool allAnswered;
   final bool submitting;
   final ValueChanged<int> onPromptSelected;
   final VoidCallback onMic;
+  final VoidCallback onAccept;
+  final VoidCallback onRetry;
   final VoidCallback onSubmit;
 
   @override
   Widget build(BuildContext context) {
     final String? answer = answers[prompt.key];
     final bool busy = stage == _VoiceStage.transcribing || submitting;
+    final String? pending = pendingTranscript;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -661,160 +732,313 @@ class _VoiceMissionPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 7),
-          Text(
-            prompt.guide,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Color(0xFFB8DBD4),
-              fontSize: 14,
-              height: 1.4,
-              fontWeight: FontWeight.w700,
+          // 확인 중에는 안내 문장을 접습니다. 아이가 읽어야 할 것은 "무엇을
+          // 말할까"가 아니라 "내가 방금 뭐라고 했나" 하나뿐입니다.
+          if (pending == null)
+            Text(
+              prompt.guide,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xFFB8DBD4),
+                fontSize: 14,
+                height: 1.4,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          ),
           const Spacer(),
-          if (answer != null && stage != _VoiceStage.recording)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(13),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF4FFF9),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  const Icon(
-                    Icons.format_quote_rounded,
-                    color: Color(0xFF3BA47A),
-                  ),
-                  const SizedBox(width: 7),
-                  Expanded(
-                    child: Text(
-                      answer,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF244159),
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          if (errorMessage != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Text(
-                errorMessage!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Color(0xFFFFB29A),
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-          const SizedBox(height: 14),
-          _VoiceWave(active: stage == _VoiceStage.recording),
-          const SizedBox(height: 12),
-          Semantics(
-            button: true,
-            label: stage == _VoiceStage.recording ? '말하기 완료' : '눌러서 말하기',
-            child: InkWell(
-              onTap: busy ? null : onMic,
-              customBorder: const CircleBorder(),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 220),
-                width: 92,
-                height: 92,
+          if (pending != null)
+            _TranscriptConfirm(
+              transcript: pending,
+              busy: submitting,
+              onAccept: onAccept,
+              onRetry: onRetry,
+            )
+          else ...<Widget>[
+            if (answer != null && stage != _VoiceStage.recording)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(13),
                 decoration: BoxDecoration(
-                  color: stage == _VoiceStage.recording
-                      ? const Color(0xFFFF6F59)
-                      : const Color(0xFF72D6B7),
-                  shape: BoxShape.circle,
-                  boxShadow: <BoxShadow>[
-                    BoxShadow(
-                      color:
-                          (stage == _VoiceStage.recording
-                                  ? const Color(0xFFFF6F59)
-                                  : const Color(0xFF72D6B7))
-                              .withValues(alpha: .45),
-                      blurRadius: 20,
-                      spreadRadius: stage == _VoiceStage.recording ? 6 : 2,
+                  color: const Color(0xFFF4FFF9),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    const Icon(
+                      Icons.format_quote_rounded,
+                      color: Color(0xFF3BA47A),
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        answer,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF244159),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ),
                   ],
                 ),
-                child: busy
-                    ? const Padding(
-                        padding: EdgeInsets.all(28),
-                        child: CircularProgressIndicator(
-                          color: Color(0xFF173653),
-                          strokeWidth: 4,
-                        ),
-                      )
-                    : Icon(
-                        stage == _VoiceStage.recording
-                            ? Icons.stop_rounded
-                            : Icons.mic_rounded,
-                        color: const Color(0xFF173653),
-                        size: 48,
+              ),
+            if (errorMessage != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Text(
+                  errorMessage!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFFFFB29A),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            const SizedBox(height: 14),
+            _VoiceWave(active: stage == _VoiceStage.recording),
+            const SizedBox(height: 12),
+            Semantics(
+              button: true,
+              label: stage == _VoiceStage.recording ? '말하기 완료' : '눌러서 말하기',
+              child: InkWell(
+                onTap: busy ? null : onMic,
+                customBorder: const CircleBorder(),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 220),
+                  width: 92,
+                  height: 92,
+                  decoration: BoxDecoration(
+                    color: stage == _VoiceStage.recording
+                        ? const Color(0xFFFF6F59)
+                        : const Color(0xFF72D6B7),
+                    shape: BoxShape.circle,
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color:
+                            (stage == _VoiceStage.recording
+                                    ? const Color(0xFFFF6F59)
+                                    : const Color(0xFF72D6B7))
+                                .withValues(alpha: .45),
+                        blurRadius: 20,
+                        spreadRadius: stage == _VoiceStage.recording ? 6 : 2,
                       ),
+                    ],
+                  ),
+                  child: busy
+                      ? const Padding(
+                          padding: EdgeInsets.all(28),
+                          child: CircularProgressIndicator(
+                            color: Color(0xFF173653),
+                            strokeWidth: 4,
+                          ),
+                        )
+                      : Icon(
+                          stage == _VoiceStage.recording
+                              ? Icons.stop_rounded
+                              : Icons.mic_rounded,
+                          color: const Color(0xFF173653),
+                          size: 48,
+                        ),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            switch (stage) {
-              _VoiceStage.recording =>
-                '듣고 있어요 · $recordingSeconds초\n말을 마치면 다시 눌러 주세요',
-              _VoiceStage.transcribing => '목소리에서 생각을 찾고 있어요...',
-              _ => answer == null ? '마이크를 누르고 편하게 말해요' : '다시 말하려면 마이크를 눌러요',
-            },
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontWeight: FontWeight.w800,
-              height: 1.35,
+            const SizedBox(height: 10),
+            Text(
+              switch (stage) {
+                _VoiceStage.recording =>
+                  '듣고 있어요 · $recordingSeconds초\n말을 마치면 다시 눌러 주세요',
+                _VoiceStage.transcribing => '목소리에서 생각을 찾고 있어요...',
+                _ => answer == null ? '마이크를 누르고 편하게 말해요' : '다시 말하려면 마이크를 눌러요',
+              },
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontWeight: FontWeight.w800,
+                height: 1.35,
+              ),
             ),
-          ),
+          ],
           const Spacer(),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 220),
-            child: allAnswered
-                ? SizedBox(
-                    key: const ValueKey<String>('submit'),
-                    width: double.infinity,
-                    height: 52,
-                    child: FilledButton.icon(
-                      onPressed: submitting ? null : onSubmit,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFFFFB84E),
-                        foregroundColor: const Color(0xFF3B291B),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(17),
+          // 확인 중에는 전달 버튼을 감춥니다. 여기서 눌리면 방금 다시 말한
+          // 내용이 확정되기 전에 통째로 나갑니다.
+          if (pending == null)
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              child: allAnswered
+                  ? SizedBox(
+                      key: const ValueKey<String>('submit'),
+                      width: double.infinity,
+                      height: 52,
+                      child: FilledButton.icon(
+                        onPressed: submitting ? null : onSubmit,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFFFFB84E),
+                          foregroundColor: const Color(0xFF3B291B),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(17),
+                          ),
+                        ),
+                        icon: const Icon(Icons.auto_awesome_rounded),
+                        label: Text(
+                          submitting ? '이야기에 전하고 있어요...' : '내 생각을 이야기에 전하기',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
                       ),
-                      icon: const Icon(Icons.auto_awesome_rounded),
-                      label: Text(
-                        submitting ? '이야기에 전하고 있어요...' : '내 생각을 이야기에 전하기',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w900,
-                        ),
+                    )
+                  : Text(
+                      '생각 ${answers.length}개를 모았어요 · ${prompts.length - answers.length}개 남음',
+                      key: const ValueKey<String>('progress'),
+                      style: const TextStyle(
+                        color: Color(0xFF8FE5CA),
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
-                  )
-                : Text(
-                    '생각 ${answers.length}개를 모았어요 · ${prompts.length - answers.length}개 남음',
-                    key: const ValueKey<String>('progress'),
-                    style: const TextStyle(
-                      color: Color(0xFF8FE5CA),
-                      fontWeight: FontWeight.w900,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 이 생각에 대해 방금 들은 말을 보여 주고, 맞는지 묻습니다.
+///
+/// 글을 못 읽는 아이도 있으므로 문구에만 기대지 않습니다 - 큰 버튼 두 개를
+/// 색과 아이콘(체크/새로고침)으로 갈라 둡니다. 대화 화면의 확인 카드와 같은
+/// 모양이라 아이가 화면마다 다른 규칙을 배우지 않아도 됩니다.
+///
+/// 아이가 한 말은 자르지 않습니다. 길게 말했으면 카드 안에서 굴리고, 버튼
+/// 두 개는 어떤 경우에도 남습니다.
+class _TranscriptConfirm extends StatelessWidget {
+  const _TranscriptConfirm({
+    required this.transcript,
+    required this.busy,
+    required this.onAccept,
+    required this.onRetry,
+  });
+
+  final String transcript;
+  final bool busy;
+  final VoidCallback onAccept;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      label: '이렇게 들었어요: $transcript. 맞으면 맞아요를 누르세요.',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(15),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF4FFF9),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFF72D6B7), width: 3),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                const Text(
+                  '이렇게 들었어요',
+                  style: TextStyle(
+                    color: Color(0xFF2F8F6B),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 138),
+                  child: SingleChildScrollView(
+                    child: Text(
+                      transcript,
+                      style: const TextStyle(
+                        color: Color(0xFF244159),
+                        fontSize: 20,
+                        height: 1.3,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: SizedBox(
+                  height: 52,
+                  child: FilledButton.icon(
+                    onPressed: busy ? null : onAccept,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF72D6B7),
+                      foregroundColor: const Color(0xFF10314A),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    icon: const Icon(Icons.check_rounded, size: 23),
+                    label: const _ConfirmButtonLabel('맞아요'),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: SizedBox(
+                  height: 52,
+                  child: OutlinedButton.icon(
+                    onPressed: busy ? null : onRetry,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFFFD56A),
+                      side: const BorderSide(
+                        color: Color(0xFFFFD56A),
+                        width: 2,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    icon: const Icon(Icons.refresh_rounded, size: 23),
+                    label: const _ConfirmButtonLabel('다시 말할래요'),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 확인 버튼 글자. 미션 패널은 대화 화면보다 좁아서 "다시 말할래요"가 두 줄로
+/// 접힙니다 - 접힌 버튼은 아이 눈에 두 개의 다른 것처럼 보입니다. 좁으면
+/// 글자를 줄여서라도 **한 줄로** 둡니다.
+class _ConfirmButtonLabel extends StatelessWidget {
+  const _ConfirmButtonLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(
+        text,
+        maxLines: 1,
+        softWrap: false,
+        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
       ),
     );
   }
