@@ -50,6 +50,20 @@ void main() {
       expect(find.bySemanticsLabel('말하기 완료'), findsOneWidget);
       await tester.tap(find.bySemanticsLabel('말하기 완료'));
       await tester.pumpAndSettle();
+
+      // 생각마다 방금 들은 말을 보여 주고 맞는지 묻습니다. 확인 전에는
+      // 다음 생각으로 넘어가지 않습니다.
+      expect(find.text('이렇게 들었어요'), findsOneWidget);
+      expect(find.text('음성 대답 ${index + 1}'), findsOneWidget);
+      expect(
+        find.text('${index + 1} / 4 생각 모음'),
+        findsNothing,
+        reason: '확인 전에 진행 눈금이 먼저 차오르면 안 됩니다',
+      );
+
+      await tester.tap(find.text('맞아요'));
+      await tester.pumpAndSettle();
+      expect(find.text('${index + 1} / 4 생각 모음'), findsOneWidget);
     }
 
     expect(find.text('내 생각을 이야기에 전하기'), findsOneWidget);
@@ -58,6 +72,67 @@ void main() {
 
     expect(submitted, contains('어떤 도구가 필요할까요?: 음성 대답 1'));
     expect(submitted, contains('어떤 일이 생길까요?: 음성 대답 4'));
+  });
+
+  testWidgets('생각마다 다시 말할 수 있고, 확인 전에는 답으로 앉지 않는다', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    String? submitted;
+    int transcriptIndex = 0;
+    const PlayMission mission = PlayMission(
+      missionId: 'mission_1',
+      missionType: PlayMissionType.problemSolving,
+      title: '배를 안전하게 받아요',
+      description: '생각을 말해 보세요.',
+      questions: <PlayMissionQuestion>[
+        PlayMissionQuestion(key: 'tool', label: '어떤 도구가 필요할까요?'),
+      ],
+      cards: <PlayMissionCard>[],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MissionOverlay(
+          mission: mission,
+          recorder: _FakeVoiceRecorder(),
+          transcribeAudio: (_) async => '잘못 들린 대답 ${++transcriptIndex}',
+          onSubmit: (String value) => submitted = value,
+        ),
+      ),
+    );
+
+    await tester.tap(find.bySemanticsLabel('눌러서 말하기'));
+    await tester.pump();
+    await tester.tap(find.bySemanticsLabel('말하기 완료'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('잘못 들린 대답 1'), findsOneWidget);
+    expect(
+      find.text('내 생각을 이야기에 전하기'),
+      findsNothing,
+      reason: '확인이 남아 있는 동안에는 전달 버튼이 뜨면 안 됩니다',
+    );
+
+    // "다시 말할래요"는 마이크를 한 번 더 누르게 하지 않고 바로 녹음합니다.
+    await tester.tap(find.text('다시 말할래요'));
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel('말하기 완료'), findsOneWidget);
+    expect(find.text('잘못 들린 대답 1'), findsNothing, reason: '버린 결과가 남으면 안 됩니다');
+
+    await tester.tap(find.bySemanticsLabel('말하기 완료'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('맞아요'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('내 생각을 이야기에 전하기'));
+    await tester.pump();
+
+    expect(submitted, '어떤 도구가 필요할까요?: 잘못 들린 대답 2');
   });
 
   testWidgets('미션 녹음도 상한에 닿으면 자동으로 멈추고 변환을 요청한다', (WidgetTester tester) async {

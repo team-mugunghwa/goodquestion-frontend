@@ -188,10 +188,13 @@ void main() {
     expect(find.text('잘 못 들었어요. 다시 말해 볼까?'), findsOneWidget);
     expect(find.byTooltip('나가기'), findsOneWidget); // 대화 화면 그대로
 
-    // 다시 녹음합니다 - 이번에는 잘 알아들어서 확인 없이 그대로 나갑니다.
+    // 다시 녹음합니다 - 이번에는 알아들어서 확인 화면이 뜨고, 아이가 맞다고
+    // 해야 나갑니다.
     await tester.tap(find.byTooltip('눌러서 말하기'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('맞아요'));
     await tester.pumpAndSettle();
 
     expect(
@@ -228,6 +231,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('말하기 완료'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('맞아요'));
+    await tester.pumpAndSettle();
 
     expect(repository.lastSttRetryCount, 1);
   });
@@ -261,16 +266,29 @@ void main() {
     );
   });
 
-  testWidgets('잘 알아들은 결과는 확인 없이 그대로 제출한다', (WidgetTester tester) async {
-    // 확인 단계는 서버가 저신뢰라고 말한 결과에만 붙습니다. 매 턴 "맞아요"를
-    // 받으면 잘 알아들은 턴까지 탭이 하나씩 늘어 대화 리듬이 끊깁니다.
+  testWidgets('잘 알아들은 결과도 아이가 확인해야 나간다 - 시계는 걸지 않는다', (
+    WidgetTester tester,
+  ) async {
+    // 서버 신뢰도는 아이가 실제로 무슨 말을 했는지 모릅니다. 자신 있게 다른
+    // 말로 옮겨 놓은 턴이 확인 없이 저장되는 것을 막습니다.
     final _AutoStopSpyRepository repository = _AutoStopSpyRepository();
     await pumpPlay(tester, repository: repository);
 
     await tester.tap(find.byTooltip('말하기 완료'));
     await tester.pumpAndSettle();
 
-    expect(find.text('맞아요'), findsNothing, reason: '고신뢰 결과에는 확인 화면이 뜨면 안 됩니다');
+    expect(find.text('이렇게 들었어요'), findsOneWidget, reason: '고신뢰는 단정해서 보여 줍니다');
+    expect(find.text('맞아요'), findsOneWidget);
+    expect(repository.submittedTexts, isEmpty, reason: '확인 전에는 나가면 안 됩니다');
+
+    // 저신뢰와 달리 무반응 자동 제출이 없습니다 - 자동으로 넘어가면 확인
+    // 화면이 스쳐 가는 자막이 되고, 아이는 고칠 기회를 못 받습니다.
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pumpAndSettle();
+    expect(repository.submittedTexts, isEmpty, reason: '고신뢰에는 시계를 걸지 않습니다');
+
+    await tester.tap(find.text('맞아요'));
+    await tester.pumpAndSettle();
     expect(repository.submittedTexts, <String>['오래오래 말한 내 생각이에요']);
   });
 
@@ -338,7 +356,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repository.transcribeCalls, 1, reason: '상한에서 자동으로 멈추고 변환을 요청해야 합니다');
-    expect(repository.submittedTexts, isNotEmpty, reason: '고신뢰 결과라 확인 없이 나갑니다');
+
+    // 상한에서 끊은 말도 확인을 거칩니다 - 여기까지 말한 것을 잃지 않는 게
+    // 요점이지, 아이 몰래 보내는 게 요점이 아닙니다.
+    await tester.tap(find.text('맞아요'));
+    await tester.pumpAndSettle();
+    expect(repository.submittedTexts, isNotEmpty);
   });
   testWidgets('STORY(전개) 장면은 문장마다 내레이션 음성을 실제로 요청한다', (
     WidgetTester tester,
@@ -920,9 +943,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byTooltip('말하기 완료'), findsOneWidget);
 
-    // 대화1에서 답합니다. 잘 알아들은 결과라 확인 없이 턴이 나가고, 캐릭터가
+    // 대화1에서 답합니다. 확인 화면에서 맞다고 하면 턴이 나가고, 캐릭터가
     // 답하는 동안에도 아이 발화는 계속 보여야 합니다.
     await tester.tap(find.byTooltip('말하기 완료'));
+    for (int i = 0; i < 6; i++) {
+      await tester.pump();
+    }
+    await tester.tap(find.text('맞아요'));
     for (int i = 0; i < 12; i++) {
       await tester.pump();
     }
