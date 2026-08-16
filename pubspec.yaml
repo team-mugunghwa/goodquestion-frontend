@@ -46,6 +46,10 @@ dependencies:
   record: 7.1.1
   audioplayers: ^6.8.1
 
+  # 기기 내장 음성으로 글자를 읽어 줍니다. 서버 TTS 가 붙기 전까지의 임시입니다
+  # (docs/DECISIONS.md 019). 목소리가 없는 기기에서는 버튼이 비활성됩니다
+  flutter_tts: ^4.2.5
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

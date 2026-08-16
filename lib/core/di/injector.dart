@@ -30,6 +30,7 @@ import '../../features/mypage/domain/guardian_gate.dart';
 import '../../features/mypage/domain/repositories/my_page_repository.dart';
 import '../../features/mypage/domain/usecases/my_page_use_cases.dart';
 import '../../features/play/data/datasources/play_remote_data_source.dart';
+import '../../features/play/data/dialogue_word_capture.dart';
 import '../../features/play/data/repositories/play_repository_impl.dart';
 import '../../features/play/domain/repositories/play_repository.dart';
 import '../../features/question/data/datasources/question_remote_data_source.dart';
@@ -43,8 +44,8 @@ import '../../features/story/domain/repositories/story_repository.dart';
 import '../../features/story/domain/usecases/get_story_catalog_use_case.dart';
 import '../../features/story/domain/usecases/get_story_detail_use_case.dart';
 import '../../features/story/domain/usecases/start_story_session_use_case.dart';
-import '../../features/word/data/datasources/word_local_data_source.dart';
-import '../../features/word/data/repositories/word_repository_mock.dart';
+import '../../features/word/data/datasources/word_remote_data_source.dart';
+import '../../features/word/data/repositories/word_repository_impl.dart';
 import '../../features/word/domain/repositories/word_repository.dart';
 import '../../features/word/domain/usecases/get_word_book_use_case.dart';
 import '../../features/word/domain/usecases/toggle_word_like_use_case.dart';
@@ -189,15 +190,28 @@ Future<void> configureDependencies() async {
     )
     ..registerLazySingleton<PlayRepository>(
       () => PlayRepositoryImpl(getIt<PlayRemoteDataSource>()),
+    )
+    // 재생 화면에서 고른 단어를 단어장에 담는 통로. 단어장 화면의 실서버
+    // 연동(#32)과 계층이 겹치지 않게 자족적으로 둡니다.
+    ..registerLazySingleton<DialogueWordCapture>(
+      () => RemoteDialogueWordCapture(
+        getIt<DioClient>(),
+        getIt<ChildProfileRepository>(),
+      ),
     );
 
   // ---- word ----
-  // 좋아요를 메모리에 들고 있어서 lazySingleton 이어야 합니다.
-  // factory 로 바꾸면 화면을 나갔다 올 때마다 좋아요가 초기화됩니다.
+  // ChildProfileRepository 는 아래 mypage 절에서 등록됩니다. lazySingleton 은
+  // 첫 사용 시점에 만들어지므로(= 등록이 다 끝난 뒤) 순서가 문제되지 않습니다.
   getIt
-    ..registerLazySingleton<WordLocalDataSource>(WordLocalDataSource.new)
+    ..registerLazySingleton<WordRemoteDataSource>(
+      () => WordRemoteDataSource(getIt<DioClient>()),
+    )
     ..registerLazySingleton<WordRepository>(
-      () => WordRepositoryMock(getIt<WordLocalDataSource>()),
+      () => WordRepositoryImpl(
+        getIt<WordRemoteDataSource>(),
+        getIt<ChildProfileRepository>(),
+      ),
     )
     ..registerLazySingleton<GetWordBookUseCase>(
       () => GetWordBookUseCase(getIt<WordRepository>()),

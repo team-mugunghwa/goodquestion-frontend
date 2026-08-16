@@ -166,6 +166,22 @@ abstract final class RecapStrings {
   static const String finish = '다 했어';
   static const String saving = '저장 중';
 
+  /// 녹음을 끝내고 글자를 받아 오는 사이.
+  static const String retellTranscribing = '무슨 이야기인지 듣고 있어…';
+
+  // ── 마이크·STT 안내 ──
+  // 화면을 통째로 에러로 바꾸지 않습니다. 아이는 말하는 중이고, 이 부류는
+  // 다시 말하거나 잠시 뒤에 하면 풀립니다. (`play_view.dart` 와 같은 표)
+  static const String micDenied = '마이크를 쓰게 해 줄래?';
+  static const String micFailed = '마이크를 켜지 못했어. 다시 눌러 볼까?';
+  static const String sttEmpty = '잘 못 들었어요. 다시 말해 볼까?';
+  static const String sttTooLong = '말이 조금 길었어요. 짧게 말해 볼까?';
+  static const String sttUnavailable = '지금은 잘 안 들려요. 잠시 뒤에 다시 말해 볼까?';
+
+  /// 완료 저장이 실패했을 때. **다시 누르면 된다**를 반드시 함께 말합니다 -
+  /// 안 그러면 아이가 활동을 처음부터 다시 합니다.
+  static String saveFailed(String reason) => '$reason 다시 눌러 볼까?';
+
   static String sceneOrder(int order, String title) => '$order번째 장면, $title';
 
   /// 낱말이 붙은 장면. 장면과 낱말을 **한 덩어리**로 읽어 줍니다 — 따로 읽으면
@@ -178,6 +194,12 @@ abstract final class RecapStrings {
 
   // ── 완료 ──
   static const String completed = '이야기를 멋지게 들려줬어!';
+
+  /// 이번 완주로 받은 별가루. 서버가 지급한 실제 수치입니다.
+  static String completedStardust(int earned) => '별가루 $earned개를 받았어!';
+
+  static String completedUnlocked(int count) => '새 아이템 $count개가 열렸어!';
+
   static const String completedAction = '마치기';
 }
 
@@ -199,7 +221,12 @@ abstract final class WordStrings {
 
   // ── 단어 상세 모달(모달 #2) ──
   static const String meaning = '무슨 뜻이냐면';
+
+  /// 뜻이 아직 없는 단어. 빈 칸을 두면 고장으로 보입니다.
+  static const String meaningMissing = '아직 뜻을 준비하고 있어.';
   static const String exampleInStory = '이야기에서는 이렇게 나왔어';
+  static const String exampleInDaily = '평소에는 이렇게 써';
+  static const String exampleAdvanced = '조금 어려운 문장에도 도전!';
   static const String like = '좋아요';
   static const String close = '닫기';
 }

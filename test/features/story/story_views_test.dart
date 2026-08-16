@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:goodquestion/core/constants/app_assets.dart';
 import 'package:goodquestion/core/constants/app_strings.dart';
 import 'package:goodquestion/core/error/failure.dart';
 import 'package:goodquestion/core/theme/app_theme.dart';
 import 'package:goodquestion/core/widgets/app_bottom_nav.dart';
 import 'package:goodquestion/core/widgets/speaker_button.dart';
 import 'package:goodquestion/core/widgets/story_card.dart';
+import 'package:goodquestion/core/widgets/story_thumbnail.dart';
 import 'package:goodquestion/features/home/domain/entities/home_summary.dart';
 import 'package:goodquestion/features/home/domain/entities/planet_summary.dart';
 import 'package:goodquestion/features/home/domain/entities/recommended_story.dart';
@@ -89,6 +91,19 @@ const StoryDetail _detail = StoryDetail(
   summary: '방귀를 참던 며느리가 마음을 털어놓는 이야기.',
   introText: '옛날 어느 마을에 방귀를 참는 며느리가 살았어요.',
   introAudio: 'assets/sounds/story_11_intro.mp3',
+  role: StoryRole(name: '며느리의 친구'),
+);
+
+/// 대화 화면 캐릭터 에셋이 있는 유일한 이야기. 역할 카드가 로고 마크
+/// 대신 그 캐릭터를 씁니다. → `role_card.dart`
+const StoryDetail _withCharacter = StoryDetail(
+  storyId: '11111111-1111-1111-1111-111111111111',
+  title: '방귀 뀌는 며느리',
+  estimatedMinutes: 20,
+  difficulty: '쉬움',
+  topics: <String>['가족'],
+  summary: '방귀를 참던 며느리가 마음을 털어놓는 이야기.',
+  introText: '옛날 어느 마을에 방귀를 참는 며느리가 살았어요.',
   role: StoryRole(name: '며느리의 친구'),
 );
 
@@ -202,6 +217,63 @@ void main() {
       expect(find.text(StoryDetailStrings.start), findsOneWidget);
     });
 
+    testWidgets('태블릿은 표지 | 글 2단으로 갈라진다', (WidgetTester tester) async {
+      // 아이패드 가로. 표지는 **폭이 아니라 높이**에 맞춰 서야 합니다 —
+      // 2:3 을 폭 기준으로 깔면 768 높이에서 세로가 넘칩니다.
+      await pump(
+        tester,
+        detailUnder(_StubRepository(detail: _detail)),
+        size: const Size(1024, 768),
+      );
+
+      final Rect cover = tester.getRect(find.byType(StoryThumbnail));
+      final Rect chip = tester.getRect(find.text('쉬움'));
+      // 표지가 왼쪽, 글이 오른쪽.
+      expect(cover.right, lessThanOrEqualTo(chip.left));
+      // 세로 2:3 그림책 판형 전체가, 잘리지 않고, 한 화면에.
+      expect(
+        cover.height / cover.width,
+        closeTo(1 / StoryThumbnail.portrait, 0.01),
+      );
+      expect(cover.bottom, lessThanOrEqualTo(768));
+    });
+
+    testWidgets('넘치는 것은 오른쪽 글이고 표지는 제자리에 남는다', (WidgetTester tester) async {
+      // 화면 전체를 스크롤시키면 표지가 위로 잘려 올라갑니다. 이 화면에서
+      // 아이가 "무슨 이야기인지" 판단하는 유일한 그림이라 표지는 고정입니다.
+      await pump(
+        tester,
+        detailUnder(_StubRepository(detail: _detail)),
+        size: const Size(1024, 768),
+      );
+
+      final Rect before = tester.getRect(find.byType(StoryThumbnail));
+      await tester.ensureVisible(find.byType(RoleCard));
+      await tester.pumpAndSettle();
+
+      expect(tester.getRect(find.byType(StoryThumbnail)), before);
+      expect(
+        tester.getRect(find.byType(RoleCard)).bottom,
+        lessThanOrEqualTo(768),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('폰은 2단으로 쪼개지 않고 세로로 쌓는다', (WidgetTester tester) async {
+      await pump(
+        tester,
+        detailUnder(_StubRepository(detail: _detail)),
+        size: const Size(390, 844),
+      );
+
+      final Rect cover = tester.getRect(find.byType(StoryThumbnail));
+      final Rect chip = tester.getRect(find.text('쉬움'));
+      // 표지 아래로 글이 옵니다. 390dp 를 둘로 나누면 표지도 글도 못 씁니다.
+      expect(cover.bottom, lessThanOrEqualTo(chip.top));
+      // 폰에서 2:3 을 전폭으로 깔면 첫 화면이 표지 하나로 끝납니다.
+      expect(cover.width / cover.height, closeTo(StoryThumbnail.wide, 0.01));
+    });
+
     testWidgets('시드가 비면 빈 카드 대신 섹션이 사라진다', (WidgetTester tester) async {
       await pump(tester, detailUnder(_StubRepository(detail: _seedless)));
 
@@ -251,6 +323,34 @@ void main() {
       expect(label.dy, greaterThan(avatar.dy));
       expect((label.dx - avatar.dx).abs(), lessThan(2));
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('캐릭터가 있는 이야기는 역할 카드에 그 캐릭터가 뜬다', (WidgetTester tester) async {
+      await pump(tester, detailUnder(_StubRepository(detail: _withCharacter)));
+
+      final Image avatar = tester.widget<Image>(
+        find.descendant(
+          of: find.byType(RoleCard),
+          matching: find.byType(Image),
+        ),
+      );
+      expect(
+        (avatar.image as AssetImage).assetName,
+        contains('dialogue/banggui'),
+      );
+    });
+
+    testWidgets('캐릭터가 없는 이야기는 로고 마크로 돌아간다', (WidgetTester tester) async {
+      // 8편 중 7편이 이 상태입니다. 빈 원반이 되면 안 됩니다.
+      await pump(tester, detailUnder(_StubRepository(detail: _detail)));
+
+      final Image avatar = tester.widget<Image>(
+        find.descendant(
+          of: find.byType(RoleCard),
+          matching: find.byType(Image),
+        ),
+      );
+      expect((avatar.image as AssetImage).assetName, AppAssets.logoMark);
     });
 
     testWidgets('없는 이야기는 목록으로 가는 문을 준다', (WidgetTester tester) async {

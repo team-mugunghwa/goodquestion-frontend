@@ -100,6 +100,7 @@ class _WordDetailSheetState extends State<_WordDetailSheet> {
                   const SizedBox(width: AppSpacing.sm),
                   SpeakerButton(
                     audio: _word.audio,
+                    speakText: _word.word,
                     semanticLabel: WordStrings.listenTo(_word.word),
                     size: AppSizes.tapChildPrimary,
                     filled: true,
@@ -107,9 +108,13 @@ class _WordDetailSheetState extends State<_WordDetailSheet> {
                 ],
               ),
               const SizedBox(height: AppSpacing.lg),
+              // 뜻은 서버가 LLM 으로 만들어 주지만 없을 수 있습니다. 빈 칸을
+              // 두면 제목만 남아 고장으로 보입니다.
               _Block(
                 title: WordStrings.meaning,
-                body: _word.meaning,
+                body: _word.hasMeaning
+                    ? _word.meaning
+                    : WordStrings.meaningMissing,
                 metrics: metrics,
               ),
               const SizedBox(height: AppSpacing.lg),
@@ -118,6 +123,24 @@ class _WordDetailSheetState extends State<_WordDetailSheet> {
                 body: _word.sentence,
                 metrics: metrics,
               ),
+              // 예문 3종(이야기/일상/심화) - 서버 V14 이전에 담긴 단어는
+              // 일상/심화가 없어서 칸을 그리지 않습니다.
+              if (_word.sentenceDaily?.isNotEmpty == true) ...<Widget>[
+                const SizedBox(height: AppSpacing.lg),
+                _Block(
+                  title: WordStrings.exampleInDaily,
+                  body: _word.sentenceDaily!,
+                  metrics: metrics,
+                ),
+              ],
+              if (_word.sentenceAdvanced?.isNotEmpty == true) ...<Widget>[
+                const SizedBox(height: AppSpacing.lg),
+                _Block(
+                  title: WordStrings.exampleAdvanced,
+                  body: _word.sentenceAdvanced!,
+                  metrics: metrics,
+                ),
+              ],
               const SizedBox(height: AppSpacing.xl),
               KidPrimaryButton(
                 icon: AppIcons.close,

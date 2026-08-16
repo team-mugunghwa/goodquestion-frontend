@@ -132,6 +132,85 @@ class PlaySessionDto {
             .toList(growable: false)
       : const <PlayMessage>[];
 
+  // ── 말하기 후 활동 → `docs/API.md` 3.9 ──
+
+  static PlayPostActivityStart postActivityStart(Object? value) {
+    if (value is! Map<String, dynamic>) {
+      throw const ParseException('후속 활동 시작 응답 형식이 올바르지 않습니다.');
+    }
+    final Object? cards = value['cards'];
+    if (cards is! List) {
+      throw const ParseException('후속 활동 카드 목록이 없습니다.');
+    }
+    return PlayPostActivityStart(
+      cards: cards
+          .whereType<Map<String, dynamic>>()
+          .map(
+            (Map<String, dynamic> item) => PlayPostActivityCard(
+              cardId: item['cardId'] as String? ?? '',
+              text: item['text'] as String? ?? '',
+            ),
+          )
+          .where((PlayPostActivityCard card) => card.cardId.isNotEmpty)
+          .toList(growable: false),
+      attemptCount: (value['attemptCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  static PlayCardOrderResult cardOrderResult(Object? value) {
+    if (value is! Map<String, dynamic>) {
+      throw const ParseException('순서 채점 응답 형식이 올바르지 않습니다.');
+    }
+    final Object? correct = value['correct'];
+    if (correct is! bool) {
+      throw const ParseException('순서 채점 결과가 없습니다.');
+    }
+    return PlayCardOrderResult(
+      correct: correct,
+      // 오답이면 서버가 null 을 줍니다 - 빈 목록으로 받아 화면이 분기 하나로
+      // 처리하게 합니다.
+      retellingKeywords: _stringList(value['retellingKeywords']),
+    );
+  }
+
+  static PlayRetellingResult retellingResult(Object? value) {
+    if (value is! Map<String, dynamic>) {
+      throw const ParseException('후속 활동 완료 응답 형식이 올바르지 않습니다.');
+    }
+    final Object? status = value['sessionStatus'];
+    if (status is! String || status.isEmpty) {
+      throw const ParseException('후속 활동 완료 응답에 세션 상태가 없습니다.');
+    }
+    final Object? stardust = value['stardust'];
+    final Object? items = value['unlockedItems'];
+    return PlayRetellingResult(
+      sessionStatus: status,
+      completedAt: DateTime.tryParse(value['completedAt'] as String? ?? ''),
+      stardust: stardust is Map<String, dynamic>
+          ? PlayStardust(
+              earned: (stardust['earned'] as num?)?.toInt() ?? 0,
+              balance: (stardust['balance'] as num?)?.toInt() ?? 0,
+            )
+          : null,
+      unlockedItems: items is List
+          ? items
+                .whereType<Map<String, dynamic>>()
+                .map(
+                  (Map<String, dynamic> item) => PlayUnlockedItem(
+                    itemId: item['itemId']?.toString() ?? '',
+                    name: item['name'] as String? ?? '',
+                    thumbnailUrl: item['thumbnailUrl'] as String?,
+                  ),
+                )
+                .toList(growable: false)
+          : const <PlayUnlockedItem>[],
+    );
+  }
+
+  static List<String> _stringList(Object? value) => value is List
+      ? value.whereType<String>().toList(growable: false)
+      : const <String>[];
+
   static PlaySceneTransition? _transition(Object? value) {
     if (value == null) return null;
     if (value is! Map<String, dynamic>) {
