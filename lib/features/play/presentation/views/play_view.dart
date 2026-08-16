@@ -11,6 +11,8 @@ import '../../../../core/error/failure.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/widgets/app_state_views.dart';
 import '../../data/dialogue_word_capture.dart';
+import '../../data/stt_choice_catalog.dart';
+import '../../data/stt_choice_selector.dart';
 import '../../domain/entities/play_session.dart';
 import '../../domain/repositories/play_repository.dart';
 import '../character/dialogue_character_manifest.dart';
@@ -19,6 +21,7 @@ import '../character/dialogue_character_state_machine.dart';
 import '../voice/mission_voice_recorder.dart';
 import '../voice/story_audio_player.dart';
 import '../widgets/mission_overlay.dart';
+import '../widgets/stt_choice_panel.dart';
 
 /// 모든 이야기가 공유하는 대화 장면 템플릿입니다.
 ///
@@ -141,12 +144,47 @@ class _PlayPageState extends State<PlayPage> {
   /// 422 STT_EMPTY_TEXT(무음/인식 실패) 나 로컬 녹음 실패일 때만 씁니다.
   /// 화면 전체를 에러로 바꾸지 않고 마이크 옆에 짧게 띄웁니다 - 아이가 자주
   /// 겪을 수 있는 흔한 상황이라 화면이 통째로 바뀌면 매번 놀랍니다.
+  ///
+  /// 안내 음성이 준비된 장면(3·5·7·9)에서는 이 자리를 쓰지 않습니다 -
+  /// 캐릭터가 직접 다시 물어보고, 그 말이 말풍선에 뜹니다. → [_speakGuide]
   String? _sttHint;
 
-  /// 저신뢰 인식 결과를 제출하기 전에 잡아 두는 자리. 서버가 이 순간을 위해
-  /// lowConfidence를 내려준다 - 여기 있는 동안 화면은 "맞아요 / 다시 말할래요"
-  /// 를 보여주고, 6초 무반응이면 그대로 제출한다(비차단 - 시험이 아니다).
+  /// 직전 턴 응답의 진행 상황. 두 번째 턴부터는 "아직 못 채운 요소"
+  /// (`progress.missingElements`)로 문장 카드를 고릅니다.
+  ///
+  /// **장면이 바뀌면 비웁니다**([_activateSnapshot]) - 안 비우면 새 장면의
+  /// 첫 턴에서 남의 장면 요소로 카드를 고릅니다.
+  PlayProgress? _lastTurnProgress;
+
+  /// 세 번 이어서 못 알아들어 내려놓은 문장 카드. 비어 있으면 선택지 모드가
+  /// 아닙니다. **빈 목록으로 판을 띄우지 않습니다.**
+  List<SttChoiceSentence> _choiceCards = const <SttChoiceSentence>[];
+
+  /// 지금 스피커로 들려주고 있는 카드.
+  String? _playingChoiceId;
+
+  /// 안내 음성이 나오는 중. 이때는 마이크를 못 누르게 막습니다 - 안 막으면
+  /// 캐릭터 목소리가 그대로 녹음됩니다.
+  bool _guideSpeaking = false;
+
+  /// 아이의 확인을 기다리는 변환 결과. null 이 아니면 확인 화면이 뜨고
+  /// 마이크는 잠깁니다.
+  ///
+  /// 변환 결과를 받자마자 제출하면 오인식을 되돌릴 방법이 없습니다. 턴이
+  /// 처리되고 캐릭터가 대답한 뒤라, 아이가 하지 않은 말이 저장되고 보호자
+  /// 리포트 대표 발화 후보에도 오릅니다. 저신뢰 안내가 의미 있는 유일한
+  /// 시점도 제출 전이라 여기서 한 번 끊습니다. → 백엔드
+  /// `docs/트러블슈팅_STT_신뢰도_산출.md` 3절
+  ///
+  /// 다만 **서버가 저신뢰로 표시한 결과에만** 띄웁니다. 매 턴 "맞아요"를
+  /// 받으면 5-7세에게는 대화 리듬이 끊기고, 잘 알아들은 턴까지 탭이 하나씩
+  /// 늘어납니다. 확인이 값을 하는 곳은 서버가 스스로 미덥지 않다고 말한
+  /// 순간뿐입니다.
   PlayTranscription? _pendingTranscription;
+
+  /// 확인 화면 무반응 시계. 아이가 자리를 뜨거나 버튼을 못 찾아도 이야기가
+  /// 멈추지 않게 6초 뒤 그대로 제출합니다 - 시험이 아니라 놀이라서 막히지
+  /// 않는 쪽이 낫습니다.
   Timer? _confirmTimer;
   String? _retainedStoryImageUrl;
 
@@ -347,6 +385,10 @@ class _PlayPageState extends State<PlayPage> {
         _lastSttLowConfidence = false;
         _sttHint = null;
         _sttRetryCount = 0;
+        // 선택지도 장면과 함께 접습니다 - 카드는 그 장면의 문장이고,
+        // 진행 상황도 그 장면에서만 뜻이 있습니다.
+        _closeChoicesState();
+        _lastTurnProgress = null;
       });
     }
     _bindCharacterScene();
@@ -502,11 +544,17 @@ class _PlayPageState extends State<PlayPage> {
     return _characterReply ?? _snapshot?.openingText ?? widget.question;
   }
 
+  /// 아이 발화 한 번을 보냅니다. 선택지에서 고른 문장도 **같은 길**로
+  /// 나갑니다 - 정상 1턴으로 세어지고 미션 오버레이도 그대로 뜹니다.
+  ///
+  /// [sttRetryCount] 는 선택지 제출에서만 넘깁니다(항상 3). 평소 발화는
+  /// 화면이 세고 있던 [_sttRetryCount] 를 그대로 씁니다.
   Future<void> _submitDialogue(
     String text, {
     String? sttRawText,
     double? sttConfidence,
     bool lowConfidence = false,
+    int? sttRetryCount,
   }) async {
     final String normalized = text.trim();
     if (normalized.isEmpty ||
@@ -529,13 +577,17 @@ class _PlayPageState extends State<PlayPage> {
         text: normalized,
         sttRawText: sttRawText,
         sttConfidence: sttConfidence,
-        sttRetryCount: _sttRetryCount,
+        sttRetryCount: sttRetryCount ?? _sttRetryCount,
       );
       if (!mounted) return;
       setState(() {
         _submittingUtterance = false;
         _transcribingVoice = false;
         _characterReply = result.characterText;
+        // 말이 나갔으니 이번 발화는 끝났습니다. 3회 세기는 한 발화 단위라
+        // 여기서 0으로 돌리고 선택지도 접습니다.
+        _sttRetryCount = 0;
+        _closeChoicesState();
         _fixedDialogue = false;
         _pendingWord = null;
       });
@@ -633,16 +685,12 @@ class _PlayPageState extends State<PlayPage> {
   /// 서버 메시지를 그대로 씁니다. → `docs/이야기_전개_가이드.md` 6장
   String _describeFailure(Failure error) {
     if (error is ServerFailure) {
+      // 목소리 관련 코드는 마이크 옆 안내와 **같은 문구를 씁니다**. 두 벌로
+      // 두면 같은 상황에서 화면마다 다른 말이 떠서, 아이는 다른 일이 난 줄
+      // 압니다.
+      final String? voiceHint = _voiceRetryHint(error);
+      if (voiceHint != null) return voiceHint;
       switch (error.code) {
-        case 'STT_EMPTY_TEXT':
-          return '잘 못 들었어요. 다시 말해 볼까?';
-        case 'AUDIO_TOO_LARGE':
-          return '말이 조금 길었어요. 짧게 말해 볼까?';
-        case 'AI_RATE_LIMITED':
-        case 'AI_UPSTREAM_ERROR':
-        case 'AI_UNAVAILABLE':
-          // 서버 원문("서버 오류가 발생했습니다")은 아이가 읽을 말이 아닙니다.
-          return '지금은 잘 안 들려요. 잠시 뒤에 다시 해볼까?';
         case 'MISSION_NOT_EXPOSED':
           return '미션을 다시 확인하고 있어요.';
         case 'SESSION_NOT_IN_PROGRESS':
@@ -702,9 +750,24 @@ class _PlayPageState extends State<PlayPage> {
   }
 
   Future<void> _toggleVoiceAnswer() async {
-    if (!_isListening || _transcribingVoice || _submittingUtterance) return;
-    if (_pendingTranscription != null) return; // 확인 단계 중 - 버튼으로만 진행
+    // 안내 음성이 나오는 중에는 녹음을 시작하지 않습니다 - 캐릭터 목소리가
+    // 그대로 녹음돼서 또 한 번 못 알아듣게 됩니다.
+    if (!_isListening ||
+        _guideSpeaking ||
+        _transcribingVoice ||
+        _submittingUtterance) {
+      return;
+    }
+    // 확인을 기다리는 결과가 있으면 마이크는 움직이지 않습니다.
+    // "맞아요"와 "다시 말할래요" 둘 중 하나로만 진행합니다.
+    if (_pendingTranscription != null) return;
     if (!_recordingVoice) {
+      // 카드 미리듣기가 나오는 중이면 소리부터 끕니다(같은 이유).
+      if (_playingChoiceId != null) {
+        await _audioPlayer.stop();
+        if (!mounted) return;
+        setState(() => _playingChoiceId = null);
+      }
       try {
         final bool allowed = await _voiceRecorder.start();
         if (!mounted) return;
@@ -720,8 +783,9 @@ class _PlayPageState extends State<PlayPage> {
         _listeningTimer = Timer.periodic(const Duration(seconds: 1), (_) {
           if (mounted && _recordingVoice) {
             setState(() => _listeningSeconds++);
-            // 업로드 한도(10MB, 웹 48kHz 기준 109초) 전에 끊는다. 미션
-            // 화면에는 있던 컷이 대화 화면에만 빠져 있었다.
+            // 업로드 한도(10MB, 웹 48kHz 기준 109초)에 닿기 전에 여기까지
+            // 말한 것을 보낸다. 상한을 넘겨 두면 통째로 413이 나서 아이가
+            // 말한 전부를 잃는다.
             if (_listeningSeconds >= maxRecordingSeconds) {
               unawaited(_toggleVoiceAnswer());
             }
@@ -745,17 +809,28 @@ class _PlayPageState extends State<PlayPage> {
           .transcribeAudio(audio);
       if (!mounted) return;
       if (transcription.lowConfidence) {
-        // 서버가 "잘못 들었을 수 있다"고 표시한 결과다. 바로 제출하지 않고
-        // 아이에게 보여 준다 - 재발화 한 번이 오인식을 정인식으로 바꾸는
-        // 가장 값싼 개입이다. 무반응이면 지금까지처럼 그대로 제출한다.
+        // 서버가 "잘못 들었을 수 있다"고 표시한 결과입니다. 바로 제출하지 않고
+        // 아이에게 보여 줍니다 - 재발화 한 번이 오인식을 정인식으로 바꾸는
+        // 가장 값싼 개입이고, 오인식을 되돌릴 수 있는 유일한 시점입니다.
+        // 무반응이면 6초 뒤 그대로 제출합니다.
         setState(() {
           _transcribingVoice = false;
           _pendingTranscription = transcription;
+          // 선택지 판은 말풍선 자리를 대신 쓰므로, 떠 있는 채로 두면 확인
+          // 화면이 그 밑에 가려집니다. 목소리로 말하는 데 성공한 참이니
+          // 카드는 접습니다 - 다시 못 알아들으면 3회째에 다시 내려옵니다.
+          _closeChoicesState();
         });
         _confirmTimer?.cancel();
-        _confirmTimer = Timer(const Duration(seconds: 6), _confirmPending);
+        _confirmTimer = Timer(
+          const Duration(seconds: 6),
+          () => unawaited(_confirmTranscription()),
+        );
         return;
       }
+      // 잘 알아들은 턴은 확인 없이 흘려보냅니다. 다만 선택지 판은 접습니다 -
+      // 목소리로 말하는 데 성공한 참이라 카드가 남아 있을 이유가 없습니다.
+      if (_choiceCards.isNotEmpty) setState(_closeChoicesState);
       await _submitDialogue(
         transcription.text,
         sttRawText: transcription.rawText,
@@ -766,9 +841,19 @@ class _PlayPageState extends State<PlayPage> {
       // 무음이거나 인식 실패 - 흔히 겪는 상황이라 화면을 통째로 에러로
       // 바꾸지 않고 마이크 옆에 짧게 안내한 뒤 바로 다시 녹음할 수 있게
       // 둡니다. → `docs/이야기_전개_가이드.md` 3.4, 6장
+      // 녹음이 서버 한도를 넘은 경우(413)도 이 자리입니다. 실서버에서
+      // 확인해 보니 전면 에러 화면이 떠서 아이가 대화 중간에 통째로 튕겼는데,
+      // 이건 이야기가 깨진 게 아니라 "이번에 말한 게 너무 길었다"일 뿐입니다.
+      // 다시 녹음하면 그만이라 자리를 지키고 안내만 바꿉니다.
+      // → `docs/이야기_전개_가이드.md` 6장
       final String? voiceHint = _voiceRetryHint(error);
       if (voiceHint != null) {
-        _recordFailedSttAttempt(voiceHint);
+        // 캐릭터가 하는 말과 **겹치지 않을 때만** 작은 글씨를 함께 남깁니다.
+        // STT_EMPTY_TEXT 는 캐릭터가 이미 "다시 한 번 말해 줄래?"라고 하는
+        // 자리라 같은 말을 두 번 띄우게 됩니다.
+        final bool addsInstruction =
+            error is ServerFailure && error.code != 'STT_EMPTY_TEXT';
+        _recordFailedSttAttempt(voiceHint, codeSpecific: addsInstruction);
         return;
       }
       if (!mounted) return;
@@ -799,53 +884,162 @@ class _PlayPageState extends State<PlayPage> {
     if (error is! ServerFailure) return null;
     return switch (error.code) {
       'STT_EMPTY_TEXT' => '잘 못 들었어요. 다시 말해 볼까?',
-      'AUDIO_TOO_LARGE' => '말이 조금 길었어요. 짧게 말해 볼까?',
+      'AUDIO_TOO_LARGE' => '조금만 짧게 말해 줄래?',
+      // 서버 원문("서버 오류가 발생했습니다")은 아이가 읽을 말이 아닙니다.
       'AI_RATE_LIMITED' ||
       'AI_UPSTREAM_ERROR' ||
-      'AI_UNAVAILABLE' => '지금은 잘 안 들려요. 잠시 뒤에 다시 말해 볼까?',
+      'AI_UNAVAILABLE' => '지금은 잘 안 들려요. 잠시 뒤에 다시 해볼까?',
       _ => null,
     };
   }
 
-  /// 저신뢰 확인 단계에서 "맞아요"(또는 6초 무반응). 잡아 둔 결과를 그대로 제출한다.
-  void _confirmPending() {
-    final PlayTranscription? pending = _pendingTranscription;
-    _confirmTimer?.cancel();
-    _confirmTimer = null;
-    if (!mounted || pending == null) return;
-    setState(() => _pendingTranscription = null);
-    unawaited(
-      _submitDialogue(
-        pending.text,
-        sttRawText: pending.rawText,
-        sttConfidence: pending.confidence,
-        lowConfidence: pending.lowConfidence,
-      ),
+  /// STT 가 텍스트를 못 만들어 다시 녹음해야 할 때 공통으로 부릅니다.
+  ///
+  /// 화면을 에러로 바꾸지 않는 것은 그대로고, 재시도 횟수를 세어 뒀다가
+  /// 이번 발화가 결국 제출될 때 `sttRetryCount` 로 함께 보냅니다. 여기에
+  /// 더해 **캐릭터가 다시 물어봐 줍니다** - 1회는 "다시 한 번 말해 줄래?",
+  /// 2회는 "조금 크게 말해 줄래?", 3회에는 문장 카드를 내려놓습니다.
+  /// → `docs/이야기_전개_가이드.md` 3.4
+  ///
+  /// 안내 음성이 없는 장면(3·5·7·9 밖)이나 내려놓을 카드를 한 장도 만들 수
+  /// 없을 때는 예전처럼 [hint] 만 답니다 - 빈 선택지 판은 띄우지 않습니다.
+  void _recordFailedSttAttempt(String hint, {bool codeSpecific = false}) {
+    if (!mounted) return;
+    final int attempt = _sttRetryCount + 1;
+    final int? sceneOrder = _snapshot?.currentScene?.sceneOrder;
+    final List<SttChoiceSentence> cards =
+        attempt >= SttChoiceSelector.attemptsBeforeChoices
+        ? SttChoiceSelector.cardsFor(
+            sceneOrder: sceneOrder,
+            lastProgress: _lastTurnProgress,
+          )
+        : const <SttChoiceSentence>[];
+    final SttChoiceVoice? guide = SttChoiceSelector.voiceFor(
+      sceneOrder: sceneOrder,
+      attempt: attempt,
+      hasCards: cards.isNotEmpty,
+    );
+    setState(() {
+      _transcribingVoice = false;
+      _sttRetryCount = attempt;
+      // 들려줄 말이 있으면 자막은 캐릭터 말풍선이 맡습니다. 작은 글씨 안내를
+      // 겹쳐 두면 같은 말이 두 번 뜹니다.
+      //
+      // 다만 **원인이 분명한 안내는 남깁니다**([codeSpecific]). 캐릭터가 하는
+      // 말은 어느 실패에나 같은 "다시 한 번 말해 줄래?"라서, 이걸로 덮으면
+      // 413에 걸린 아이가 또 길게 말해 또 413을 받습니다. 원인별로 갈라 준
+      // 코드(백엔드 #68)가 화면까지 오지 못하면 갈라 준 의미가 없습니다.
+      _sttHint = (guide == null || codeSpecific) ? hint : null;
+      if (cards.isNotEmpty) _choiceCards = cards;
+    });
+    if (guide != null) unawaited(_speakGuide(guide));
+  }
+
+  /// 캐릭터가 다시 물어보는 한 마디. 자막은 **캐릭터 말풍선에** 올립니다 -
+  /// 시스템 알림이 아니라 대화의 일부여야 합니다.
+  ///
+  /// 재생하는 동안 마이크를 잠그고([_guideSpeaking]) 끝나면 되살립니다.
+  /// [_playCharacterMessage] 가 대사를 다 읽고 마이크를 켜 주는 것과 같은
+  /// 방식입니다. 소리가 안 나도(에셋 누락 등) 자막은 남고 마이크만 풀립니다.
+  Future<void> _speakGuide(SttChoiceVoice voice) async {
+    final int token = ++_speechToken;
+    _releaseSpeechWait();
+    await _audioPlayer.stop();
+    if (!mounted || token != _speechToken) return;
+    setState(() {
+      _characterSentences = <String>[voice.text];
+      _characterSentenceIndex = 0;
+      _playingChoiceId = null;
+      _guideSpeaking = true;
+    });
+    try {
+      await _audioPlayer.playUrl(voice.assetPath);
+    } on Object {
+      // 소리가 안 나도 흐름은 이어집니다.
+    }
+    if (!mounted || token != _speechToken) return;
+    setState(() => _guideSpeaking = false);
+  }
+
+  /// 카드 문장을 소리로 들려줍니다. 초1~3 은 읽기가 느려서, 소리가 없으면
+  /// '고르기'가 또 하나의 시험이 됩니다.
+  Future<void> _playChoiceCard(SttChoiceSentence sentence) async {
+    final int token = ++_speechToken;
+    await _audioPlayer.stop();
+    if (!mounted || token != _speechToken) return;
+    setState(() => _playingChoiceId = sentence.id);
+    try {
+      await _audioPlayer.playUrl(sentence.assetPath);
+    } on Object {
+      // 무시합니다 - 카드 글자는 그대로 남아 있습니다.
+    }
+    if (!mounted || token != _speechToken) return;
+    setState(() => _playingChoiceId = null);
+  }
+
+  /// 고른 문장을 발화로 보냅니다.
+  ///
+  /// `sttRawText`·`sttConfidence` 를 **비운 채로** 보냅니다. STT 를 타지 않은
+  /// 말이라 비어 있는 게 사실이고, 보호자 리포트가 저신뢰 발화를 거르는
+  /// 판단을 가짜 값으로 오염시키면 안 됩니다.
+  Future<void> _chooseSentence(SttChoiceSentence sentence) async {
+    if (_submittingUtterance) return;
+    if (_playingChoiceId != null) {
+      await _audioPlayer.stop();
+      if (!mounted) return;
+      setState(() => _playingChoiceId = null);
+    }
+    await _submitDialogue(
+      sentence.text,
+      sttRetryCount: SttChoiceSelector.choiceRetryCount,
     );
   }
 
-  /// 저신뢰 확인 단계에서 "다시 말할래요". 재시도 횟수를 세고 곧바로 재녹음한다.
-  void _retryPending() {
+  /// 선택지 모드를 접습니다. **[setState] 안에서 부르세요** - 값만 되돌리고
+  /// 스스로 다시 그리지 않습니다.
+  void _closeChoicesState() {
+    _choiceCards = const <SttChoiceSentence>[];
+    _playingChoiceId = null;
+    _guideSpeaking = false;
+  }
+
+  /// 아이가 변환 결과를 맞다고 확인했습니다(또는 6초 무반응). 이제서야 턴을
+  /// 보냅니다.
+  Future<void> _confirmTranscription() async {
+    final PlayTranscription? pending = _pendingTranscription;
     _confirmTimer?.cancel();
     _confirmTimer = null;
-    if (!mounted || _pendingTranscription == null) return;
+    if (!mounted || pending == null || _submittingUtterance) return;
+    setState(() => _pendingTranscription = null);
+    await _submitDialogue(
+      pending.text,
+      // 화면에 보인 텍스트가 아니라 **STT 원문**을 보냅니다. 서버는 이 값으로
+      // 인식 품질을 재는데, 다듬은 텍스트를 보내면 그 신호가 지워집니다.
+      sttRawText: pending.rawText,
+      sttConfidence: pending.confidence,
+      lowConfidence: pending.lowConfidence,
+    );
+  }
+
+  /// 아이가 다르게 들렸다고 했습니다. 결과를 버리고 곧바로 다시 녹음합니다 -
+  /// 마이크를 한 번 더 누르게 하면 아이가 흐름을 놓칩니다. 다시 말한 횟수는
+  /// [_sttRetryCount] 로 세어 뒀다가 결국 제출될 때 함께 보냅니다.
+  ///
+  /// 다시 말하기는 **선택지를 부르지 않습니다**. 카드는 못 알아들었을 때
+  /// (`STT_EMPTY_TEXT`) 내려놓는 것이고, 여기는 알아듣긴 했는데 아이가 아니라고
+  /// 한 자리라 [_recordFailedSttAttempt] 를 타지 않습니다.
+  Future<void> _retryTranscription() async {
+    _confirmTimer?.cancel();
+    _confirmTimer = null;
+    if (!mounted || _pendingTranscription == null || _submittingUtterance) {
+      return;
+    }
     setState(() {
       _pendingTranscription = null;
       _sttRetryCount++;
+      _sttHint = null;
     });
-    unawaited(_toggleVoiceAnswer());
-  }
-
-  /// STT 가 텍스트를 못 만들어 다시 녹음해야 할 때 공통으로 부릅니다.
-  /// 화면은 그대로 두고 마이크 옆 안내만 바꾸며, 재시도 횟수를 세어 뒀다가
-  /// 이번 발화가 결국 제출될 때 `sttRetryCount` 로 함께 보냅니다.
-  void _recordFailedSttAttempt(String hint) {
-    if (!mounted) return;
-    setState(() {
-      _transcribingVoice = false;
-      _sttRetryCount++;
-      _sttHint = hint;
-    });
+    await _toggleVoiceAnswer();
   }
 
   /// 턴 결과로 표정을 옮긴다. 캐릭터 대사를 재생하기 **전에** 부른다 - 아이 말에 대한 반응이
@@ -873,6 +1067,9 @@ class _PlayPageState extends State<PlayPage> {
   }
 
   Future<void> _presentTurnResult(PlayTurnResult result) async {
+    // 다음 턴에서 못 알아들었을 때 "아직 못 채운 요소"로 카드를 고르려면
+    // 이 값이 필요합니다. 장면이 바뀌면 [_activateSnapshot] 이 비웁니다.
+    _lastTurnProgress = result.progress;
     await _applyCharacterState(result);
     if (!mounted) return;
     final String? reaction = result.closingReactionText;
@@ -924,6 +1121,9 @@ class _PlayPageState extends State<PlayPage> {
       final PlayTurnResult result = await _submitUtteranceWithRetry(
         text: answer,
         missionId: mission.missionId,
+        // 미션 답도 아이가 말한 것을 받아 적은 것이라 원문이 곧 답입니다.
+        // 데이터 계층이 더는 대신 채워 주지 않으므로 여기서 실어 보냅니다.
+        sttRawText: answer,
       );
       if (!mounted) return;
       setState(() {
@@ -1437,6 +1637,9 @@ class _PlayPageState extends State<PlayPage> {
       _sttHint = null;
       _lastChildText = null;
       _lastSttLowConfidence = false;
+      _pendingTranscription = null;
+      // 새 차례에는 지난 차례의 선택지를 들고 오지 않습니다.
+      _closeChoicesState();
     });
     _listeningTimer?.cancel();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1466,9 +1669,11 @@ class _PlayPageState extends State<PlayPage> {
           // 루프가 이미 끝난 뒤에 멈춘 경우에만 다시 들려줍니다.
           unawaited(_playQuestion());
         }
-      } else {
+      } else if (_pendingTranscription == null) {
         _startListening();
       }
+      // 확인 대기 중에 멈췄다면 결과를 지우지 않고 확인 화면으로 되돌아갑니다 -
+      // _startListening 을 타면 아이가 말해 둔 답이 사라집니다.
       return;
     }
 
@@ -1632,14 +1837,41 @@ class _PlayPageState extends State<PlayPage> {
                         recording: _recordingVoice,
                         transcribing: _transcribingVoice,
                         compact: compact,
-                        onMicTap: _isListening ? _toggleVoiceAnswer : null,
+                        onMicTap: _isListening && _pendingTranscription == null
+                            ? _toggleVoiceAnswer
+                            : null,
+                        guideSpeaking: _guideSpeaking,
+                        pendingTranscription: _pendingTranscription,
+                        onConfirmTranscription: _confirmTranscription,
+                        onRetryTranscription: _retryTranscription,
+                        // 한 번이라도 못 알아들은 뒤로는(선택지가 떠 있을 때
+                        // 포함) 녹음을 대신 켜 주지 않습니다. 제출에 성공하면
+                        // 0으로 돌아가고 다음 턴은 다시 자동으로 켜집니다.
+                        micNeedsTap: _sttRetryCount > 0,
                         submitting: _submittingUtterance,
                         lastChildText: _lastChildText,
                         lastSttLowConfidence: _lastSttLowConfidence,
                         sttHint: _sttHint,
-                        pendingConfirmText: _pendingTranscription?.text,
-                        onConfirmPending: _confirmPending,
-                        onRetryPending: _retryPending,
+                        // 선택지 판은 캐릭터 말풍선 자리를 대신 씁니다 -
+                        // 안내 문구가 판 머리에 그대로 들어가 있어서 같은
+                        // 말을 두 곳에 띄울 이유가 없습니다. 마이크는 아래
+                        // 제자리에 그대로 남습니다.
+                        choicePanel: _choiceCards.isEmpty
+                            ? null
+                            : SttChoicePanel(
+                                characterName:
+                                    dialogueScene?.characterName ??
+                                    widget.characterName,
+                                introText: _visibleCharacterText,
+                                cards: _choiceCards,
+                                playingCardId: _playingChoiceId,
+                                submitting: _submittingUtterance,
+                                compact: compact,
+                                onChoose: (SttChoiceSentence sentence) =>
+                                    unawaited(_chooseSentence(sentence)),
+                                onListen: (SttChoiceSentence sentence) =>
+                                    unawaited(_playChoiceCard(sentence)),
+                              ),
                         // 담기 통로가 있으면 고정/동적 대사 모두 단어를
                         // 누를 수 있습니다. 동적 대사의 오인식 단어는 서버
                         // 유효성 관문(422 INVALID_WORD)이 걸러 줍니다.
@@ -2034,10 +2266,13 @@ class _DialogueCanvas extends StatelessWidget {
     required this.submitting,
     required this.lastChildText,
     required this.lastSttLowConfidence,
+    this.guideSpeaking = false,
+    this.micNeedsTap = false,
     this.sttHint,
-    this.pendingConfirmText,
-    this.onConfirmPending,
-    this.onRetryPending,
+    this.choicePanel,
+    this.pendingTranscription,
+    this.onConfirmTranscription,
+    this.onRetryTranscription,
     this.onWordTap,
     this.pendingWord,
     this.savingWord = false,
@@ -2058,6 +2293,23 @@ class _DialogueCanvas extends StatelessWidget {
   final bool transcribing;
   final bool compact;
   final VoidCallback? onMicTap;
+
+  /// 캐릭터가 다시 물어보는 안내 음성이 나오는 중. 이때 마이크는 "준비됨"이
+  /// 아니라 "듣는 중" 모양이어야 한다 - 눌러도 안 되는 버튼이 켜져 보이면
+  /// 아이는 고장 났다고 여긴다.
+  final bool guideSpeaking;
+
+  /// 마이크가 저절로 켜지지 않고 아이가 눌러 줘야 하는 상태(못 알아들어서 다시
+  /// 말해야 할 때·선택지가 떠 있을 때). 턴을 새로 시작할 때는 화면이 알아서
+  /// 녹음을 켜지만, 다시 말하는 자리에서는 안내 음성 꼬리가 녹음되지 않도록
+  /// 아이가 직접 누르게 두기 때문이다.
+  final bool micNeedsTap;
+
+  /// 아이의 확인을 기다리는 변환 결과. 값이 있으면 말풍선이 확인 화면으로 바뀐다.
+  final PlayTranscription? pendingTranscription;
+  final VoidCallback? onConfirmTranscription;
+  final VoidCallback? onRetryTranscription;
+
   final bool submitting;
   final String? lastChildText;
   final bool lastSttLowConfidence;
@@ -2065,6 +2317,10 @@ class _DialogueCanvas extends StatelessWidget {
   /// 무음/인식 실패로 다시 말해야 할 때만 값이 있다. [lastSttLowConfidence]
   /// 와 달리 화면을 안 바꾸고 마이크 옆에만 짧게 띄운다.
   final String? sttHint;
+
+  /// 세 번 이어서 못 알아들었을 때만 값이 있다. 캐릭터 말풍선 자리를 대신
+  /// 쓰고, 아이 말풍선(마이크)은 제자리에 그대로 둔다.
+  final Widget? choicePanel;
 
   /// 고정 대사일 때만 값이 있다. null 이면 말풍선은 지금처럼 통짜 글로
   /// 그려지고 단어를 누를 수 없다(동적 대사).
@@ -2074,12 +2330,6 @@ class _DialogueCanvas extends StatelessWidget {
   final String? wordNotice;
   final VoidCallback? onConfirmWord;
   final VoidCallback? onCancelWord;
-
-  /// 저신뢰 인식 결과를 제출하기 전에 아이가 확인하는 중이면 그 텍스트.
-  /// 값이 있으면 말풍선이 "맞아요 / 다시 말할래요" 버튼을 보여준다.
-  final String? pendingConfirmText;
-  final VoidCallback? onConfirmPending;
-  final VoidCallback? onRetryPending;
 
   @override
   Widget build(BuildContext context) {
@@ -2127,24 +2377,29 @@ class _DialogueCanvas extends StatelessWidget {
                   : (hasStage ? stageWidth + 24 : constraints.maxWidth * .23),
               right: compact ? 10 : 20,
               top: compact ? 18 : 44,
-              child: _QuestionBubble(
-                characterName: characterName,
-                question: question,
-                compact: compact,
-                onWordTap: onWordTap,
-                pendingWord: pendingWord,
-                savingWord: savingWord,
-                wordNotice: wordNotice,
-                onConfirmWord: onConfirmWord,
-                onCancelWord: onCancelWord,
-                // 아이 말풍선(아래)과 서로 밀어내지 않도록 위아래로 나눠
-                // 씁니다. 좁은 폭에서 대사가 길어져도 잘리는 대신 이 안에서
-                // 굴러갑니다.
-                maxHeight:
-                    constraints.maxHeight -
-                    (compact ? 18 : 44) -
-                    (compact ? 160 : 190),
-              ),
+              // 선택지 판은 아이 말풍선 바로 위까지 내려와 카드 3장을 크게
+              // 폅니다. 말풍선은 내용만큼만 차지하므로 bottom 을 주지 않습니다.
+              bottom: choicePanel == null ? null : (compact ? 154.0 : 190.0),
+              child:
+                  choicePanel ??
+                  _QuestionBubble(
+                    characterName: characterName,
+                    question: question,
+                    compact: compact,
+                    onWordTap: onWordTap,
+                    pendingWord: pendingWord,
+                    savingWord: savingWord,
+                    wordNotice: wordNotice,
+                    onConfirmWord: onConfirmWord,
+                    onCancelWord: onCancelWord,
+                    // 아이 말풍선(아래)과 서로 밀어내지 않도록 위아래로 나눠
+                    // 씁니다. 좁은 폭에서 대사가 길어져도 잘리는 대신 이 안에서
+                    // 굴러갑니다.
+                    maxHeight:
+                        constraints.maxHeight -
+                        (compact ? 18 : 44) -
+                        (compact ? 160 : 190),
+                  ),
             ),
             // 이름 배지는 인물 발밑에 겹치고, 말풍선이 이미 "○○의 질문"으로 화자를 밝힌다.
             if (!compact && !hasStage)
@@ -2165,14 +2420,16 @@ class _DialogueCanvas extends StatelessWidget {
                 recording: recording,
                 transcribing: transcribing,
                 submitting: submitting,
+                guideSpeaking: guideSpeaking,
+                micNeedsTap: micNeedsTap,
                 onMicTap: onMicTap,
                 lastChildText: lastChildText,
                 lowConfidence: lastSttLowConfidence,
                 sttHint: sttHint,
-                pendingConfirmText: pendingConfirmText,
-                onConfirmPending: onConfirmPending,
-                onRetryPending: onRetryPending,
                 compact: compact,
+                pending: pendingTranscription,
+                onConfirm: onConfirmTranscription,
+                onRetry: onRetryTranscription,
                 maxHeight: constraints.maxHeight * (compact ? .42 : .5),
               ),
             ),
@@ -2540,10 +2797,12 @@ class _ChildVoiceBubble extends StatelessWidget {
     required this.lowConfidence,
     required this.compact,
     required this.maxHeight,
+    this.guideSpeaking = false,
+    this.micNeedsTap = false,
     this.sttHint,
-    this.pendingConfirmText,
-    this.onConfirmPending,
-    this.onRetryPending,
+    this.pending,
+    this.onConfirm,
+    this.onRetry,
   });
 
   /// 말풍선이 차지해도 되는 최대 높이. 아이가 길게 말했어도 잘라내지 않고
@@ -2559,36 +2818,52 @@ class _ChildVoiceBubble extends StatelessWidget {
   final String? lastChildText;
   final bool lowConfidence;
   final bool compact;
+
+  /// 캐릭터가 다시 물어보는 중. 마이크는 잠겨 있다. → [_DialogueCanvas]
+  final bool guideSpeaking;
+
+  /// 마이크를 아이가 눌러 줘야 하는 자리. → [_DialogueCanvas.micNeedsTap]
+  final bool micNeedsTap;
+
   final String? sttHint;
-  final String? pendingConfirmText;
-  final VoidCallback? onConfirmPending;
-  final VoidCallback? onRetryPending;
+
+  /// 아이의 확인을 기다리는 변환 결과. 값이 있으면 확인 화면을 그린다.
+  final PlayTranscription? pending;
+  final VoidCallback? onConfirm;
+  final VoidCallback? onRetry;
 
   bool get listening => phase == _DialoguePhase.listening;
 
+  /// 안내 음성이 나오는 동안에는 "말할 차례"가 아니다. 마이크를 켜진 모양으로
+  /// 두면 눌렀다가 아무 일도 안 일어난다.
+  bool get micReady => listening && !guideSpeaking;
+
   @override
   Widget build(BuildContext context) {
-    final String status = pendingConfirmText != null
-        ? '이렇게 들었어요. 맞아요?'
-        : transcribing
+    if (pending != null) return _buildConfirmView();
+    final String status = transcribing
         ? '목소리를 글로 바꾸고 있어요'
         : submitting
         ? '이야기 친구가 답을 준비하고 있어요'
         : recording
         ? '잘 듣고 있어요 · $seconds초'
+        : guideSpeaking
+        ? '이야기 친구가 다시 물어보고 있어요'
         : listening
-        ? '이제 말할 차례예요'
+        // 다시 말하는 자리에서는 마이크가 저절로 켜지지 않는다. "이제 말할
+        // 차례예요"라고 두면 아이가 누르지 않고 기다린다.
+        ? (micNeedsTap ? '다시 말할 수 있어요' : '이제 말할 차례예요')
         : '질문을 듣고 있어요';
-    final String body = pendingConfirmText != null
-        ? pendingConfirmText!
-        : lastChildText?.trim().isNotEmpty == true
+    final String body = lastChildText?.trim().isNotEmpty == true
         ? lastChildText!.trim()
         : recording
         ? '나는 이렇게 생각해요…'
         : transcribing
         ? '말한 내용을 잠깐 확인하고 있어요.'
+        : guideSpeaking
+        ? '친구 말이 끝나면 말할 수 있어요.'
         : listening
-        ? '마이크가 자동으로 켜졌어요.'
+        ? (micNeedsTap ? '마이크를 누르고 말해 주세요.' : '마이크가 자동으로 켜졌어요.')
         : '질문이 끝나면 마이크가 켜져요.';
 
     return AnimatedContainer(
@@ -2616,7 +2891,7 @@ class _ChildVoiceBubble extends StatelessWidget {
       child: Row(
         children: <Widget>[
           _ListeningMic(
-            ready: listening,
+            ready: micReady,
             recording: recording,
             busy: transcribing || submitting,
             onTap: onMicTap,
@@ -2654,28 +2929,7 @@ class _ChildVoiceBubble extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (pendingConfirmText != null) ...<Widget>[
-                    const SizedBox(height: 10),
-                    Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: _ConfirmChoiceButton(
-                            label: '맞아요',
-                            emphasized: true,
-                            onTap: onConfirmPending,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _ConfirmChoiceButton(
-                            label: '다시 말할래요',
-                            emphasized: false,
-                            onTap: onRetryPending,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ] else if (sttHint != null) ...<Widget>[
+                  if (sttHint != null) ...<Widget>[
                     const SizedBox(height: 6),
                     Text(
                       sttHint!,
@@ -2702,6 +2956,140 @@ class _ChildVoiceBubble extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// 변환 결과 확인 화면. "맞아요"를 눌러야 턴이 제출된다.
+  ///
+  /// 글을 못 읽는 아이도 있으므로 문구에만 기대지 않는다 - 버튼을 크게 두 개만
+  /// 두고 색과 아이콘(체크/새로고침)으로 "보내기"와 "다시 말하기"를 구분한다.
+  /// 저신뢰면 테두리와 제목을 노란색 계열로 바꿔 "확실하지 않다"는 신호를 준다.
+  ///
+  /// 아이가 한 말은 자르지 않는다. 길게 말했으면 [maxHeight] 안에서 굴리고,
+  /// 버튼 두 개는 어떤 경우에도 화면에 남는다 - 잘린 말과 사라진 버튼은
+  /// 아이에게 "여기서 뭘 해야 하는지"를 통째로 숨긴다.
+  Widget _buildConfirmView() {
+    final PlayTranscription result = pending!;
+    final Color accent = result.lowConfidence
+        ? const Color(0xFFFFD56A)
+        : const Color(0xFF77E0C4);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      constraints: BoxConstraints(
+        minHeight: compact ? 128 : 154,
+        maxHeight: maxHeight,
+      ),
+      padding: EdgeInsets.all(compact ? 15 : 20),
+      decoration: BoxDecoration(
+        color: const Color(0xF2123252),
+        borderRadius: BorderRadius.circular(compact ? 22 : 28),
+        border: Border.all(color: accent, width: 3),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            color: Color(0x66000000),
+            blurRadius: 24,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Semantics(
+        liveRegion: true,
+        label: '이렇게 들었어요: ${result.text}. 맞으면 맞아요를 누르세요.',
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              result.lowConfidence ? '이렇게 들었는데, 맞을까요?' : '이렇게 들었어요',
+              style: TextStyle(
+                color: accent,
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 9),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Text(
+                  result.text,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: compact ? 20 : 23,
+                    height: 1.35,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+            if (result.lowConfidence) ...<Widget>[
+              const SizedBox(height: 6),
+              const Text(
+                '잘 못 알아들었을 수도 있어요.',
+                style: TextStyle(
+                  color: Color(0xFFFFD56A),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+            SizedBox(height: compact ? 12 : 16),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: SizedBox(
+                    height: compact ? 48 : 54,
+                    child: FilledButton.icon(
+                      onPressed: submitting ? null : onConfirm,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF72D6B7),
+                        foregroundColor: const Color(0xFF10314A),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      icon: const Icon(Icons.check_rounded, size: 26),
+                      label: const Text(
+                        '맞아요',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: SizedBox(
+                    height: compact ? 48 : 54,
+                    child: OutlinedButton.icon(
+                      onPressed: submitting ? null : onRetry,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFFFD56A),
+                        side: const BorderSide(
+                          color: Color(0xFFFFD56A),
+                          width: 2,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      icon: const Icon(Icons.refresh_rounded, size: 26),
+                      label: const Text(
+                        '다시 말할래요',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -3070,48 +3458,6 @@ class _ChildBubble extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 저신뢰 확인의 두 갈래. 초등 저학년 손가락 기준으로 크게(높이 48+),
-/// "맞아요"를 강조해 6초 무반응 자동 제출과 같은 방향이 기본이 되게 한다.
-class _ConfirmChoiceButton extends StatelessWidget {
-  const _ConfirmChoiceButton({
-    required this.label,
-    required this.emphasized,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool emphasized;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: label,
-      child: Material(
-        color: emphasized ? const Color(0xFF8DE7CF) : const Color(0x33FFFFFF),
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          child: Container(
-            height: 48,
-            alignment: Alignment.center,
-            child: Text(
-              label,
-              style: TextStyle(
-                color: emphasized ? const Color(0xFF0D2A47) : Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
         ),
       ),
     );

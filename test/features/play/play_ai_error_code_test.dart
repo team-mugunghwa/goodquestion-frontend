@@ -55,7 +55,7 @@ void main() {
       await tester.pump();
     }
 
-    expect(find.text('말이 조금 길었어요. 짧게 말해 볼까?'), findsOneWidget);
+    expect(find.text('조금만 짧게 말해 줄래?'), findsOneWidget);
     expect(find.text('서버 오류가 발생했습니다.'), findsNothing);
     expect(find.byTooltip('나가기'), findsOneWidget, reason: '대화 화면이 그대로 남아야 합니다');
   });
@@ -79,7 +79,7 @@ void main() {
         await tester.pump();
       }
 
-      expect(find.text('지금은 잘 안 들려요. 잠시 뒤에 다시 말해 볼까?'), findsOneWidget);
+      expect(find.text('지금은 잘 안 들려요. 잠시 뒤에 다시 해볼까?'), findsOneWidget);
       expect(find.text('서버 오류가 발생했습니다.'), findsNothing);
       expect(find.byTooltip('나가기'), findsOneWidget);
     });

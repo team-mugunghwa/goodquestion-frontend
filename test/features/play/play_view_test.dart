@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:goodquestion/core/error/failure.dart';
 import 'package:goodquestion/core/router/app_routes.dart';
+import 'package:goodquestion/features/play/data/stt_choice_catalog.dart';
 import 'package:goodquestion/features/play/domain/entities/play_session.dart';
 import 'package:goodquestion/features/play/domain/repositories/play_repository.dart';
 import 'package:goodquestion/features/play/presentation/views/play_view.dart';
@@ -187,7 +188,7 @@ void main() {
     expect(find.text('잘 못 들었어요. 다시 말해 볼까?'), findsOneWidget);
     expect(find.byTooltip('나가기'), findsOneWidget); // 대화 화면 그대로
 
-    // 다시 녹음합니다 - 이번에는 성공합니다.
+    // 다시 녹음합니다 - 이번에는 잘 알아들어서 확인 없이 그대로 나갑니다.
     await tester.tap(find.byTooltip('눌러서 말하기'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('말하기 완료'));
@@ -200,6 +201,37 @@ void main() {
     );
   });
 
+  testWidgets('녹음이 서버 한도를 넘어도 화면을 안 바꾸고 짧게 말하라고만 한다', (
+    WidgetTester tester,
+  ) async {
+    // 실서버에서 확인된 자리입니다. 한도를 넘기면 413이 오는데 전면 에러
+    // 화면을 띄우면 아이가 대화 중간에 통째로 튕깁니다 - 이야기가 깨진 게
+    // 아니라 이번에 말한 게 길었을 뿐이라 그 자리를 지켜야 합니다.
+    final _SttRetrySpyRepository repository = _SttRetrySpyRepository(
+      firstFailureCode: 'AUDIO_TOO_LARGE',
+    );
+    await pumpPlay(tester, repository: repository);
+
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
+
+    for (final Text t in tester.widgetList<Text>(find.byType(Text))) {
+      // ignore: avoid_print
+      print('TEXT>> ${t.data}');
+    }
+    expect(find.text('조금만 짧게 말해 줄래?'), findsOneWidget);
+    expect(find.byTooltip('나가기'), findsOneWidget); // 대화 화면 그대로
+    expect(find.text('다시 불러오기'), findsNothing); // 전면 에러가 아니다
+
+    // 다시 말하면 그대로 이어집니다.
+    await tester.tap(find.byTooltip('눌러서 말하기'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
+
+    expect(repository.lastSttRetryCount, 1);
+  });
+
   testWidgets('저신뢰 인식은 바로 제출하지 않고 확인을 거친다', (WidgetTester tester) async {
     final _SttRetrySpyRepository repository = _SttRetrySpyRepository()
       ..lowConfidenceAlways = true;
@@ -208,13 +240,12 @@ void main() {
     await tester.tap(find.byTooltip('말하기 완료'));
     await tester.pumpAndSettle();
 
-    // 제출이 잡혀 있고, 들은 내용과 두 버튼이 보인다.
     expect(
       repository.submittedTexts,
       isEmpty,
       reason: '서버가 잘못 들었을 수 있다고 한 결과를 바로 제출하면 안 됩니다',
     );
-    expect(find.text('이렇게 들었어요. 맞아요?'), findsOneWidget);
+    expect(find.text('이렇게 들었는데, 맞을까요?'), findsOneWidget);
     expect(find.text('방귀를 참으면 안 돼요'), findsOneWidget);
     expect(find.text('맞아요'), findsOneWidget);
     expect(find.text('다시 말할래요'), findsOneWidget);
@@ -230,28 +261,17 @@ void main() {
     );
   });
 
-  testWidgets('저신뢰 확인에서 다시 말하면 제출 없이 재녹음하고 재시도 횟수를 센다', (
-    WidgetTester tester,
-  ) async {
-    final _SttRetrySpyRepository repository = _SttRetrySpyRepository()
-      ..lowConfidenceAlways = true;
+  testWidgets('잘 알아들은 결과는 확인 없이 그대로 제출한다', (WidgetTester tester) async {
+    // 확인 단계는 서버가 저신뢰라고 말한 결과에만 붙습니다. 매 턴 "맞아요"를
+    // 받으면 잘 알아들은 턴까지 탭이 하나씩 늘어 대화 리듬이 끊깁니다.
+    final _AutoStopSpyRepository repository = _AutoStopSpyRepository();
     await pumpPlay(tester, repository: repository);
 
     await tester.tap(find.byTooltip('말하기 완료'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('다시 말할래요'));
-    await tester.pumpAndSettle();
 
-    expect(repository.submittedTexts, isEmpty);
-    // 재녹음이 자동으로 시작돼 있어야 한다 - 아이가 마이크를 또 찾게 하지 않는다.
-    expect(find.byTooltip('말하기 완료'), findsOneWidget);
-
-    // 두 번째 발화를 확정하면 재시도 횟수 1이 실려 간다.
-    await tester.tap(find.byTooltip('말하기 완료'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('맞아요'));
-    await tester.pumpAndSettle();
-    expect(repository.lastSttRetryCount, 1);
+    expect(find.text('맞아요'), findsNothing, reason: '고신뢰 결과에는 확인 화면이 뜨면 안 됩니다');
+    expect(repository.submittedTexts, <String>['오래오래 말한 내 생각이에요']);
   });
 
   testWidgets('저신뢰 확인은 6초 무반응이면 그대로 제출한다', (WidgetTester tester) async {
@@ -269,6 +289,57 @@ void main() {
     expect(repository.submittedTexts, <String>['방귀를 참으면 안 돼요']);
   });
 
+  testWidgets('저신뢰면 확인 화면이 맞을까요로 묻고, 다시 말하면 재시도 횟수가 오른다', (
+    WidgetTester tester,
+  ) async {
+    final _AutoStopSpyRepository repository = _AutoStopSpyRepository(
+      lowConfidence: true,
+    );
+    await pumpPlay(tester, repository: repository);
+
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
+
+    // 저신뢰는 단정하지 않고 물어봅니다.
+    expect(find.text('이렇게 들었는데, 맞을까요?'), findsOneWidget);
+    expect(find.text('잘 못 알아들었을 수도 있어요.'), findsOneWidget);
+
+    // 다시 말하면 앞의 결과는 버려지고 곧바로 재녹음됩니다.
+    await tester.tap(find.text('다시 말할래요'));
+    await tester.pumpAndSettle();
+    expect(repository.submittedTexts, isEmpty);
+    expect(find.byTooltip('말하기 완료'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('맞아요'));
+    await tester.pumpAndSettle();
+
+    expect(repository.submittedTexts, hasLength(1));
+    expect(
+      repository.lastSttRetryCount,
+      1,
+      reason: '다시 말할래요 한 번이 재시도 횟수로 실려 가야 합니다',
+    );
+  });
+
+  testWidgets('녹음이 상한에 닿으면 자동으로 멈추고 지금까지 말한 것을 보낸다', (
+    WidgetTester tester,
+  ) async {
+    final _AutoStopSpyRepository repository = _AutoStopSpyRepository();
+    await pumpPlay(tester, repository: repository);
+
+    // 듣기 화면에 들어오면 마이크가 자동으로 녹음을 시작한 상태입니다.
+    expect(find.byTooltip('말하기 완료'), findsOneWidget);
+
+    // 아무도 누르지 않은 채 상한까지 시간이 흐릅니다. 상한을 넘기면 업로드가
+    // 통째로 413이라(웹 48kHz, 10MB 한도) 그 전에 끊어 보내야 합니다.
+    await tester.pump(const Duration(seconds: maxRecordingSeconds));
+    await tester.pumpAndSettle();
+
+    expect(repository.transcribeCalls, 1, reason: '상한에서 자동으로 멈추고 변환을 요청해야 합니다');
+    expect(repository.submittedTexts, isNotEmpty, reason: '고신뢰 결과라 확인 없이 나갑니다');
+  });
   testWidgets('STORY(전개) 장면은 문장마다 내레이션 음성을 실제로 요청한다', (
     WidgetTester tester,
   ) async {
@@ -794,9 +865,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byTooltip('말하기 완료'), findsOneWidget);
 
-    // 대화1에서 답합니다 - 캐릭터가 답하는 동안에는 계속 보여야 합니다.
+    // 대화1에서 답합니다. 잘 알아들은 결과라 확인 없이 턴이 나가고, 캐릭터가
+    // 답하는 동안에도 아이 발화는 계속 보여야 합니다.
     await tester.tap(find.byTooltip('말하기 완료'));
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 12; i++) {
       await tester.pump();
     }
     expect(
@@ -1072,6 +1144,200 @@ void main() {
     expect(bubbleText.maxLines, isNull);
     // 잘리는 대신 글자가 한 단계 줄어듭니다.
     expect(bubbleText.style?.fontSize, lessThan(27));
+  });
+
+  /// 선택지가 있는 장면(3·5·7·9)은 캐릭터 상태 머신이 붙어 대기 모션이 계속
+  /// 돕니다 - `pumpAndSettle` 이 영영 안 끝나므로 프레임을 직접 흘려보냅니다.
+  Future<void> settleFrames(WidgetTester tester, [int count = 12]) async {
+    for (int i = 0; i < count; i++) {
+      await tester.pump();
+    }
+  }
+
+  /// 마이크를 켜고 끄면서 한 번 발화를 시도합니다. 가짜 STT 가 계속
+  /// `STT_EMPTY_TEXT` 를 던지므로 시도할 때마다 실패합니다.
+  Future<void> tryToSpeak(WidgetTester tester) async {
+    if (find.byTooltip('말하기 완료').evaluate().isEmpty) {
+      await tester.tap(find.byTooltip('눌러서 말하기'));
+      await settleFrames(tester);
+    }
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await settleFrames(tester);
+  }
+
+  /// 선택지 흐름을 보는 대화 화면을 띄우고 아이 차례까지 진행합니다.
+  Future<void> pumpChoiceScene(
+    WidgetTester tester, {
+    required _SttChoiceSpyRepository repository,
+  }) async {
+    await pumpPlay(tester, repository: repository, settle: false);
+    await settleFrames(tester, 16);
+  }
+
+  testWidgets('세 번 이어서 못 알아들으면 문장 카드를 내려놓는다 - 1·2회에는 캐릭터가 다시 물어본다', (
+    WidgetTester tester,
+  ) async {
+    final _SttChoiceSpyRepository repository = _SttChoiceSpyRepository();
+    await pumpChoiceScene(tester, repository: repository);
+    final String firstCard = SttChoiceCatalog.firstTurn[3]!.first.text;
+
+    // 1회 - 캐릭터가 다시 물어보고, 선택지는 아직 없습니다.
+    await tryToSpeak(tester);
+    expect(find.text(SttChoiceCatalog.retryFirst[3]!.text), findsOneWidget);
+    expect(find.text(firstCard), findsNothing);
+
+    // 2회 - 조금 크게 말해 달라고 합니다. 여전히 선택지는 없습니다.
+    await tryToSpeak(tester);
+    expect(find.text(SttChoiceCatalog.retrySecond[3]!.text), findsOneWidget);
+    expect(find.text(firstCard), findsNothing);
+
+    // 3회 - 그제야 고를 수 있는 문장을 내려놓습니다.
+    await tryToSpeak(tester);
+    expect(find.text(SttChoiceCatalog.choiceIntro[3]!.text), findsOneWidget);
+    for (final SttChoiceSentence sentence in SttChoiceCatalog.firstTurn[3]!) {
+      expect(find.text(sentence.text), findsOneWidget);
+    }
+    expect(
+      repository.submitCount,
+      0,
+      reason: '아직 아이가 고르지 않았으니 서버로 나간 발화는 없어야 합니다',
+    );
+  });
+
+  testWidgets('고른 문장은 평소 발화와 같은 길로, sttRetryCount 3 · STT 값은 비운 채로 나간다', (
+    WidgetTester tester,
+  ) async {
+    final _SttChoiceSpyRepository repository = _SttChoiceSpyRepository();
+    await pumpChoiceScene(tester, repository: repository);
+
+    for (int attempt = 0; attempt < 3; attempt++) {
+      await tryToSpeak(tester);
+    }
+    final SttChoiceSentence chosen = SttChoiceCatalog.firstTurn[3]!.first;
+    await tester.tap(find.text(chosen.text));
+    await settleFrames(tester);
+
+    expect(repository.submitCount, 1);
+    expect(repository.lastText, chosen.text);
+    expect(
+      repository.lastSttRetryCount,
+      3,
+      reason: '카운터가 4든 5든 선택지 제출은 "세 번 만에 고르기로 내려왔다"는 뜻의 3 입니다',
+    );
+    expect(
+      repository.lastSttRawText,
+      isNull,
+      reason: 'STT 를 안 탄 말이라 원문이 없습니다 - 가짜 값을 넣으면 보호자 리포트의 저신뢰 판정이 오염됩니다',
+    );
+    expect(repository.lastSttConfidence, isNull);
+  });
+
+  testWidgets('고른 문장을 보내고 나면 선택지는 접히고, 다음 차례는 평소대로 마이크로 시작한다', (
+    WidgetTester tester,
+  ) async {
+    final _SttChoiceSpyRepository repository = _SttChoiceSpyRepository();
+    await pumpChoiceScene(tester, repository: repository);
+
+    for (int attempt = 0; attempt < 3; attempt++) {
+      await tryToSpeak(tester);
+    }
+    final SttChoiceSentence chosen = SttChoiceCatalog.firstTurn[3]!.first;
+    await tester.tap(find.text(chosen.text));
+    await settleFrames(tester);
+
+    for (final SttChoiceSentence sentence in SttChoiceCatalog.firstTurn[3]!) {
+      expect(find.text(sentence.text), findsNothing);
+    }
+    expect(find.byTooltip('말하기 완료'), findsOneWidget);
+  });
+
+  testWidgets('선택지가 떠 있어도 마이크는 그대로 남는다 - 고르기로 내려온 것이지 마이크가 막힌 게 아니다', (
+    WidgetTester tester,
+  ) async {
+    final _SttChoiceSpyRepository repository = _SttChoiceSpyRepository();
+    await pumpChoiceScene(tester, repository: repository);
+
+    for (int attempt = 0; attempt < 3; attempt++) {
+      await tryToSpeak(tester);
+    }
+
+    expect(
+      find.text(SttChoiceCatalog.firstTurn[3]!.first.text),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('눌러서 말하기'), findsOneWidget);
+  });
+
+  testWidgets('다시 말하는 자리에서는 "자동으로 켜졌다"고 하지 않는다 - 눌러야 켜지기 때문', (
+    WidgetTester tester,
+  ) async {
+    final _SttChoiceSpyRepository repository = _SttChoiceSpyRepository();
+    await pumpChoiceScene(tester, repository: repository);
+
+    // 턴을 새로 시작할 때는 화면이 알아서 녹음을 켭니다 - 녹음 중 문구입니다.
+    expect(find.text('나는 이렇게 생각해요…'), findsOneWidget);
+
+    // 한 번 못 알아들은 뒤로는 녹음이 꺼진 채로 기다립니다. 이때 "자동으로
+    // 켜졌다"고 하면 아이가 누르지 않고 기다립니다.
+    await tryToSpeak(tester);
+    expect(find.text('마이크가 자동으로 켜졌어요.'), findsNothing);
+    expect(find.text('마이크를 누르고 말해 주세요.'), findsOneWidget);
+
+    // 선택지가 떠 있을 때도 마찬가지입니다.
+    await tryToSpeak(tester);
+    await tryToSpeak(tester);
+    expect(
+      find.text(SttChoiceCatalog.firstTurn[3]!.first.text),
+      findsOneWidget,
+    );
+    expect(find.text('마이크가 자동으로 켜졌어요.'), findsNothing);
+    expect(find.text('마이크를 누르고 말해 주세요.'), findsOneWidget);
+  });
+
+  testWidgets('음성이 없는 장면에서는 세 번 실패해도 선택지를 띄우지 않는다', (
+    WidgetTester tester,
+  ) async {
+    // 4장면에는 안내 음성도 문장도 없습니다. 빈 판을 내리는 대신 예전처럼
+    // 짧은 안내만 답니다.
+    final _SttChoiceSpyRepository repository = _SttChoiceSpyRepository(
+      sceneOrder: 4,
+    );
+    await pumpChoiceScene(tester, repository: repository);
+
+    for (int attempt = 0; attempt < 3; attempt++) {
+      await tryToSpeak(tester);
+    }
+
+    expect(find.text('잘 못 들었어요. 다시 말해 볼까?'), findsOneWidget);
+    expect(find.text(SttChoiceCatalog.firstTurn[3]!.first.text), findsNothing);
+    expect(find.byTooltip('나가기'), findsOneWidget); // 대화 화면 그대로
+  });
+
+  testWidgets('안내 음성이 나오는 동안에는 마이크를 누를 수 없다', (WidgetTester tester) async {
+    final _SttChoiceSpyRepository repository = _SttChoiceSpyRepository();
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      settle: false,
+    );
+
+    // 첫 대사를 끝까지 듣고 아이 차례가 됩니다.
+    await settleFrames(tester);
+    audioPlayer.finishPlayback();
+    await settleFrames(tester);
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await settleFrames(tester);
+
+    // 안내 음성이 아직 재생 중입니다 - 이때 녹음을 시작하면 캐릭터 목소리가
+    // 그대로 녹음됩니다.
+    expect(find.byTooltip('눌러서 말하기'), findsNothing);
+    expect(find.text('이야기 친구가 다시 물어보고 있어요'), findsOneWidget);
+
+    audioPlayer.finishPlayback();
+    await settleFrames(tester);
+    expect(find.byTooltip('눌러서 말하기'), findsOneWidget);
   });
 
   testWidgets('1280x720 범용 대화 템플릿 골든', (WidgetTester tester) async {
@@ -1573,6 +1839,12 @@ class _StopSpyRepository implements PlayRepository {
 /// 첫 녹음은 422 `STT_EMPTY_TEXT`로 실패시키고, 그다음부터는 성공시킵니다.
 /// 결국 제출되는 `sttRetryCount`를 [lastSttRetryCount]에 기록합니다.
 class _SttRetrySpyRepository implements PlayRepository {
+  _SttRetrySpyRepository({this.firstFailureCode = 'STT_EMPTY_TEXT'});
+
+  /// 첫 변환에서 서버가 돌려줄 실패 코드. 무음(`STT_EMPTY_TEXT`)과 녹음 초과
+  /// (`AUDIO_TOO_LARGE`)는 아이 입장에서 같은 자리라 같은 흐름을 타야 합니다.
+  final String firstFailureCode;
+
   int _transcribeCalls = 0;
   int? lastSttRetryCount;
 
@@ -1631,7 +1903,7 @@ class _SttRetrySpyRepository implements PlayRepository {
       );
     }
     if (_transcribeCalls == 1) {
-      throw const ServerFailure(message: '무음이거나 인식 실패', code: 'STT_EMPTY_TEXT');
+      throw ServerFailure(message: '변환 실패', code: firstFailureCode);
     }
     return const PlayTranscription(
       text: '나는 이렇게 생각해요',
@@ -1661,6 +1933,221 @@ class _SttRetrySpyRepository implements PlayRepository {
     submittedRawTexts.add(sttRawText);
     return const PlayTurnResult(
       characterText: null,
+      characterAudioUrl: null,
+      mission: null,
+      sceneTransition: null,
+    );
+  }
+
+  @override
+  Future<PlayPostActivityStart> startPostActivity(String sessionId) async =>
+      const PlayPostActivityStart(
+        cards: <PlayPostActivityCard>[],
+        attemptCount: 0,
+      );
+
+  @override
+  Future<PlayCardOrderResult> submitCardOrder(
+    String sessionId, {
+    required List<String> submittedOrder,
+  }) async => const PlayCardOrderResult(correct: true);
+
+  @override
+  Future<PlayRetellingResult> submitRetelling(
+    String sessionId, {
+    required String text,
+    String? sttRawText,
+  }) async => const PlayRetellingResult(sessionStatus: 'COMPLETED');
+
+  @override
+  Future<void> stop(String sessionId) async {}
+}
+
+/// 무엇을 말해도 422 `STT_EMPTY_TEXT` 로 실패시키는 가짜입니다. 세 번 이어서
+/// 실패했을 때 문장 카드가 내려오는지, 고른 문장이 어떤 값으로 나가는지를
+/// 보는 데 씁니다. [sceneOrder] 를 3·5·7·9 밖으로 두면 선택지 음성이 없는
+/// 장면이 됩니다.
+/// 음성 흐름(상한 자동 종료, 확인 단계) 검증용.
+/// 변환 호출 수, 제출된 텍스트, 마지막 재시도 횟수를 기록합니다.
+class _AutoStopSpyRepository implements PlayRepository {
+  _AutoStopSpyRepository({this.lowConfidence = false});
+
+  final bool lowConfidence;
+  int transcribeCalls = 0;
+  final List<String> submittedTexts = <String>[];
+  int? lastSttRetryCount;
+
+  @override
+  Future<PlaySessionSnapshot> resume(String sessionId) async =>
+      const PlaySessionSnapshot(
+        phase: PlayPhase.dialogue,
+        currentScene: PlayScene(
+          sceneId: 'scene-1',
+          sceneOrder: 1,
+          sceneType: PlaySceneType.dialogue,
+          narrationSentences: <String>[],
+          characterName: '토리',
+          maxTurns: 4,
+        ),
+        openingText: '이럴 때는 어떻게 하면 좋을까?',
+      );
+
+  @override
+  Future<PlaySessionSnapshot> completeStoryScene(String sessionId) =>
+      resume(sessionId);
+
+  @override
+  Future<PlayOpeningMessage> openCurrentScene(String sessionId) async =>
+      const PlayOpeningMessage(
+        text: '이럴 때는 어떻게 하면 좋을까?',
+        audioUrl: null,
+        alreadyOpened: true,
+      );
+
+  @override
+  Future<List<PlayMessage>> sceneMessages(
+    String sessionId, {
+    required String sceneId,
+  }) async => const <PlayMessage>[];
+
+  @override
+  Future<PlayMission?> currentMission(String sessionId) async => null;
+
+  @override
+  Future<PlayTranscription> transcribeAudio(Uint8List wavBytes) async {
+    transcribeCalls++;
+    return PlayTranscription(
+      text: '오래오래 말한 내 생각이에요',
+      confidence: lowConfidence ? .41 : .9,
+      lowConfidence: lowConfidence,
+    );
+  }
+
+  @override
+  Future<PlaySpeechAudio> synthesizeSpeech({
+    required String text,
+    String? characterName,
+  }) async => const PlaySpeechAudio(audioUrl: 'stub://audio');
+
+  @override
+  Future<PlayTurnResult> submitUtterance(
+    String sessionId, {
+    required String text,
+    String? missionId,
+    String? sttRawText,
+    double? sttConfidence,
+    int sttRetryCount = 0,
+    String? idempotencyKey,
+  }) async {
+    submittedTexts.add(text);
+    lastSttRetryCount = sttRetryCount;
+    return const PlayTurnResult(
+      characterText: null,
+      characterAudioUrl: null,
+      mission: null,
+      sceneTransition: null,
+    );
+  }
+
+  @override
+  Future<PlayPostActivityStart> startPostActivity(String sessionId) async =>
+      const PlayPostActivityStart(
+        cards: <PlayPostActivityCard>[],
+        attemptCount: 0,
+      );
+
+  @override
+  Future<PlayCardOrderResult> submitCardOrder(
+    String sessionId, {
+    required List<String> submittedOrder,
+  }) async => const PlayCardOrderResult(correct: true);
+
+  @override
+  Future<PlayRetellingResult> submitRetelling(
+    String sessionId, {
+    required String text,
+    String? sttRawText,
+  }) async => const PlayRetellingResult(sessionStatus: 'COMPLETED');
+
+  @override
+  Future<void> stop(String sessionId) async {}
+}
+
+class _SttChoiceSpyRepository implements PlayRepository {
+  _SttChoiceSpyRepository({this.sceneOrder = 3});
+
+  final int sceneOrder;
+
+  int submitCount = 0;
+  String? lastText;
+  int? lastSttRetryCount;
+  String? lastSttRawText;
+  double? lastSttConfidence;
+
+  @override
+  Future<PlaySessionSnapshot> resume(String sessionId) async =>
+      PlaySessionSnapshot(
+        phase: PlayPhase.dialogue,
+        currentScene: PlayScene(
+          sceneId: 'scene-$sceneOrder',
+          sceneOrder: sceneOrder,
+          sceneType: PlaySceneType.dialogue,
+          narrationSentences: const <String>[],
+          characterName: '토리',
+          maxTurns: 4,
+        ),
+        openingText: '이럴 때는 어떻게 하면 좋을까?',
+      );
+
+  @override
+  Future<PlaySessionSnapshot> completeStoryScene(String sessionId) =>
+      resume(sessionId);
+
+  @override
+  Future<PlayOpeningMessage> openCurrentScene(String sessionId) async =>
+      const PlayOpeningMessage(
+        text: '이럴 때는 어떻게 하면 좋을까?',
+        audioUrl: null,
+        alreadyOpened: true,
+      );
+
+  @override
+  Future<List<PlayMessage>> sceneMessages(
+    String sessionId, {
+    required String sceneId,
+  }) async => const <PlayMessage>[];
+
+  @override
+  Future<PlayMission?> currentMission(String sessionId) async => null;
+
+  @override
+  Future<PlayTranscription> transcribeAudio(Uint8List wavBytes) async {
+    throw const ServerFailure(message: '무음이거나 인식 실패', code: 'STT_EMPTY_TEXT');
+  }
+
+  @override
+  Future<PlaySpeechAudio> synthesizeSpeech({
+    required String text,
+    String? characterName,
+  }) async => const PlaySpeechAudio(audioUrl: 'stub://audio');
+
+  @override
+  Future<PlayTurnResult> submitUtterance(
+    String sessionId, {
+    required String text,
+    String? missionId,
+    String? sttRawText,
+    double? sttConfidence,
+    int sttRetryCount = 0,
+    String? idempotencyKey,
+  }) async {
+    submitCount++;
+    lastText = text;
+    lastSttRetryCount = sttRetryCount;
+    lastSttRawText = sttRawText;
+    lastSttConfidence = sttConfidence;
+    return const PlayTurnResult(
+      characterText: '그렇게 생각했구나.',
       characterAudioUrl: null,
       mission: null,
       sceneTransition: null,
