@@ -23,19 +23,27 @@ class AuthTokenStore {
 
   Future<String?> read() async {
     if (_sessionAccessToken != null) return _sessionAccessToken;
-    try {
-      return await _secureStorage.read(key: _accessKey);
-    } on MissingPluginException {
-      return null;
-    } on PlatformException {
-      return null;
-    }
+    return _readStored(_accessKey);
   }
 
   Future<String?> readRefresh() async {
     if (_sessionRefreshToken != null) return _sessionRefreshToken;
+    return _readStored(_refreshKey);
+  }
+
+  /// 저장소에서 토큰을 읽으면 이 세션도 "로그인 유지"다.
+  ///
+  /// [_persistent] 는 메모리에만 있어서 새로고침이 리셋한다. 리셋된 채로
+  /// 재발급([saveRefreshed])이 돌면 [_write] 의 else 갈래가 저장소 토큰을
+  /// 지워 버리고, 리프레시 토큰은 1회용 회전이라 옛 값으로도 복구할 수
+  /// 없다 - 다음 새로고침 때 로그인이 통째로 풀리는 사고가 났다.
+  /// 유지를 끈 로그인은 저장소에 아예 쓰지 않으므로(오히려 지운다),
+  /// **저장소에 토큰이 있다는 것 자체가 유지를 켰다는 증거**다.
+  Future<String?> _readStored(String key) async {
     try {
-      return await _secureStorage.read(key: _refreshKey);
+      final String? stored = await _secureStorage.read(key: key);
+      if (stored != null && stored.isNotEmpty) _persistent = true;
+      return stored;
     } on MissingPluginException {
       return null;
     } on PlatformException {
