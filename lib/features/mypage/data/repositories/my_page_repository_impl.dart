@@ -28,10 +28,6 @@ class MyPageRepositoryImpl implements MyPageRepository, ChildProfileRepository {
         childCount: children.length,
         completedStories: activity?.completedStories ?? 0,
         stardust: activity?.stardust ?? 0,
-        // 리포트 목록 응답(`id·sessionId·storyTitle·createdAt`)에 안 읽음을
-        // 가릴 값이 없습니다. 지금 목록 화면의 NEW 배지는 앱이 들고 있는
-        // 열람 기록으로 만듭니다.
-        hasNewReport: false,
       );
     } on AppException catch (error) {
       throw Failure.fromException(error);

@@ -35,7 +35,6 @@ class _Stub
   AppSettings? settings;
   final Object? error;
 
-  final List<String> markedAsRead = <String>[];
   final List<String> createdChildNames = <String>[];
   final List<int> createdChildAges = <int>[];
   @override
@@ -67,7 +66,6 @@ class _Stub
       childCount: current.childCount,
       completedStories: current.completedStories,
       stardust: current.stardust,
-      hasNewReport: current.hasNewReport,
     );
   }
 
@@ -88,10 +86,6 @@ class _Stub
     if (error != null) throw error!;
     return detail;
   }
-
-  @override
-  Future<void> markAsRead(String sessionId) async =>
-      markedAsRead.add(sessionId);
 
   @override
   Future<AppSettings> getSettings() async {
@@ -117,14 +111,12 @@ const MyPageSummary _summary = MyPageSummary(
   childCount: 2,
   completedStories: 3,
   stardust: 7,
-  hasNewReport: true,
 );
 
 const MyPageSummary _noChild = MyPageSummary(
   childCount: 0,
   completedStories: 0,
   stardust: 0,
-  hasNewReport: false,
 );
 
 const MyPageChild _skyChild = MyPageChild(
@@ -142,13 +134,11 @@ const List<MyPageChild> _twoChildren = <MyPageChild>[_skyChild, _seaChild];
 ReportList _list() => const ReportList(
   childName: '하늘이',
   totalCount: 2,
-  newCount: 1,
   reports: <ReportSummary>[
     ReportSummary(
       sessionId: '104',
       storyTitle: '방귀 뀌는 며느리',
       completedAt: null,
-      isNew: true,
       playCount: 2,
       highlightUtterance: '며느리가 참으면 배가 아프니까',
     ),
@@ -156,7 +146,6 @@ ReportList _list() => const ReportList(
       sessionId: '103',
       storyTitle: '해와 달이 된 오누이',
       completedAt: null,
-      isNew: false,
       playCount: 1,
       highlightUtterance: '손을 보여 달라고 할 거예요',
     ),
@@ -264,7 +253,6 @@ void main() {
           childCount: 2,
           completedStories: 0,
           stardust: 0,
-          hasNewReport: false,
         ),
         childProfiles: _twoChildren,
       );
@@ -288,10 +276,7 @@ void main() {
   group('ReportListViewModel', () {
     test('목록을 불러온다', () async {
       final _Stub stub = _Stub(list: _list());
-      final vm = ReportListViewModel(
-        GetReportListUseCase(stub),
-        MarkReportAsReadUseCase(stub),
-      );
+      final vm = ReportListViewModel(GetReportListUseCase(stub));
 
       await vm.load();
 
@@ -299,36 +284,15 @@ void main() {
       expect(vm.isEmpty, isFalse);
     });
 
-    test('읽으면 그 카드의 NEW 만 사라지고 개수가 줄어든다', () async {
-      final _Stub stub = _Stub(list: _list());
-      final vm = ReportListViewModel(
-        GetReportListUseCase(stub),
-        MarkReportAsReadUseCase(stub),
-      );
-      await vm.load();
-
-      await vm.markAsRead('104');
-
-      expect(stub.markedAsRead, <String>['104']);
-      expect(vm.reports.first.isNew, isFalse);
-      expect(vm.list?.newCount, 0);
-      // 총 개수는 줄지 않습니다 — 읽었다고 리포트가 사라지진 않습니다.
-      expect(vm.list?.totalCount, 2);
-    });
-
     test('리포트가 없으면 빈 상태다', () async {
       final _Stub stub = _Stub(
         list: const ReportList(
           childName: '하늘이',
           totalCount: 0,
-          newCount: 0,
           reports: <ReportSummary>[],
         ),
       );
-      final vm = ReportListViewModel(
-        GetReportListUseCase(stub),
-        MarkReportAsReadUseCase(stub),
-      );
+      final vm = ReportListViewModel(GetReportListUseCase(stub));
 
       await vm.load();
 

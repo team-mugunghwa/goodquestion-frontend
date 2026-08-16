@@ -70,7 +70,6 @@ class _Stub
       childCount: current.childCount,
       completedStories: current.completedStories,
       stardust: current.stardust,
-      hasNewReport: current.hasNewReport,
     );
   }
 
@@ -91,9 +90,6 @@ class _Stub
     if (error != null) throw error!;
     return detail;
   }
-
-  @override
-  Future<void> markAsRead(String sessionId) async {}
 
   @override
   Future<AppSettings> getSettings() async {
@@ -119,14 +115,12 @@ const MyPageSummary _summary = MyPageSummary(
   childCount: 2,
   completedStories: 3,
   stardust: 7,
-  hasNewReport: true,
 );
 
 const MyPageSummary _noChild = MyPageSummary(
   childCount: 0,
   completedStories: 0,
   stardust: 0,
-  hasNewReport: false,
 );
 
 const MyPageChild _skyChild = MyPageChild(
@@ -144,13 +138,11 @@ const List<MyPageChild> _twoChildren = <MyPageChild>[_skyChild, _seaChild];
 const ReportList _list = ReportList(
   childName: '하늘이',
   totalCount: 2,
-  newCount: 1,
   reports: <ReportSummary>[
     ReportSummary(
       sessionId: '104',
       storyTitle: '방귀 뀌는 며느리',
       completedAt: null,
-      isNew: true,
       playCount: 2,
       highlightUtterance: '며느리가 참으면 배가 아프니까',
     ),
@@ -267,7 +259,6 @@ void main() {
           childCount: 2,
           completedStories: 0,
           stardust: 0,
-          hasNewReport: false,
         ),
         childProfiles: _twoChildren,
       );
@@ -299,19 +290,18 @@ void main() {
 
   group('리포트 목록', () {
     Widget under(_Stub stub) => ChangeNotifierProvider<ReportListViewModel>(
-      create: (_) => ReportListViewModel(
-        GetReportListUseCase(stub),
-        MarkReportAsReadUseCase(stub),
-      )..load(),
+      create: (_) => ReportListViewModel(GetReportListUseCase(stub))..load(),
       child: const ReportListView(),
     );
 
-    testWidgets('요약 스트립·카드·NEW 배지가 보인다', (WidgetTester tester) async {
+    testWidgets('요약 스트립과 카드가 보인다 - NEW 배지는 없다', (WidgetTester tester) async {
       await pump(tester, under(_Stub(list: _list)));
 
-      expect(find.text(ReportListStrings.summary(2, 1)), findsOneWidget);
+      expect(find.text(ReportListStrings.summary(2)), findsOneWidget);
       expect(find.text('방귀 뀌는 며느리'), findsOneWidget);
-      expect(find.text(ReportListStrings.badgeNew), findsOneWidget);
+      // 서버가 열람 여부를 저장하지 않아 앱을 다시 켤 때마다 전부 NEW 가
+      // 됐습니다. 틀린 신호를 남기느니 없앴습니다.
+      expect(find.text('NEW'), findsNothing);
       // 회차가 없으면 같은 제목 카드가 중복으로 보입니다.
       expect(
         find.textContaining(ReportListStrings.playCount(2)),
@@ -335,7 +325,6 @@ void main() {
             list: const ReportList(
               childName: '하늘이',
               totalCount: 0,
-              newCount: 0,
               reports: <ReportSummary>[],
             ),
           ),

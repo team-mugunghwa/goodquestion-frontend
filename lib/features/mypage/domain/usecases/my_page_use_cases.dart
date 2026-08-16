@@ -57,15 +57,6 @@ class GetReportDetailUseCase {
       _repository.getReportDetail(sessionId);
 }
 
-/// 리포트 열람 처리. 카드를 눌러 상세로 들어가는 순간 부릅니다.
-class MarkReportAsReadUseCase {
-  const MarkReportAsReadUseCase(this._repository);
-
-  final ReportRepository _repository;
-
-  Future<void> call(String sessionId) => _repository.markAsRead(sessionId);
-}
-
 /// 설정 읽기.
 class GetSettingsUseCase {
   const GetSettingsUseCase(this._repository);

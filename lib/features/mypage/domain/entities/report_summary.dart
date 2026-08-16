@@ -4,7 +4,6 @@ class ReportSummary {
     required this.sessionId,
     required this.storyTitle,
     required this.completedAt,
-    required this.isNew,
     required this.playCount,
     required this.highlightUtterance,
     this.storyImage,
@@ -16,25 +15,12 @@ class ReportSummary {
   final String? storyImage;
   final DateTime? completedAt;
 
-  /// 아직 안 읽음. 이 배지가 이 화면의 존재 이유입니다.
-  final bool isNew;
-
   /// 같은 이야기를 몇 번째 하는지. **회차 표기가 없으면** 같은 제목의 카드가
   /// 여러 장 쌓였을 때 보호자에게 중복으로 보입니다.
   final int playCount;
 
   /// 대표 발화 한 줄 미리보기.
   final String highlightUtterance;
-
-  ReportSummary copyWith({bool? isNew}) => ReportSummary(
-    sessionId: sessionId,
-    storyTitle: storyTitle,
-    storyImage: storyImage,
-    completedAt: completedAt,
-    isNew: isNew ?? this.isNew,
-    playCount: playCount,
-    highlightUtterance: highlightUtterance,
-  );
 }
 
 /// 리포트 목록 화면이 한 번에 받는 것.
@@ -42,7 +28,6 @@ class ReportList {
   const ReportList({
     required this.childName,
     required this.totalCount,
-    required this.newCount,
     required this.reports,
   });
 
@@ -52,7 +37,6 @@ class ReportList {
   final String childName;
 
   final int totalCount;
-  final int newCount;
 
   /// 최신순. 서버 순서를 그대로 씁니다.
   final List<ReportSummary> reports;
