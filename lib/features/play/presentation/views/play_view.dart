@@ -1929,8 +1929,7 @@ class _PlayPageState extends State<PlayPage> {
                 // 서버 영상은 캐릭터가 구워져 들어간 한 장이라 표정 무대와 겹치면
                 // 인물이 둘이 된다. 무대가 없는 폴백 화면에서만 영상을 얹는다.
                 videoUrl: _character == null ? dialogueScene?.videoUrl : null,
-                // DIALOGUE 장면은 아이가 말하는 동안 화면이 계속 돌아야 한다.
-                loop: dialogueScene?.sceneType == PlaySceneType.dialogue,
+                loop: true,
               ),
               const _BackdropShade(),
               SafeArea(
@@ -2129,8 +2128,7 @@ class _StorySceneView extends StatelessWidget {
           _SceneBackdrop(
             imageAsset: scene.imageUrl,
             videoUrl: scene.videoUrl,
-            // STORY 장면은 1회 재생 후 마지막 프레임에 머문다.
-            loop: scene.sceneType == PlaySceneType.dialogue,
+            loop: true,
           ),
           const _BackdropShade(),
           SafeArea(
@@ -2222,8 +2220,10 @@ class _SceneBackdrop extends StatelessWidget {
   final String? imageAsset;
   final String? videoUrl;
 
-  /// 반복 여부는 별도 플래그가 아니라 `scene_type`이 정한다 -
-  /// STORY는 1회 재생 후 마지막 프레임 유지, DIALOGUE는 계속 반복.
+  /// 장면 영상은 전부 반복 재생한다. 처음에는 STORY를 1회 재생 후 정지로
+  /// 설계했으나, 멈춘 화면이 "영상이 끝났다/고장났다"로 읽혀 전 장면 반복으로
+  /// 확정했다(2026-08-16 팀 결정). 5초 단일본 클립은 반복 시 이음매가 보일 수
+  /// 있는데, 그건 프론트가 아니라 루프본 에셋(_loop)으로 푼다.
   final bool loop;
 
   @override
