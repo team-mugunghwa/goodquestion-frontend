@@ -16,12 +16,16 @@ class SavedWord {
     this.savedAt,
   });
 
-  final int wordId;
+  /// 서버가 주는 UUID 문자열입니다.
+  final String wordId;
 
   /// 표제어. 목록 카드에서 가장 큰 글씨입니다.
   final String word;
 
   /// 쉬운 뜻. 모달에서만 보여 줍니다.
+  ///
+  /// **비어 있을 수 있습니다.** 서버가 LLM 으로 만들어 주지만 실패하거나
+  /// 아직 안 만든 단어가 있습니다 — 화면은 빈 칸 대신 안내 문구를 그립니다.
   final String meaning;
 
   /// 이야기 속에서 이 단어가 나온 문장. 모달에서만 보여 줍니다.
@@ -40,6 +44,9 @@ class SavedWord {
   final bool liked;
 
   final DateTime? savedAt;
+
+  /// 뜻이 아직 없는 단어인가. 서버가 만들어 주기 전이거나 생성에 실패한 경우.
+  bool get hasMeaning => meaning.trim().isNotEmpty;
 
   SavedWord copyWith({bool? liked}) => SavedWord(
     wordId: wordId,

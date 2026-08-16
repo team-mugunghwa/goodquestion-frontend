@@ -256,21 +256,22 @@ class _StoryChips extends StatelessWidget {
   Widget build(BuildContext context) {
     return KidFilterChips(
       metrics: metrics,
-      selectedId: '${vm.selectedStoryId}',
-      onSelected: (String id) =>
-          vm.selectStory(int.tryParse(id) ?? WordListViewModel.allStoryId),
+      selectedId: vm.selectedStoryId,
+      onSelected: vm.selectStory,
       items: <KidFilterChipData>[
         const KidFilterChipData(
-          id: '${WordListViewModel.allStoryId}',
+          id: WordListViewModel.allStoryId,
           label: AppStrings.filterAll,
           icon: AppIcons.topicAll,
         ),
+        // 이름 없는 묶음은 칩으로 만들지 않습니다 — 라벨이 빈 칩이 됩니다.
         for (final WordGroup group in vm.allGroups)
-          KidFilterChipData(
-            id: '${group.storyId}',
-            label: group.storyTitle,
-            image: group.storyImage,
-          ),
+          if (group.hasStory)
+            KidFilterChipData(
+              id: group.filterKey,
+              label: group.storyTitle,
+              image: group.storyImage,
+            ),
       ],
     );
   }
@@ -300,8 +301,12 @@ class _GroupList extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            _GroupHeader(group: group, metrics: metrics),
-            const SizedBox(height: AppSpacing.md),
+            // 이야기를 모르는 묶음에는 **헤더를 그리지 않습니다.** 붙일 이름이
+            // 없는데 억지로 지어내면, 아이는 그게 이야기 제목인 줄 압니다.
+            if (group.hasStory) ...<Widget>[
+              _GroupHeader(group: group, metrics: metrics),
+              const SizedBox(height: AppSpacing.md),
+            ],
             for (final SavedWord word in group.words) ...<Widget>[
               WordCard(
                 word: word,

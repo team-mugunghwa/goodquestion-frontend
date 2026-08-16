@@ -221,6 +221,9 @@ abstract final class WordStrings {
 
   // ── 단어 상세 모달(모달 #2) ──
   static const String meaning = '무슨 뜻이냐면';
+
+  /// 뜻이 아직 없는 단어. 빈 칸을 두면 고장으로 보입니다.
+  static const String meaningMissing = '아직 뜻을 준비하고 있어.';
   static const String exampleInStory = '이야기에서는 이렇게 나왔어';
   static const String exampleInDaily = '평소에는 이렇게 써';
   static const String exampleAdvanced = '조금 어려운 문장에도 도전!';

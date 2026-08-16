@@ -51,8 +51,10 @@ class WordGroupDto {
     this.storyImage,
   });
 
+  // 더미 JSON 은 ID 가 숫자입니다. 서버는 UUID 문자열이라, 읽는 자리에서
+  // 문자열로 맞춥니다 — 더미를 고치는 것보다 여기가 한 곳입니다.
   factory WordGroupDto.fromJson(Map<String, dynamic> json) => WordGroupDto(
-    storyId: json['storyId'] as int? ?? 0,
+    storyId: json['storyId']?.toString(),
     storyTitle: json['storyTitle'] as String? ?? '',
     storyImage: json['storyImage'] as String?,
     words: (json['words'] as List<dynamic>? ?? <dynamic>[])
@@ -61,7 +63,7 @@ class WordGroupDto {
         .toList(growable: false),
   );
 
-  final int storyId;
+  final String? storyId;
   final String storyTitle;
   final String? storyImage;
   final List<SavedWordDto> words;
@@ -90,7 +92,7 @@ class SavedWordDto {
   });
 
   factory SavedWordDto.fromJson(Map<String, dynamic> json) => SavedWordDto(
-    wordId: json['wordId'] as int? ?? 0,
+    wordId: json['wordId']?.toString() ?? '',
     word: json['word'] as String? ?? '',
     meaning: json['meaning'] as String? ?? '',
     sentence: json['sentence'] as String? ?? '',
@@ -103,7 +105,7 @@ class SavedWordDto {
     savedAt: json['savedAt'] as String?,
   );
 
-  final int wordId;
+  final String wordId;
   final String word;
   final String meaning;
   final String sentence;

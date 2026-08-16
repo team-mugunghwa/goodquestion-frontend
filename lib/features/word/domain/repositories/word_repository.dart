@@ -7,7 +7,9 @@ abstract class WordRepository {
 
   /// 좋아요를 켜고 끕니다. 바뀐 값을 돌려줍니다.
   ///
-  /// 서버가 붙기 전에는 메모리에만 남습니다 — 앱을 다시 켜면 더미 값으로
-  /// 돌아갑니다. 그게 목업의 정직한 동작입니다.
-  Future<bool> toggleLike(int wordId);
+  /// 서버에서는 좋아요가 **단어의 분류**입니다 — `UNKNOWN`(모르는 말) 과
+  /// `FAVORITE`(좋아하는 말) 을 오갑니다. 화면은 하트 하나로 보여 주고,
+  /// 목록은 분류로 거르지 않습니다. 거르면 하트를 누른 단어가 목록에서
+  /// 사라져 아이가 자기가 지운 줄 압니다. → `docs/API.md` 2.12
+  Future<bool> toggleLike(String wordId);
 }
