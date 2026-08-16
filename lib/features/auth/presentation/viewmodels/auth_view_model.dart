@@ -40,7 +40,7 @@ class AuthViewModel extends BaseViewModel {
        // ignore: prefer_initializing_formals
        _pushRegistrar = pushRegistrar;
 
-  /// 로그인 뒤 기기 토큰을 등록합니다. 넘기지 않으면 등록을 건너뜁니다 —
+  /// 로그인 뒤 기기 토큰을 등록합니다. 넘기지 않으면 등록을 건너뜁니다 -
   /// 단위 테스트가 푸시까지 준비하지 않아도 되게 하려는 것입니다.
   final PushRegistrar? _pushRegistrar;
 

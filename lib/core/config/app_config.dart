@@ -81,14 +81,14 @@ abstract final class AppConfig {
     return 'goodquestion://oauth';
   }
 
-  // ─────────────────────────────────────────────────────────
+  // ---------------------------------------------------------
   // 푸시(FCM)
   //
   // google-services.json 대신 --dart-define 으로 받습니다. 웹 배포가 주 경로인데
   // 웹에는 그 파일 방식이 없고, 값이 빌드마다 갈리는 것도 아니라 설정 파일을
   // 하나 더 늘릴 이유가 없습니다. 값이 비면 푸시 자체를 켜지 않습니다.
-  // → lib/core/push/push_service.dart
-  // ─────────────────────────────────────────────────────────
+  // -> lib/core/push/push_service.dart
+  // ---------------------------------------------------------
 
   static const String _firebaseApiKey = String.fromEnvironment('FIREBASE_API_KEY');
   static const String _firebaseAppId = String.fromEnvironment('FIREBASE_APP_ID');

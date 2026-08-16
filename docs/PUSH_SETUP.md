@@ -6,7 +6,7 @@
 ## 설정하지 않으면 어떻게 되나
 
 **앱은 그대로 뜹니다.** 설정값이 비어 있으면 Firebase 초기화 자체를 건너뛰고
-`NoopPushService` 가 등록됩니다. → [`lib/core/push/push_service.dart`](../lib/core/push/push_service.dart)
+`NoopPushService` 가 등록됩니다. -> [`lib/core/push/push_service.dart`](../lib/core/push/push_service.dart)
 
 푸시만 나가지 않고 **알림은 서버에 쌓이므로 설정 > 알림함에서 답변을 확인할 수
 있습니다.** 푸시는 알리는 수단이지 전달 경로가 아닙니다. 로컬과 CI 에 Firebase
@@ -53,7 +53,7 @@
 
 `google-services.json`(안드로이드), `GoogleService-Info.plist`(iOS)를 각 플랫폼
 폴더에 넣고 iOS 는 APNs 인증 키를 Firebase 콘솔에 등록합니다. 이 파일들은
-**저장소에 커밋하지 않습니다** — `.gitignore` 에 이미 들어 있습니다.
+**저장소에 커밋하지 않습니다** - `.gitignore` 에 이미 들어 있습니다.
 
 ## 서버 쪽
 
@@ -69,7 +69,7 @@
 3. 관리자 콘솔 > 고객센터에서 그 문의에 답변을 등록합니다.
 4. 기기에 푸시가 오고, 누르면 문의 상세(`/support/{inquiryId}`)가 열립니다.
 5. 푸시가 오지 않아도 설정 > 알림함에 같은 알림이 있어야 합니다. 없다면 푸시가
-   아니라 **알림 생성** 쪽 문제입니다 — 서버 로그를 봅니다.
+   아니라 **알림 생성** 쪽 문제입니다 - 서버 로그를 봅니다.
 
 ## 알아 둘 것
 

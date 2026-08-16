@@ -1,6 +1,6 @@
 import '../entities/helpdesk.dart';
 
-/// 공지 · 이용 안내 · 문의 · 알림.
+/// 공지 / 이용 안내 / 문의 / 알림.
 ///
 /// 앱이 쓰는 것은 문의 작성과 기기 토큰 등록뿐입니다. 나머지는 관리자 콘솔이
 /// 만들고 여기서는 읽습니다.
@@ -10,7 +10,7 @@ abstract class HelpdeskRepository {
 
   Future<Notice> getNotice(String noticeId);
 
-  /// 이용 안내 전체. 본문까지 함께 옵니다 — 문서가 짧고 화면이 아코디언이라
+  /// 이용 안내 전체. 본문까지 함께 옵니다 - 문서가 짧고 화면이 아코디언이라
   /// 펼칠 때마다 요청을 보내면 펼침이 한 박자씩 늦습니다.
   Future<List<Guide>> getGuides();
 
@@ -33,7 +33,7 @@ abstract class HelpdeskRepository {
 
   Future<void> markAllNotificationsRead();
 
-  /// 푸시 기기 등록. 앱이 뜰 때마다 부릅니다 — 토큰은 재설치나 미사용으로
+  /// 푸시 기기 등록. 앱이 뜰 때마다 부릅니다 - 토큰은 재설치나 미사용으로
   /// 바뀌고, 바뀐 것을 서버가 알 방법이 이 호출뿐입니다.
   Future<void> registerDevice({required String token, required String platform});
 

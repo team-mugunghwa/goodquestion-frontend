@@ -15,7 +15,7 @@ import '../../domain/usecases/helpdesk_use_cases.dart';
 import '../viewmodels/helpdesk_view_models.dart';
 import '../widgets/helpdesk_widgets.dart';
 
-/// 고객센터 — 내 문의 목록.
+/// 고객센터 - 내 문의 목록.
 ///
 /// 답변이 등록되면 알림이 오고, 그 알림을 누르면 이 목록이 아니라 문의 상세로
 /// 바로 들어옵니다(관리자 콘솔이 알림에 경로를 실어 보냅니다).

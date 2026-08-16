@@ -4,7 +4,7 @@ import '../dtos/helpdesk_dto.dart';
 
 /// 고객 지원 HTTP 호출. 엔드포인트 문자열은 여기에만 둡니다.
 ///
-/// → `docs/API.md`
+/// -> `docs/API.md`
 class HelpdeskRemoteDataSource {
   const HelpdeskRemoteDataSource(this._client);
 
