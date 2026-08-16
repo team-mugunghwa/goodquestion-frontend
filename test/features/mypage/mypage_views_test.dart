@@ -6,6 +6,7 @@ import 'package:goodquestion/core/error/failure.dart';
 import 'package:goodquestion/core/network/dio_client.dart';
 import 'package:goodquestion/core/theme/app_theme.dart';
 import 'package:goodquestion/core/widgets/app_bottom_nav.dart';
+import 'package:goodquestion/core/widgets/confirm_actions.dart';
 import 'package:goodquestion/features/mypage/data/datasources/settings_remote_data_source.dart';
 import 'package:goodquestion/features/mypage/domain/entities/app_settings.dart';
 import 'package:goodquestion/features/mypage/domain/entities/my_page_summary.dart';
@@ -467,6 +468,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text(SettingsStrings.signOutConfirm), findsOneWidget);
+      // 취소와 로그아웃이 대등하게 놓입니다 - 되돌리기 어려운 동작이라
+      // 한쪽으로 기울면 안 됩니다.
+      expect(find.byType(ConfirmActions), findsOneWidget);
     });
 
     testWidgets('설정 화면에는 게이트가 없다', (WidgetTester tester) async {

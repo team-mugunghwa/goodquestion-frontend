@@ -9,6 +9,7 @@ import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/app_state_views.dart';
+import '../../../../core/widgets/confirm_actions.dart';
 import '../../../../core/widgets/guardian_list.dart';
 import '../../../../core/widgets/guardian_scaffold.dart';
 import '../../../../core/widgets/policy_document_view.dart';
@@ -250,14 +251,13 @@ class SettingsView extends StatelessWidget {
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
         title: const Text(SettingsStrings.signOutConfirm),
+        actionsPadding: ConfirmActions.dialogPadding,
         actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text(SettingsStrings.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text(SettingsStrings.signOut),
+          ConfirmActions(
+            cancelLabel: SettingsStrings.cancel,
+            confirmLabel: SettingsStrings.signOut,
+            onCancel: () => Navigator.of(dialogContext).pop(false),
+            onConfirm: () => Navigator.of(dialogContext).pop(true),
           ),
         ],
       ),

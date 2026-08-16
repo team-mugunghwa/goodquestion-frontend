@@ -8,6 +8,7 @@ import '../../../../core/state/view_state.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/app_state_views.dart';
+import '../../../../core/widgets/confirm_actions.dart';
 import '../../../../core/widgets/guardian_scaffold.dart';
 import '../../domain/entities/helpdesk.dart';
 import '../../domain/usecases/helpdesk_use_cases.dart';
@@ -77,15 +78,14 @@ class _Body extends StatelessWidget {
       builder: (BuildContext context) => AlertDialog(
         title: const Text('문의를 삭제할까요?'),
         content: const Text('삭제한 문의는 되돌릴 수 없습니다.'),
+        actionsPadding: ConfirmActions.dialogPadding,
         actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-            child: const Text('삭제'),
+          ConfirmActions(
+            cancelLabel: '취소',
+            confirmLabel: '삭제',
+            danger: true,
+            onCancel: () => Navigator.of(context).pop(false),
+            onConfirm: () => Navigator.of(context).pop(true),
           ),
         ],
       ),
