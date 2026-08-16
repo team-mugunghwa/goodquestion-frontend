@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:goodquestion/core/constants/app_strings.dart';
@@ -6,6 +8,7 @@ import 'package:goodquestion/core/theme/app_theme.dart';
 import 'package:goodquestion/core/widgets/app_bottom_nav.dart';
 import 'package:goodquestion/core/widgets/story_thumbnail.dart';
 import 'package:goodquestion/features/word/domain/entities/saved_word.dart';
+import 'package:goodquestion/features/word/domain/entities/sentence_practice.dart';
 import 'package:goodquestion/features/word/domain/entities/word_book.dart';
 import 'package:goodquestion/features/word/domain/entities/word_group.dart';
 import 'package:goodquestion/features/word/domain/repositories/word_repository.dart';
@@ -22,6 +25,17 @@ class _StubRepository implements WordRepository {
   final WordBook? book;
   final Object? error;
   final Map<String, bool> likes = <String, bool>{};
+
+  @override
+  Future<SentencePracticeResult> practiceSentence({
+    required String wordId,
+    required SentenceType sentenceType,
+    required String spokenText,
+  }) async => throw UnimplementedError();
+
+  @override
+  Future<String> transcribe(Uint8List wavBytes) async =>
+      throw UnimplementedError();
 
   @override
   Future<WordBook> getWordBook() async {

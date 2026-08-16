@@ -328,6 +328,12 @@ class _GroupList extends StatelessWidget {
       metrics: metrics,
       onToggleLike: () => vm.toggleLike(word.wordId),
       latest: () => vm.wordOf(word.wordId),
+      // 시트가 닫힌 뒤 이 context(목록)에서 push 합니다. 상세로 가는 건
+      // context.go 가 아니라 push - 돌아왔을 때 필터가 남아야 합니다.
+      onPractice: () => context.push(
+        AppRoutes.wordPracticeOf(word.wordId),
+        extra: vm.wordOf(word.wordId) ?? word,
+      ),
     );
   }
 }

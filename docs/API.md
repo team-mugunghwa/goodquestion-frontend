@@ -538,6 +538,7 @@ _(도메인별 코드는 기능 추가 시 여기에 계속 채웁니다)_
 | POST | `/api/children/{childId}/words` | `WordCreateRequest` | 201 `WordResponse` | ⛔ |
 | GET | `/api/children/{childId}/words` | `?entryType=` (선택) | `List<WordResponse>` | ✅ |
 | PATCH | `/api/children/{childId}/words/{wordId}/favorite` | — | `WordResponse` | ✅ |
+| POST | `/api/children/{childId}/words/{wordId}/sentence-practice` | `SentencePracticeRequest` | `SentencePracticeResponse` | ✅ |
 | DELETE | `/api/words/{wordId}` | — | 204 | ⛔ |
 
 ### 2.13 보상 — 상점·보관함
@@ -1170,7 +1171,20 @@ DB의 `provider`는 `LOCAL`/`KAKAO` 둘 다 NOT NULL이지만, 응답에서는 `
 > **사용처** — `POST /api/children/{childId}/words` · `GET /api/children/{childId}/words` · `PATCH /api/children/{childId}/words/{wordId}/favorite` 응답
 > 
 
-`id` · `word` · `meaning` · `exampleSentence` · `entryType` · `sourceSceneId` · `createdAt`
+`id` · `word` · `meaning` · `exampleSentence` · `exampleSentenceDaily` · `exampleSentenceAdvanced` · `entryType` · `sourceSceneId` · `storyId` · `storyTitle` · `storyImageUrl` · `createdAt`
+
+예문 확장 전에 담은 단어는 `exampleSentenceDaily` / `exampleSentenceAdvanced` 가 null 이다. 목록은 평면이고, 프론트가 `storyId` 로 이야기별 그룹핑을 한다.
+
+#### `SentencePracticeRequest` / `SentencePracticeResponse`
+
+> **사용처** — `POST /api/children/{childId}/words/{wordId}/sentence-practice`
+> 
+
+요청: `sentenceType`(`STORY` / `DAILY` / `ADVANCED`) · `spokenText`(max 500)
+
+응답: `matched` · `similarity`(0.00 ~ 1.00) · `targetSentence` · `rewarded` · `skipReason`(`ALREADY_REWARDED` / `DAILY_LIMIT` / null) · `stardustAmount` · `stardustBalance`
+
+유사도 90% 이상이면 별가루 2개. 단, 같은 문장은 평생 1회, 하루 최대 2회까지만 지급하고 초과분은 `skipReason` 으로 알려 준다. 해당 종류의 예문이 없는 단어면 409 `EXAMPLE_SENTENCE_MISSING`.
 
 ---
 
