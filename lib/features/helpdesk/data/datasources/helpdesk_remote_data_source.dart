@@ -10,10 +10,8 @@ class HelpdeskRemoteDataSource {
 
   final DioClient _client;
 
-  Future<List<NoticeDto>> getNotices() => _client.get(
-    '/notices',
-    parse: (data) => _list(data, NoticeDto.fromJson),
-  );
+  Future<List<NoticeDto>> getNotices() =>
+      _client.get('/notices', parse: (data) => _list(data, NoticeDto.fromJson));
 
   Future<NoticeDto> getNotice(String noticeId) => _client.get(
     '/notices/$noticeId',
@@ -50,10 +48,8 @@ class HelpdeskRemoteDataSource {
     parse: (data) => (_map(data)['unreadCount'] as num?)?.toInt() ?? 0,
   );
 
-  Future<void> markRead(String notificationId) => _client.patch<void>(
-    '/notifications/$notificationId/read',
-    parse: (_) {},
-  );
+  Future<void> markRead(String notificationId) =>
+      _client.patch<void>('/notifications/$notificationId/read', parse: (_) {});
 
   Future<void> markAllRead() =>
       _client.post<void>('/notifications/read-all', parse: (_) {});

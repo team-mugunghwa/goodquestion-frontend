@@ -111,10 +111,11 @@ enum InquiryStatus {
   final String code;
   final String label;
 
-  static InquiryStatus fromCode(String? code) => InquiryStatus.values.firstWhere(
-    (status) => status.code == code,
-    orElse: () => InquiryStatus.pending,
-  );
+  static InquiryStatus fromCode(String? code) =>
+      InquiryStatus.values.firstWhere(
+        (status) => status.code == code,
+        orElse: () => InquiryStatus.pending,
+      );
 }
 
 class InquiryAnswer {

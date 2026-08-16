@@ -12,7 +12,8 @@ class HelpdeskRepositoryImpl implements HelpdeskRepository {
 
   @override
   Future<List<Notice>> getNotices() => _guard(
-    () async => (await _remote.getNotices()).map((dto) => dto.toEntity()).toList(),
+    () async =>
+        (await _remote.getNotices()).map((dto) => dto.toEntity()).toList(),
   );
 
   @override
@@ -21,7 +22,8 @@ class HelpdeskRepositoryImpl implements HelpdeskRepository {
 
   @override
   Future<List<Guide>> getGuides() => _guard(
-    () async => (await _remote.getGuides()).map((dto) => dto.toEntity()).toList(),
+    () async =>
+        (await _remote.getGuides()).map((dto) => dto.toEntity()).toList(),
   );
 
   @override
@@ -52,8 +54,7 @@ class HelpdeskRepositoryImpl implements HelpdeskRepository {
       _guard(() async => (await _remote.getNotifications()).notifications);
 
   @override
-  Future<int> getUnreadNotificationCount() =>
-      _guard(_remote.getUnreadCount);
+  Future<int> getUnreadNotificationCount() => _guard(_remote.getUnreadCount);
 
   @override
   Future<void> markNotificationRead(String notificationId) =>

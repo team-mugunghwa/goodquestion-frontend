@@ -90,8 +90,12 @@ abstract final class AppConfig {
   // → lib/core/push/push_service.dart
   // ─────────────────────────────────────────────────────────
 
-  static const String _firebaseApiKey = String.fromEnvironment('FIREBASE_API_KEY');
-  static const String _firebaseAppId = String.fromEnvironment('FIREBASE_APP_ID');
+  static const String _firebaseApiKey = String.fromEnvironment(
+    'FIREBASE_API_KEY',
+  );
+  static const String _firebaseAppId = String.fromEnvironment(
+    'FIREBASE_APP_ID',
+  );
   static const String _firebaseProjectId = String.fromEnvironment(
     'FIREBASE_PROJECT_ID',
   );

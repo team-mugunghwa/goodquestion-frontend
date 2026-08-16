@@ -99,9 +99,7 @@ class _InquiryWriteViewState extends State<InquiryWriteView> {
             TextFormField(
               controller: _titleController,
               maxLength: 200,
-              decoration: const InputDecoration(
-                hintText: '어떤 점이 궁금하신가요?',
-              ),
+              decoration: const InputDecoration(hintText: '어떤 점이 궁금하신가요?'),
               validator: (String? value) =>
                   (value == null || value.trim().isEmpty)
                   ? '제목을 입력해 주세요.'
@@ -117,7 +115,8 @@ class _InquiryWriteViewState extends State<InquiryWriteView> {
               minLines: 6,
               maxLength: 2000,
               decoration: const InputDecoration(
-                hintText: '겪으신 상황을 알려주시면 더 빠르게 도와드릴 수 있어요.\n'
+                hintText:
+                    '겪으신 상황을 알려주시면 더 빠르게 도와드릴 수 있어요.\n'
                     '사용 중인 기기와 아이 이름도 함께 적어주세요.',
               ),
               validator: (String? value) =>
