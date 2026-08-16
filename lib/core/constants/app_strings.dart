@@ -362,7 +362,21 @@ abstract final class MyPageStrings {
 
   // ── 보호자 확인 게이트(모달 5) 호출 지점 ──
   static const String gateTitle = '보호자 확인';
-  static const String gateBody = '리포트는 보호자만 볼 수 있어요.\n보호자가 맞다면 확인을 눌러 주세요.';
+
+  /// 이메일 계정에 묻는 말. 소셜 계정은 비밀번호가 없어 아예 묻지 않습니다.
+  static const String gateBody = '리포트는 보호자만 볼 수 있어요.\n계정 비밀번호를 입력해 주세요.';
+  static const String gatePasswordLabel = '비밀번호';
+
+  /// 비밀번호가 틀렸을 때. 다이얼로그를 닫지 않고 이 자리에만 뜹니다 -
+  /// 닫아 버리면 보호자가 리포트 메뉴부터 다시 눌러야 합니다.
+  static const String gateWrongPassword = '비밀번호가 올바르지 않아요.';
+
+  /// 보호자 조회·비밀번호 확인이 네트워크 문제로 실패했을 때.
+  /// **통과시키지 않습니다** - 연결이 끊긴 상태에서 게이트가 뚫리는 것보다
+  /// 보호자가 잠깐 못 보고 다시 시도하는 편이 낫습니다.
+  static const String gateNetworkError = '잠시 후 다시 시도해 주세요.';
+  static const String gateRetry = '다시 시도';
+
   static const String gateConfirm = '확인';
   static const String gateCancel = '취소';
 }
