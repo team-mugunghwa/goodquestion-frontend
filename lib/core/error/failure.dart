@@ -15,7 +15,7 @@ sealed class Failure {
   /// data 레이어의 예외를 domain 의 실패로 번역합니다.
   factory Failure.fromException(Object error) {
     return switch (error) {
-      UnauthorizedException() => const UnauthorizedFailure(),
+      UnauthorizedException(:final String message) => UnauthorizedFailure(message),
       NetworkException(:final message) => NetworkFailure(message),
       ServerException(:final message, :final code) => ServerFailure(
         message: message,
