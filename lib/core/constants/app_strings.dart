@@ -273,12 +273,12 @@ abstract final class ReportListStrings {
 
   static String childLabel(String name) => '아이: $name';
 
-  /// "리포트 4개 · 새 리포트 1개"
-  static String summary(int total, int unread) =>
-      '리포트 $total개 · 새 리포트 $unread개';
-
-  /// 미열람 배지.
-  static const String badgeNew = 'NEW';
+  /// "리포트 4개"
+  ///
+  /// 안 읽은 개수는 붙이지 않습니다 - 서버가 열람 여부를 저장하지 않아
+  /// 앱을 다시 켜면 전부 다시 "새 리포트"가 됐습니다. 틀린 숫자를 보여 주느니
+  /// 총 개수만 말합니다. 서버가 열람 여부를 주면 그때 다시 넣습니다.
+  static String summary(int total) => '리포트 $total개';
 
   /// "2회차" — 같은 이야기를 여러 번 하면 카드가 쌓이므로 회차가 없으면
   /// 보호자에게 중복으로 보입니다.

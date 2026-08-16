@@ -16,7 +16,6 @@ class ReportRepositoryImpl implements ReportRepository {
 
   final ReportRemoteDataSource _remote;
   final ChildProfileRepository _children;
-  final Set<String> _readSessions = <String>{};
 
   @override
   Future<ReportList> getReportList() => _guard(() async {
@@ -31,7 +30,6 @@ class ReportRepositoryImpl implements ReportRepository {
             sessionId: response.sessionId,
             storyTitle: response.storyTitle,
             completedAt: response.createdAt,
-            isNew: !_readSessions.contains(response.sessionId),
             playCount: rounds[response.sessionId] ?? 1,
             // 목록 API에는 발화가 없습니다. 상세를 보지 않고 실제 발화를
             // 추측해서 표시하지 않습니다.
@@ -42,7 +40,6 @@ class ReportRepositoryImpl implements ReportRepository {
     return ReportList(
       childName: child.name,
       totalCount: reports.length,
-      newCount: reports.where((ReportSummary report) => report.isNew).length,
       reports: reports,
     );
   });
@@ -67,11 +64,6 @@ class ReportRepositoryImpl implements ReportRepository {
     } on Object catch (error) {
       throw Failure.fromException(ParseException('$error'));
     }
-  }
-
-  @override
-  Future<void> markAsRead(String sessionId) async {
-    _readSessions.add(sessionId);
   }
 
   Future<MyPageChild> _selectedChild() async {

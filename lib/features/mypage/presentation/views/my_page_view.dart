@@ -85,7 +85,6 @@ class MyPageView extends StatelessWidget {
               GuardianTile(
                 icon: AppIcons.locked,
                 label: MyPageStrings.report,
-                showBadge: vm.summary?.hasNewReport ?? false,
                 // 아이가 없으면 볼 리포트도 없습니다.
                 enabled: vm.hasChild,
                 onTap: () => _openReport(context),

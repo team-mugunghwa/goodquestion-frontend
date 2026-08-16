@@ -23,50 +23,16 @@ class MyPageRepositoryMock
   final MyPageLocalDataSource _localDataSource;
   final Duration latency;
 
-  /// 열람한 세션. 더미의 `isNew` 위에 덮어씁니다.
-  final Set<String> _readSessions = <String>{};
-
   /// 토글 결과. 메모리에만 남습니다 — 앱을 다시 켜면 더미 값으로 돌아갑니다.
   bool? _reportNotification;
   bool? _marketingConsent;
 
   @override
-  Future<MyPageSummary> getSummary() => _guard(() async {
-    final MyPageSummary summary = (await _localDataSource.fetchSummary())
-        .toEntity();
-    // 리포트를 다 읽었으면 마이페이지의 빨간 점도 사라져야 합니다.
-    if (_readSessions.isEmpty) return summary;
-    final ReportList reports = await _reportListRaw();
-    final bool hasUnread = reports.reports.any(
-      (ReportSummary r) => r.isNew && !_readSessions.contains(r.sessionId),
-    );
-    return MyPageSummary(
-      child: summary.child,
-      childCount: summary.childCount,
-      completedStories: summary.completedStories,
-      stardust: summary.stardust,
-      hasNewReport: hasUnread,
-    );
-  });
+  Future<MyPageSummary> getSummary() =>
+      _guard(() async => (await _localDataSource.fetchSummary()).toEntity());
 
   @override
-  Future<ReportList> getReportList() => _guard(() async {
-    final ReportList raw = await _reportListRaw();
-    if (_readSessions.isEmpty) return raw;
-    final List<ReportSummary> reports = raw.reports
-        .map(
-          (ReportSummary r) => _readSessions.contains(r.sessionId)
-              ? r.copyWith(isNew: false)
-              : r,
-        )
-        .toList(growable: false);
-    return ReportList(
-      childName: raw.childName,
-      totalCount: raw.totalCount,
-      newCount: reports.where((ReportSummary r) => r.isNew).length,
-      reports: reports,
-    );
-  });
+  Future<ReportList> getReportList() => _guard(_reportListRaw);
 
   @override
   Future<ReportDetail?> getReportDetail(String sessionId) => _guard(() async {
@@ -75,11 +41,6 @@ class MyPageRepositoryMock
     );
     return dto?.toEntity();
   });
-
-  @override
-  Future<void> markAsRead(String sessionId) async {
-    _readSessions.add(sessionId);
-  }
 
   @override
   Future<AppSettings> getSettings() => _guard(_settingsWithOverrides);

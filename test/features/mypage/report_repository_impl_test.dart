@@ -75,8 +75,6 @@ void main() {
     expect(list.reports.first.sessionId, 'session-new');
     expect(list.reports.first.playCount, 2);
     expect(list.reports.last.playCount, 1);
-    await repository.markAsRead('session-new');
-    expect((await repository.getReportList()).newCount, 1);
   });
 
   test('상세 응답은 내부 태그를 숨긴 어휘·표현·논리 리포트가 된다', () async {

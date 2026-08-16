@@ -22,7 +22,6 @@ void main() {
     expect(summary.child?.age, greaterThan(0));
     // 전환 버튼 강조 분기를 시연하려면 아이가 2명 이상이어야 합니다.
     expect(summary.canSwitchChild, isTrue);
-    expect(summary.hasNewReport, isTrue);
   });
 
   test('리포트 목록 더미의 개수가 실제와 맞는다', () async {
@@ -30,27 +29,8 @@ void main() {
 
     expect(list.reports, isNotEmpty);
     expect(list.totalCount, list.reports.length);
-    expect(
-      list.newCount,
-      list.reports.where((ReportSummary r) => r.isNew).length,
-    );
     // 반복 회차 케이스가 없으면 회차 표기가 의미 있는지 확인할 수 없습니다.
     expect(list.reports.any((ReportSummary r) => r.playCount > 1), isTrue);
-  });
-
-  test('리포트를 읽으면 NEW 와 마이페이지 배지가 함께 사라진다', () async {
-    final MyPageRepositoryMock repository = repositoryOf();
-    final ReportList before = await repository.getReportList();
-    final ReportSummary unread = before.reports.firstWhere(
-      (ReportSummary r) => r.isNew,
-    );
-
-    await repository.markAsRead(unread.sessionId);
-
-    final ReportList after = await repository.getReportList();
-    expect(after.newCount, 0);
-    // 목록과 마이페이지가 어긋나면 보호자는 안 읽은 게 남은 줄 압니다.
-    expect((await repository.getSummary()).hasNewReport, isFalse);
   });
 
   test('리포트 상세 더미가 5단 구조를 갖춘다', () async {

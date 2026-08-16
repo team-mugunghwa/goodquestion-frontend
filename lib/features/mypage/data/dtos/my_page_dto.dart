@@ -44,7 +44,6 @@ class MyPageSummaryDto {
     required this.childCount,
     required this.completedStories,
     required this.stardust,
-    required this.hasNewReport,
     this.child,
   });
 
@@ -59,7 +58,6 @@ class MyPageSummaryDto {
       childCount: json['childCount'] as int? ?? 0,
       completedStories: activity['completedStories'] as int? ?? 0,
       stardust: activity['stardust'] as int? ?? 0,
-      hasNewReport: json['hasNewReport'] as bool? ?? false,
     );
   }
 
@@ -67,14 +65,12 @@ class MyPageSummaryDto {
   final int childCount;
   final int completedStories;
   final int stardust;
-  final bool hasNewReport;
 
   MyPageSummary toEntity() => MyPageSummary(
     child: child?.toEntity(),
     childCount: childCount,
     completedStories: completedStories,
     stardust: stardust,
-    hasNewReport: hasNewReport,
   );
 }
 
@@ -106,14 +102,12 @@ class ReportListDto {
   const ReportListDto({
     required this.childName,
     required this.totalCount,
-    required this.newCount,
     required this.reports,
   });
 
   factory ReportListDto.fromJson(Map<String, dynamic> json) => ReportListDto(
     childName: json['childName'] as String? ?? '',
     totalCount: json['totalCount'] as int? ?? 0,
-    newCount: json['newCount'] as int? ?? 0,
     reports: (json['reports'] as List<dynamic>? ?? <dynamic>[])
         .whereType<Map<String, dynamic>>()
         .map(ReportSummaryDto.fromJson)
@@ -122,13 +116,11 @@ class ReportListDto {
 
   final String childName;
   final int totalCount;
-  final int newCount;
   final List<ReportSummaryDto> reports;
 
   ReportList toEntity() => ReportList(
     childName: childName,
     totalCount: totalCount,
-    newCount: newCount,
     reports: reports
         .map((ReportSummaryDto dto) => dto.toEntity())
         .toList(growable: false),
@@ -139,7 +131,6 @@ class ReportSummaryDto {
   const ReportSummaryDto({
     required this.sessionId,
     required this.storyTitle,
-    required this.isNew,
     required this.playCount,
     required this.highlightUtterance,
     this.storyImage,
@@ -152,7 +143,6 @@ class ReportSummaryDto {
         storyTitle: json['storyTitle'] as String? ?? '',
         storyImage: json['storyImage'] as String?,
         completedAt: json['completedAt'] as String?,
-        isNew: json['isNew'] as bool? ?? false,
         playCount: json['playCount'] as int? ?? 1,
         highlightUtterance: json['highlightUtterance'] as String? ?? '',
       );
@@ -161,7 +151,6 @@ class ReportSummaryDto {
   final String storyTitle;
   final String? storyImage;
   final String? completedAt;
-  final bool isNew;
   final int playCount;
   final String highlightUtterance;
 
@@ -170,7 +159,6 @@ class ReportSummaryDto {
     storyTitle: storyTitle,
     storyImage: storyImage,
     completedAt: _parseDate(completedAt),
-    isNew: isNew,
     playCount: playCount,
     highlightUtterance: highlightUtterance,
   );

@@ -339,9 +339,6 @@ Future<void> configureDependencies() async {
     ..registerLazySingleton<GetReportDetailUseCase>(
       () => GetReportDetailUseCase(getIt<ReportRepository>()),
     )
-    ..registerLazySingleton<MarkReportAsReadUseCase>(
-      () => MarkReportAsReadUseCase(getIt<ReportRepository>()),
-    )
     ..registerLazySingleton<GetSettingsUseCase>(
       () => GetSettingsUseCase(getIt<SettingsRepository>()),
     )

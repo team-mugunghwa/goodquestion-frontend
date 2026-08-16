@@ -34,10 +34,7 @@ class ReportListPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<ReportListViewModel>(
-      create: (_) => ReportListViewModel(
-        getIt<GetReportListUseCase>(),
-        getIt<MarkReportAsReadUseCase>(),
-      )..load(),
+      create: (_) => ReportListViewModel(getIt<GetReportListUseCase>())..load(),
       child: const ReportListView(),
     );
   }
@@ -95,31 +92,19 @@ class ReportListView extends StatelessWidget {
           return Padding(
             padding: const EdgeInsets.only(bottom: AppSpacing.xs),
             child: Text(
-              ReportListStrings.summary(list.totalCount, list.newCount),
+              ReportListStrings.summary(list.totalCount),
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           );
         }
         final ReportSummary report = list.reports[index - 1];
-        return _ReportCard(
-          report: report,
-          onTap: () => _open(context, vm, report),
-        );
+        return _ReportCard(report: report, onTap: () => _open(context, report));
       },
     );
   }
 
-  /// 배지를 먼저 지우고 이동합니다 — 상세를 보고 돌아왔는데 NEW 가 그대로면
-  /// 무엇을 읽었는지 알 수 없습니다.
-  Future<void> _open(
-    BuildContext context,
-    ReportListViewModel vm,
-    ReportSummary report,
-  ) async {
-    await vm.markAsRead(report.sessionId);
-    if (!context.mounted) return;
-    unawaited(context.push(AppRoutes.reportDetailOf(report.sessionId)));
-  }
+  void _open(BuildContext context, ReportSummary report) =>
+      unawaited(context.push(AppRoutes.reportDetailOf(report.sessionId)));
 }
 
 class _ReportCard extends StatelessWidget {
@@ -173,7 +158,6 @@ class _ReportCard extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (report.isNew) const _NewBadge(),
                       ],
                     ),
                     const SizedBox(height: AppSpacing.xs),
@@ -204,31 +188,6 @@ class _ReportCard extends StatelessWidget {
     final DateTime? at = report.completedAt;
     if (at == null) return round;
     return '$round · ${at.month}월 ${at.day}일';
-  }
-}
-
-class _NewBadge extends StatelessWidget {
-  const _NewBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
-        vertical: 2,
-      ),
-      decoration: BoxDecoration(
-        // 빨강은 보호자 화면 전용입니다. 여기가 그 자리입니다.
-        color: AppColors.danger,
-        borderRadius: BorderRadius.circular(AppRadius.xs),
-      ),
-      child: Text(
-        ReportListStrings.badgeNew,
-        style: Theme.of(
-          context,
-        ).textTheme.labelMedium?.copyWith(color: AppColors.surface),
-      ),
-    );
   }
 }
 

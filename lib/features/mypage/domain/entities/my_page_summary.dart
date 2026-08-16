@@ -7,7 +7,6 @@ class MyPageSummary {
     required this.childCount,
     required this.completedStories,
     required this.stardust,
-    required this.hasNewReport,
     this.child,
   });
 
@@ -19,9 +18,6 @@ class MyPageSummary {
 
   final int completedStories;
   final int stardust;
-
-  /// 안 읽은 리포트가 있는가. 메뉴에 빨간 점으로 붙습니다.
-  final bool hasNewReport;
 
   bool get hasChild => child != null;
 
