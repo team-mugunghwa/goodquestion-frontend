@@ -559,11 +559,19 @@ abstract final class AuthRecoveryStrings {
   static const String resetPasswordTab = 'PW 찾기';
 
   static const String findIdTitle = '가입한 이메일을 찾아드릴게요';
-  static const String findIdDescription = '회원가입할 때 입력한 보호자 정보로 가입 이메일을 확인합니다.';
+  static const String findIdDescription =
+      '가입할 때 입력한 보호자 이름과 아이 정보로 가입 이메일을 확인합니다.';
   static const String guardianName = '보호자 이름';
-  static const String birthDate = '보호자 생년월일';
-  static const String birthDateHint = '예: 1990.03.15';
+  static const String childName = '아이 이름';
+  static const String childNameHint = '예: 지우';
+  static const String childBirthYear = '아이 출생연도';
+  static const String childBirthYearHint = '예: 2018';
   static const String findIdAction = '가입 이메일 확인하기';
+
+  /// 아이 정보를 왜 다 받는지. **비워 두면 못 찾습니다** - 서버가 아이 정보
+  /// 없이 찾을 때는 아이가 등록된 계정을 결과에서 빼기 때문입니다(아이 정보
+  /// 없이 남의 계정을 캐낼 수 없게 하는 조건).
+  static const String childInfoNotice = '아이 이름과 출생연도를 모두 입력해야 계정을 찾을 수 있어요.';
 
   static const String resetTitle = '비밀번호를 다시 설정해요';
   static const String resetDescription = '가입한 이메일로 안전한 비밀번호 재설정 링크를 보내드립니다.';
@@ -572,17 +580,31 @@ abstract final class AuthRecoveryStrings {
   static const String resetAction = '재설정 링크 받기';
 
   static const String requiredFields = '입력하지 않은 항목이 있어요.';
-  static const String invalidBirthDate = '생년월일을 YYYY.MM.DD 형식으로 입력해 주세요.';
+  static const String invalidBirthYear = '출생연도를 네 자리로 입력해 주세요. (예: 2018)';
   static const String invalidEmail = '올바른 이메일 주소를 입력해 주세요.';
   static const String requestFailed = '요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.';
 
   static const String findIdDoneTitle = '가입 이메일을 확인했어요';
-  static const String findIdDoneBody =
-      '백엔드 연결 후에는 입력한 정보와 일치하는 가입 이메일을 이곳에 안전하게 표시합니다.';
+
+  /// 이메일은 **서버가 가려서** 옵니다(`de***@...`). 화면에서 또 가리지 않습니다.
+  static const String findIdDoneBody = '아래 주소로 로그인해 보세요.';
+
+  /// 못 찾았을 때. 오류가 아니라 결과입니다 - 서버도 404 가 아니라 빈 목록을 줍니다.
+  static const String findIdEmptyTitle = '일치하는 계정을 찾지 못했어요';
+  static const String findIdEmptyBody =
+      '이름과 아이 정보가 가입할 때와 같은지 확인해 주세요. 소셜 계정으로 가입했다면 카카오·구글 로그인을 눌러 보세요.';
   static const String resetDoneTitle = '재설정 안내를 보냈어요';
   static const String resetDoneBody =
       '입력한 이메일로 비밀번호 재설정 링크를 보냈습니다. 메일함을 확인해 주세요.';
   static const String resend = '다시 보내기';
+
+  /// ID 찾기의 같은 자리. 보낸 것이 없으니 "다시 보내기"가 아닙니다 -
+  /// 특히 못 찾은 화면에서는 이 버튼이 유일한 재시도 통로입니다.
+  static const String findIdRetry = '다시 찾기';
+
+  /// **PW 찾기 전용입니다.** ID 찾기는 목적 자체가 이메일을 알려 주는 것이라
+  /// 결과가 갈리고, 서버도 그렇게 동작합니다. 그 화면에는 [childInfoNotice] 를
+  /// 씁니다.
   static const String securityNotice = '계정 보호를 위해 가입 여부와 관계없이 동일한 안내를 표시합니다.';
   static const String newPasswordTitle = '새 비밀번호 설정';
   static const String newPassword = '새 비밀번호';

@@ -19,10 +19,19 @@ class AccountRecoveryPage extends StatefulWidget {
     super.key,
     required this.mode,
     this.requestPasswordReset,
+    this.findEmails,
   });
 
   final AccountRecoveryMode mode;
   final Future<void> Function(String email)? requestPasswordReset;
+
+  /// 가입 이메일 찾기. null 이면 DI 의 데이터소스를 씁니다(테스트용 주입구).
+  final Future<List<String>> Function({
+    required String parentName,
+    String? childName,
+    int? childBirthYear,
+  })?
+  findEmails;
 
   @override
   State<AccountRecoveryPage> createState() => _AccountRecoveryPageState();
@@ -30,18 +39,25 @@ class AccountRecoveryPage extends StatefulWidget {
 
 class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
   final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _birthDateController = TextEditingController();
+  final TextEditingController _childNameController = TextEditingController();
+  final TextEditingController _childBirthYearController =
+      TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   String? _error;
   bool _completed = false;
   bool _submitting = false;
+
+  /// 서버가 찾아 준 가입 이메일. **이미 가려진 채로** 옵니다(`de***@...`).
+  /// 비어 있으면 "못 찾았어요" - 오류가 아닙니다.
+  List<String> _emails = const <String>[];
 
   bool get _findId => widget.mode == AccountRecoveryMode.findId;
 
   @override
   void dispose() {
     _nameController.dispose();
-    _birthDateController.dispose();
+    _childNameController.dispose();
+    _childBirthYearController.dispose();
     _emailController.dispose();
     super.dispose();
   }
@@ -81,8 +97,10 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
                           submitting: _submitting,
                           error: _error,
                           nameController: _nameController,
-                          birthDateController: _birthDateController,
+                          childNameController: _childNameController,
+                          childBirthYearController: _childBirthYearController,
                           emailController: _emailController,
+                          emails: _emails,
                           onSubmit: _submit,
                           onReset: _reset,
                           onLogin: () => context.go(AppRoutes.login),
@@ -105,19 +123,28 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
       setState(() => _error = validation);
       return;
     }
-    if (_findId) {
-      setState(() {
-        _error = null;
-        _completed = true;
-      });
-      return;
-    }
-
     setState(() {
       _error = null;
       _submitting = true;
     });
     try {
+      if (_findId) {
+        final find =
+            widget.findEmails ??
+            getIt<AccountRecoveryRemoteDataSource>().findEmails;
+        final List<String> emails = await find(
+          parentName: _nameController.text.trim(),
+          childName: _childNameController.text.trim(),
+          childBirthYear: int.parse(_childBirthYearController.text.trim()),
+        );
+        if (mounted) {
+          setState(() {
+            _emails = emails;
+            _completed = true;
+          });
+        }
+        return;
+      }
       final request =
           widget.requestPasswordReset ??
           getIt<AccountRecoveryRemoteDataSource>().requestPasswordReset;
@@ -134,15 +161,26 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
     }
   }
 
+  /// 아이 정보는 스키마상 선택이지만 **여기서는 필수로 받습니다.**
+  ///
+  /// 하나라도 비면 서버가 보호자 이름만으로 찾고 그때는 아이가 등록된 계정을
+  /// 결과에서 뺍니다. 이 앱은 가입 마지막 단계에서 아이 프로필을 반드시
+  /// 받으므로(`auth_view` 스텝 3) 실사용자는 전원 아이가 있습니다 - 즉 비워
+  /// 두면 "항상 못 찾음"이고, 그건 사용자가 이해할 수 없는 실패입니다.
+  /// 보내기 전에 막고 이유를 말해 주는 편이 낫습니다.
   String? _validateFindId() {
+    final String year = _childBirthYearController.text.trim();
     if (_nameController.text.trim().isEmpty ||
-        _birthDateController.text.trim().isEmpty) {
+        _childNameController.text.trim().isEmpty ||
+        year.isEmpty) {
       return AuthRecoveryStrings.requiredFields;
     }
-    if (!RegExp(
-      r'^\d{4}[.-]\d{2}[.-]\d{2}$',
-    ).hasMatch(_birthDateController.text.trim())) {
-      return AuthRecoveryStrings.invalidBirthDate;
+    final int? parsed = int.tryParse(year);
+    if (!RegExp(r'^\d{4}$').hasMatch(year) ||
+        parsed == null ||
+        parsed < 1900 ||
+        parsed > DateTime.now().year) {
+      return AuthRecoveryStrings.invalidBirthYear;
     }
     return null;
   }
@@ -160,6 +198,7 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
     _completed = false;
     _error = null;
     _submitting = false;
+    _emails = const <String>[];
   });
 }
 
@@ -264,8 +303,10 @@ class _RecoveryCard extends StatelessWidget {
     required this.submitting,
     required this.error,
     required this.nameController,
-    required this.birthDateController,
+    required this.childNameController,
+    required this.childBirthYearController,
     required this.emailController,
+    required this.emails,
     required this.onSubmit,
     required this.onReset,
     required this.onLogin,
@@ -276,8 +317,12 @@ class _RecoveryCard extends StatelessWidget {
   final bool submitting;
   final String? error;
   final TextEditingController nameController;
-  final TextEditingController birthDateController;
+  final TextEditingController childNameController;
+  final TextEditingController childBirthYearController;
   final TextEditingController emailController;
+
+  /// 서버가 가려서 준 가입 이메일. 비어 있으면 못 찾은 것입니다.
+  final List<String> emails;
   final VoidCallback onSubmit;
   final VoidCallback onReset;
   final VoidCallback onLogin;
@@ -353,13 +398,24 @@ class _RecoveryCard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.md),
+        const SizedBox(height: AppSpacing.md),
         TextField(
-          controller: birthDateController,
-          keyboardType: TextInputType.datetime,
+          controller: childNameController,
+          textInputAction: TextInputAction.next,
+          decoration: const InputDecoration(
+            labelText: AuthRecoveryStrings.childName,
+            hintText: AuthRecoveryStrings.childNameHint,
+            prefixIcon: Icon(Icons.child_care_rounded),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        TextField(
+          controller: childBirthYearController,
+          keyboardType: TextInputType.number,
           onSubmitted: (_) => onSubmit(),
           decoration: const InputDecoration(
-            labelText: AuthRecoveryStrings.birthDate,
-            hintText: AuthRecoveryStrings.birthDateHint,
+            labelText: AuthRecoveryStrings.childBirthYear,
+            hintText: AuthRecoveryStrings.childBirthYearHint,
             prefixIcon: Icon(Icons.cake_outlined),
           ),
         ),
@@ -410,7 +466,11 @@ class _RecoveryCard extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
-              AuthRecoveryStrings.securityNotice,
+              // ID 찾기는 목적 자체가 이메일을 알려 주는 것이라 결과가
+              // 갈립니다 - "가입 여부와 관계없이 같은 안내"는 PW 찾기의 말입니다.
+              _findId
+                  ? AuthRecoveryStrings.childInfoNotice
+                  : AuthRecoveryStrings.securityNotice,
               style: Theme.of(
                 context,
               ).textTheme.bodySmall?.copyWith(color: AppColors.ink500),
@@ -421,19 +481,35 @@ class _RecoveryCard extends StatelessWidget {
     ],
   );
 
+  /// ID 찾기인데 결과가 비었는가. **오류가 아니라 결과입니다** - 서버도
+  /// 404 가 아니라 200 + 빈 목록을 줍니다.
+  bool get _foundNothing => _findId && emails.isEmpty;
+
+  String get _doneTitle {
+    if (!_findId) return AuthRecoveryStrings.resetDoneTitle;
+    return _foundNothing
+        ? AuthRecoveryStrings.findIdEmptyTitle
+        : AuthRecoveryStrings.findIdDoneTitle;
+  }
+
+  String get _doneBody {
+    if (!_findId) return AuthRecoveryStrings.resetDoneBody;
+    return _foundNothing
+        ? AuthRecoveryStrings.findIdEmptyBody
+        : AuthRecoveryStrings.findIdDoneBody;
+  }
+
   Widget _done(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: <Widget>[
-      const Icon(
-        Icons.check_circle_rounded,
+      Icon(
+        _foundNothing ? Icons.search_off_rounded : Icons.check_circle_rounded,
         size: 72,
-        color: AppColors.success,
+        color: _foundNothing ? AppColors.ink300 : AppColors.success,
       ),
       const SizedBox(height: AppSpacing.md),
       Text(
-        _findId
-            ? AuthRecoveryStrings.findIdDoneTitle
-            : AuthRecoveryStrings.resetDoneTitle,
+        _doneTitle,
         textAlign: TextAlign.center,
         style: Theme.of(
           context,
@@ -441,14 +517,34 @@ class _RecoveryCard extends StatelessWidget {
       ),
       const SizedBox(height: AppSpacing.sm),
       Text(
-        _findId
-            ? AuthRecoveryStrings.findIdDoneBody
-            : AuthRecoveryStrings.resetDoneBody,
+        _doneBody,
         textAlign: TextAlign.center,
         style: Theme.of(
           context,
         ).textTheme.bodyMedium?.copyWith(color: AppColors.ink500),
       ),
+      // 형제가 있거나 동명이인이면 여러 개가 옵니다. 하나로 가정하지 않습니다.
+      for (final String email in emails) ...<Widget>[
+        const SizedBox(height: AppSpacing.md),
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.md,
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.brandBlueSurface,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
+          child: Text(
+            email,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: AppColors.brandBlueDeep,
+            ),
+          ),
+        ),
+      ],
       const SizedBox(height: AppSpacing.xl),
       FilledButton(
         onPressed: onLogin,
@@ -456,7 +552,11 @@ class _RecoveryCard extends StatelessWidget {
       ),
       TextButton(
         onPressed: onReset,
-        child: const Text(AuthRecoveryStrings.resend),
+        child: Text(
+          _findId
+              ? AuthRecoveryStrings.findIdRetry
+              : AuthRecoveryStrings.resend,
+        ),
       ),
     ],
   );
