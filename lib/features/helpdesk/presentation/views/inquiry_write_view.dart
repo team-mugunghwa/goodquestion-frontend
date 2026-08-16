@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/router/app_routes.dart';
+import '../../../../core/router/pop_or_go.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/guardian_scaffold.dart';
@@ -85,7 +86,7 @@ class _InquiryWriteViewState extends State<InquiryWriteView> {
       ),
     );
     // 수정 모드는 상세로 돌아가 새 내용을 보여줘야 한다 - pop 결과로 알린다.
-    context.pop(created);
+    popOrGo(context, AppRoutes.support, result: created);
   }
 
   @override
@@ -95,7 +96,7 @@ class _InquiryWriteViewState extends State<InquiryWriteView> {
 
     return GuardianScaffold(
       title: _isEdit ? '문의 수정' : '문의하기',
-      onBack: () => context.pop(),
+      onBack: () => popOrGo(context, AppRoutes.support),
       child: Form(
         key: _formKey,
         child: ListView(

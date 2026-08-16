@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/router/app_routes.dart';
+import '../../../../core/router/pop_or_go.dart';
 import '../../../../core/state/view_state.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -37,7 +38,7 @@ class NoticeDetailView extends StatelessWidget {
 
     return GuardianScaffold(
       title: '공지사항',
-      onBack: () => context.pop(),
+      onBack: () => popOrGo(context, AppRoutes.notices),
       child: switch (vm.state) {
         ViewState.idle || ViewState.loading => const AppLoadingView(),
         ViewState.error => AppErrorView(
