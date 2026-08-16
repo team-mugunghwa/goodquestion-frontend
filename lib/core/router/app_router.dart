@@ -102,6 +102,7 @@ GoRouter createAppRouter({
             builder: (BuildContext context, GoRouterState state) =>
                 PlayRecapPage(
                   sessionId: state.pathParameters[AppRoutes.sessionIdParam]!,
+                  repository: getIt<PlayRepository>(),
                 ),
           ),
         ],
