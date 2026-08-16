@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/router/app_routes.dart';
+import '../../../../core/router/pop_or_go.dart';
 import '../../../../core/state/view_state.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -42,7 +43,7 @@ class InquiryDetailView extends StatelessWidget {
 
     return GuardianScaffold(
       title: '문의 내용',
-      onBack: () => context.pop(),
+      onBack: () => popOrGo(context, AppRoutes.support),
       child: switch (vm.state) {
         ViewState.idle || ViewState.loading => const AppLoadingView(),
         ViewState.error => AppErrorView(
@@ -97,7 +98,7 @@ class _Body extends StatelessWidget {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('문의를 삭제했습니다.')));
-      context.pop(true); // 목록이 새로고침하도록 알린다
+      popOrGo(context, AppRoutes.support, result: true); // 목록이 새로고침하도록 알린다
     } on Object catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));

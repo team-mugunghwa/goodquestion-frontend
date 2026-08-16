@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 
 import '../../../../core/constants/app_icons.dart';
 import '../../../../core/di/injector.dart';
+import '../../../../core/router/app_routes.dart';
+import '../../../../core/router/pop_or_go.dart';
 import '../../../../core/state/view_state.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -45,7 +47,7 @@ class NotificationListView extends StatelessWidget {
 
     return GuardianScaffold(
       title: '알림',
-      onBack: () => context.pop(),
+      onBack: () => popOrGo(context, AppRoutes.settings),
       trailing: vm.unreadCount == 0
           ? null
           : TextButton(
