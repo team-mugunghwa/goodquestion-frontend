@@ -73,12 +73,6 @@ abstract final class AppSizes {
   /// 빈 화면·에러 화면의 캐릭터 일러스트 지름.
   static const double illustration = 160;
 
-  /// 대표 이미지의 최대 높이. (이야기 상세의 커버)
-  ///
-  /// 태블릿에서 16:9 를 전폭으로 깔면 이미지 하나가 화면을 다 먹어서,
-  /// 정작 중요한 역할 카드와 시작하기가 접히는 곳 아래로 내려갑니다.
-  static const double coverMaxHeight = 320;
-
   /// 말풍선 최대 폭. 이보다 넓으면 한 줄이 길어져 아이가 눈으로 놓칩니다.
   static const double bubbleMaxWidth = 560;
 
