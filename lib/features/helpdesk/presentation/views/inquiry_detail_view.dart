@@ -12,6 +12,7 @@ import '../../domain/entities/helpdesk.dart';
 import '../../domain/usecases/helpdesk_use_cases.dart';
 import '../viewmodels/helpdesk_view_models.dart';
 import '../widgets/helpdesk_widgets.dart';
+import 'inquiry_write_view.dart';
 
 /// 문의 상세. **답변 알림을 누르면 도착하는 화면입니다.**
 ///
@@ -59,6 +60,50 @@ class _Body extends StatelessWidget {
 
   final Inquiry inquiry;
 
+  Future<void> _edit(BuildContext context) async {
+    final InquiryDetailViewModel vm = context.read<InquiryDetailViewModel>();
+    final Object? updated = await Navigator.of(context).push<Object>(
+      MaterialPageRoute<Object>(
+        builder: (_) => InquiryWritePage(initial: inquiry),
+      ),
+    );
+    if (updated != null) await vm.load();
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        title: const Text('문의를 삭제할까요?'),
+        content: const Text('삭제한 문의는 되돌릴 수 없습니다.'),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await getIt<DeleteInquiryUseCase>()(inquiry.id);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('문의를 삭제했습니다.')));
+      context.pop(true); // 목록이 새로고침하도록 알린다
+    } on Object catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final TextTheme text = Theme.of(context).textTheme;
@@ -83,6 +128,34 @@ class _Body extends StatelessWidget {
           child: SelectableText(inquiry.content ?? '', style: text.bodyMedium),
         ),
         const SizedBox(height: AppSpacing.xl),
+
+        // 답변 전에만 고칠 수 있다 - 답변이 달린 문의의 내용이 바뀌면 답변이
+        // 무엇에 대한 것인지 어긋난다(서버도 409로 막는다).
+        if (inquiry.status == InquiryStatus.pending) ...<Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _edit(context),
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  label: const Text('수정하기'),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _confirmDelete(context),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.danger,
+                  ),
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  label: const Text('삭제하기'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xl),
+        ],
 
         if (inquiry.answer == null)
           HelpdeskCard(

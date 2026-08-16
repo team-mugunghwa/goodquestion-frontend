@@ -24,6 +24,17 @@ abstract class HelpdeskRepository {
     required String content,
   });
 
+  /// 답변 전(접수) 문의만 수정할 수 있습니다. 이후에는 서버가 409로 거절합니다.
+  Future<Inquiry> updateInquiry(
+    String inquiryId, {
+    required InquiryCategory category,
+    required String title,
+    required String content,
+  });
+
+  /// 답변 전 문의만 삭제할 수 있습니다.
+  Future<void> deleteInquiry(String inquiryId);
+
   Future<List<AppNotification>> getNotifications();
 
   /// 안 읽은 개수만. 홈이 뜰 때마다 부르는 값이라 목록 전체를 받지 않습니다.
