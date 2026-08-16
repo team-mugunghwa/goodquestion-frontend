@@ -249,6 +249,12 @@ Future<void> configureDependencies() async {
     ..registerLazySingleton<CreateInquiryUseCase>(
       () => CreateInquiryUseCase(getIt<HelpdeskRepository>()),
     )
+    ..registerLazySingleton<UpdateInquiryUseCase>(
+      () => UpdateInquiryUseCase(getIt<HelpdeskRepository>()),
+    )
+    ..registerLazySingleton<DeleteInquiryUseCase>(
+      () => DeleteInquiryUseCase(getIt<HelpdeskRepository>()),
+    )
     ..registerLazySingleton<GetNotificationsUseCase>(
       () => GetNotificationsUseCase(getIt<HelpdeskRepository>()),
     )

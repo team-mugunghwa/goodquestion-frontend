@@ -40,6 +40,30 @@ class GetInquiryUseCase {
   Future<Inquiry> call(String inquiryId) => _repository.getInquiry(inquiryId);
 }
 
+class UpdateInquiryUseCase {
+  const UpdateInquiryUseCase(this._repository);
+  final HelpdeskRepository _repository;
+
+  Future<Inquiry> call(
+    String inquiryId, {
+    required InquiryCategory category,
+    required String title,
+    required String content,
+  }) => _repository.updateInquiry(
+    inquiryId,
+    category: category,
+    title: title,
+    content: content,
+  );
+}
+
+class DeleteInquiryUseCase {
+  const DeleteInquiryUseCase(this._repository);
+  final HelpdeskRepository _repository;
+
+  Future<void> call(String inquiryId) => _repository.deleteInquiry(inquiryId);
+}
+
 class CreateInquiryUseCase {
   const CreateInquiryUseCase(this._repository);
   final HelpdeskRepository _repository;

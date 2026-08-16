@@ -50,6 +50,24 @@ class HelpdeskRepositoryImpl implements HelpdeskRepository {
   );
 
   @override
+  Future<Inquiry> updateInquiry(
+    String inquiryId, {
+    required InquiryCategory category,
+    required String title,
+    required String content,
+  }) => _guard(
+    () async => (await _remote.updateInquiry(inquiryId, {
+      'category': category.code,
+      'title': title,
+      'content': content,
+    })).toEntity(),
+  );
+
+  @override
+  Future<void> deleteInquiry(String inquiryId) =>
+      _guard(() => _remote.deleteInquiry(inquiryId));
+
+  @override
   Future<List<AppNotification>> getNotifications() =>
       _guard(() async => (await _remote.getNotifications()).notifications);
 

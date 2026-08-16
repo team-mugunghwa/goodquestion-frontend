@@ -84,11 +84,20 @@ class InquiryDetailViewModel extends BaseViewModel {
 }
 
 class InquiryWriteViewModel extends BaseViewModel {
-  InquiryWriteViewModel(this._createInquiry);
+  InquiryWriteViewModel(
+    this._createInquiry,
+    this._updateInquiry, {
+    Inquiry? initial,
+  }) : _editingId = initial?.id,
+       _category = initial?.category ?? InquiryCategory.etc;
 
   final CreateInquiryUseCase _createInquiry;
+  final UpdateInquiryUseCase _updateInquiry;
 
-  InquiryCategory _category = InquiryCategory.etc;
+  /// 수정 모드면 대상 문의 id, 새 문의면 null.
+  final String? _editingId;
+
+  InquiryCategory _category;
   bool _submitting = false;
 
   InquiryCategory get category => _category;
@@ -107,6 +116,15 @@ class InquiryWriteViewModel extends BaseViewModel {
     _submitting = true;
     safeNotify();
     try {
+      final String? editingId = _editingId;
+      if (editingId != null) {
+        return await _updateInquiry(
+          editingId,
+          category: _category,
+          title: title,
+          content: content,
+        );
+      }
       return await _createInquiry(
         category: _category,
         title: title,

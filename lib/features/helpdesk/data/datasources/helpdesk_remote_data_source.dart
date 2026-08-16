@@ -38,6 +38,18 @@ class HelpdeskRemoteDataSource {
     parse: (data) => InquiryDto.fromJson(_map(data)),
   );
 
+  Future<InquiryDto> updateInquiry(
+    String inquiryId,
+    Map<String, dynamic> body,
+  ) => _client.patch(
+    '/inquiries/$inquiryId',
+    body: body,
+    parse: (data) => InquiryDto.fromJson(_map(data)),
+  );
+
+  Future<void> deleteInquiry(String inquiryId) =>
+      _client.delete('/inquiries/$inquiryId');
+
   Future<NotificationListDto> getNotifications() => _client.get(
     '/notifications',
     parse: (data) => NotificationListDto.fromJson(_map(data)),
