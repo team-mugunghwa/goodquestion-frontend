@@ -45,7 +45,7 @@ void main() {
     await open(
       tester,
       const SavedWord(
-        wordId: 1,
+        wordId: 'w-1',
         word: '기왓장',
         meaning: '지붕을 덮는 납작한 조각',
         sentence: '방귀 소리에 지붕의 기왓장이 들썩들썩 움직였어요.',
@@ -66,7 +66,7 @@ void main() {
     await open(
       tester,
       const SavedWord(
-        wordId: 2,
+        wordId: 'w-2',
         word: '장대',
         meaning: '길고 굵은 나무 막대기',
         sentence: '장대로 배나무의 배를 따려고 했어요.',

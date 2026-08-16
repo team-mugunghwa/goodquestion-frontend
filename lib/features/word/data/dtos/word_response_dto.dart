@@ -12,6 +12,8 @@ class WordResponseDto {
     required this.entryType,
     this.meaning,
     this.exampleSentence,
+    this.exampleSentenceDaily,
+    this.exampleSentenceAdvanced,
     this.sourceSceneId,
     this.storyId,
     this.storyTitle,
@@ -30,12 +32,16 @@ class WordResponseDto {
       entryType: json['entryType'] as String? ?? unknownEntry,
       meaning: json['meaning'] as String?,
       exampleSentence: json['exampleSentence'] as String?,
+      exampleSentenceDaily: json['exampleSentenceDaily'] as String?,
+      exampleSentenceAdvanced: json['exampleSentenceAdvanced'] as String?,
       sourceSceneId: json['sourceSceneId']?.toString(),
       storyId: json['storyId']?.toString(),
       storyTitle: json['storyTitle'] as String?,
       storyImageUrl: json['storyImageUrl'] as String?,
       // 타임존 없는 문자열이 와도 화면이 죽지 않게 방어합니다.
-      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '')?.toLocal(),
+      createdAt: DateTime.tryParse(
+        json['createdAt'] as String? ?? '',
+      )?.toLocal(),
     );
   }
 
@@ -55,6 +61,11 @@ class WordResponseDto {
   final String? meaning;
 
   final String? exampleSentence;
+
+  /// 예문 3종 - 일상/심화 (서버 V14). 그 전에 담긴 단어는 null이라
+  /// 상세 모달이 해당 칸을 그리지 않습니다.
+  final String? exampleSentenceDaily;
+  final String? exampleSentenceAdvanced;
   final String? sourceSceneId;
 
   /// 이야기 3필드는 백엔드 PR 반영 전까지 오지 않습니다. 없으면 앱이

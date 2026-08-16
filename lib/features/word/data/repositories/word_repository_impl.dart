@@ -69,16 +69,18 @@ class WordRepositoryImpl implements WordRepository {
       buckets[key]!.add(_toEntity(dto));
     }
 
-    return order.map((String key) {
-      final WordResponseDto head = heads[key]!;
-      return WordGroup(
-        storyId: head.storyId,
-        // 이름을 지어내지 않습니다. 비어 있으면 화면이 헤더를 안 그립니다.
-        storyTitle: head.storyTitle ?? '',
-        storyImage: head.storyImageUrl,
-        words: buckets[key]!,
-      );
-    }).toList(growable: false);
+    return order
+        .map((String key) {
+          final WordResponseDto head = heads[key]!;
+          return WordGroup(
+            storyId: head.storyId,
+            // 이름을 지어내지 않습니다. 비어 있으면 화면이 헤더를 안 그립니다.
+            storyTitle: head.storyTitle ?? '',
+            storyImage: head.storyImageUrl,
+            words: buckets[key]!,
+          );
+        })
+        .toList(growable: false);
   }
 
   SavedWord _toEntity(WordResponseDto dto) => SavedWord(
@@ -86,6 +88,8 @@ class WordRepositoryImpl implements WordRepository {
     word: dto.word,
     meaning: dto.meaning ?? '',
     sentence: dto.exampleSentence ?? '',
+    sentenceDaily: dto.exampleSentenceDaily,
+    sentenceAdvanced: dto.exampleSentenceAdvanced,
     liked: dto.liked,
     // 서버에는 단어 음성이 없습니다. 화면은 기기 내장 목소리로 읽어 줍니다.
     // → `docs/DECISIONS.md` 019
