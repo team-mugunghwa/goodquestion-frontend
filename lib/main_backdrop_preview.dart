@@ -9,6 +9,13 @@ import 'features/home/data/repositories/home_repository_mock.dart';
 import 'features/home/domain/usecases/get_home_summary_use_case.dart';
 import 'features/home/presentation/viewmodels/home_view_model.dart';
 import 'features/home/presentation/views/home_view.dart';
+import 'features/mypage/data/datasources/my_page_local_data_source.dart';
+import 'features/mypage/data/repositories/my_page_repository_mock.dart';
+import 'features/mypage/domain/entities/my_page_summary.dart';
+import 'features/mypage/domain/repositories/my_page_repository.dart';
+import 'features/mypage/domain/usecases/my_page_use_cases.dart';
+import 'features/mypage/presentation/viewmodels/my_page_view_model.dart';
+import 'features/mypage/presentation/views/my_page_view.dart';
 import 'features/story/data/datasources/story_local_data_source.dart';
 import 'features/story/data/repositories/story_repository_mock.dart';
 import 'features/story/domain/usecases/get_story_catalog_use_case.dart';
@@ -70,8 +77,25 @@ final GoRouter _router = GoRouter(
         child: const HomeView(),
       ),
     ),
+    GoRoute(
+      path: AppRoutes.myPage,
+      builder: (_, _) {
+        final MyPageRepositoryMock repo = MyPageRepositoryMock(
+          const MyPageLocalDataSource(),
+        );
+        const _PreviewChildren children = _PreviewChildren();
+        return ChangeNotifierProvider<MyPageViewModel>(
+          create: (_) => MyPageViewModel(
+            GetMyPageSummaryUseCase(repo),
+            const CreateMyPageChildUseCase(children),
+            const GetMyPageChildrenUseCase(children),
+            const SelectMyPageChildUseCase(children),
+          )..load(),
+          child: const MyPageView(),
+        );
+      },
+    ),
     // 프리뷰 범위 밖의 목적지들. 하단 내비·카드 탭이 죽지 않게만 받아 줍니다.
-    GoRoute(path: AppRoutes.myPage, builder: (_, _) => const _OutOfScope()),
     GoRoute(
       path: AppRoutes.storyDetailPath,
       builder: (_, _) => const _OutOfScope(),
@@ -95,6 +119,25 @@ class _BackdropPreviewApp extends StatelessWidget {
       routerConfig: _router,
     );
   }
+}
+
+/// 프리뷰용 아이 프로필 저장소. 화면 배치 확인이 목적이라 고정 목록입니다.
+class _PreviewChildren implements ChildProfileRepository {
+  const _PreviewChildren();
+
+  @override
+  String? get selectedChildId => 'preview-child';
+
+  @override
+  Future<void> createChild({required String name, required int age}) async {}
+
+  @override
+  Future<List<MyPageChild>> getChildren() async => const <MyPageChild>[
+    MyPageChild(childId: 'preview-child', name: '하늘이', age: 7),
+  ];
+
+  @override
+  Future<void> selectChild(String childId) async {}
 }
 
 /// 프리뷰가 다루지 않는 화면의 자리 표시.

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../constants/app_icons.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_shadows.dart';
 import '../theme/app_spacing.dart';
 
 /// 보호자 화면의 그룹 목록. 제목 + 흰 카드 안에 행들.
@@ -34,11 +35,13 @@ class GuardianSection extends StatelessWidget {
             ),
           ),
         ],
+        // 얇은 테두리 대신 옅은 그림자. 캔버스와 같은 명도의 선은 화면을
+        // 칸막이처럼 보이게 합니다.
         DecoratedBox(
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(AppRadius.md),
-            border: Border.all(color: AppColors.ink100),
+            boxShadow: AppShadows.soft,
           ),
           child: Column(
             children: <Widget>[
