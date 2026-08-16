@@ -14,6 +14,20 @@ class ChildProfileRemoteDataSource {
             .toList(growable: false),
       );
 
+  /// 별가루 지갑. 마이페이지가 쓰는 것은 **현재 잔액(`balance`)** 입니다 -
+  /// `totalEarned` 는 쓰고 남은 것이 아니라 누적 획득이라 다른 값입니다.
+  /// → `docs/API.md` 2.14 · `StardustWalletResponse`
+  Future<int> getStardustBalance(String childId) => _client.get<int>(
+    '/children/$childId/stardust',
+    parse: (Object? data) {
+      if (data is Map<String, dynamic>) {
+        final Object? balance = data['balance'];
+        if (balance is num) return balance.toInt();
+      }
+      throw const ParseException('별가루 응답 형식이 올바르지 않습니다.');
+    },
+  );
+
   Future<Map<String, dynamic>> createChild({
     required String name,
     required int birthYear,
