@@ -32,6 +32,9 @@ abstract final class AppRoutes {
   /// 단어장
   static const String words = '/words';
 
+  /// 예문 따라 말하기 (템플릿). 이동할 때는 [wordPracticeOf] 를 쓰세요.
+  static const String wordPracticePath = '/words/:wordId/practice';
+
   /// 마이페이지
   static const String myPage = '/mypage';
 
@@ -98,6 +101,7 @@ abstract final class AppRoutes {
   static const String sessionIdParam = 'sessionId';
   static const String noticeIdParam = 'noticeId';
   static const String inquiryIdParam = 'inquiryId';
+  static const String wordIdParam = 'wordId';
 
   static String storyDetailOf(String storyId) => '/stories/$storyId';
 
@@ -117,6 +121,8 @@ abstract final class AppRoutes {
   static const String totalScenesParam = 'totalScenes';
 
   static String playRecapOf(String sessionId) => '/play/$sessionId/recap';
+
+  static String wordPracticeOf(String wordId) => '/words/$wordId/practice';
 
   static String reportDetailOf(String sessionId) => '/mypage/report/$sessionId';
 

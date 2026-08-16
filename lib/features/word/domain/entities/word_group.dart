@@ -13,7 +13,11 @@ class WordGroup {
     this.storyImage,
   });
 
-  final int storyId;
+  /// 이야기 UUID. 이야기 없이 담긴 단어는 빈 문자열로 묶입니다.
+  final String storyId;
+
+  /// 이야기 제목. 이야기 없이 담긴 단어면 빈 문자열입니다 - 화면이
+  /// 대체 문구(`WordStrings.noStory`)로 바꿔 보여 줍니다.
   final String storyTitle;
   final String? storyImage;
   final List<SavedWord> words;

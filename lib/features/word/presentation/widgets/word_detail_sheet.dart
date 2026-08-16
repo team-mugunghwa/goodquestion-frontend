@@ -19,12 +19,16 @@ import '../../domain/entities/saved_word.dart';
 ///
 /// [onToggleLike] 는 바뀐 값을 화면 밖(ViewModel)에 알리고, 이 시트는
 /// 넘겨받은 [word] 가 갱신되면 다시 그려집니다.
+///
+/// [onPractice] 를 주면 예문이 있는 단어에 "따라 말하기" 버튼이 붙습니다.
+/// 시트를 닫은 뒤에 불리므로, 호출부의 살아 있는 context 로 이동하세요.
 Future<void> showWordDetailSheet(
   BuildContext context, {
   required SavedWord word,
   required ScreenMetrics metrics,
   required Future<void> Function() onToggleLike,
   required SavedWord? Function() latest,
+  VoidCallback? onPractice,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -35,6 +39,7 @@ Future<void> showWordDetailSheet(
       metrics: metrics,
       onToggleLike: onToggleLike,
       latest: latest,
+      onPractice: onPractice,
     ),
   );
 }
@@ -45,6 +50,7 @@ class _WordDetailSheet extends StatefulWidget {
     required this.metrics,
     required this.onToggleLike,
     required this.latest,
+    required this.onPractice,
   });
 
   final SavedWord initial;
@@ -53,6 +59,9 @@ class _WordDetailSheet extends StatefulWidget {
 
   /// 토글 후 최신 단어를 다시 읽어 오는 함수. ViewModel 이 진실의 출처입니다.
   final SavedWord? Function() latest;
+
+  /// "따라 말하기"를 눌렀을 때. 시트가 닫힌 뒤에 불립니다.
+  final VoidCallback? onPractice;
 
   @override
   State<_WordDetailSheet> createState() => _WordDetailSheetState();
@@ -106,19 +115,39 @@ class _WordDetailSheetState extends State<_WordDetailSheet> {
                   ),
                 ],
               ),
-              const SizedBox(height: AppSpacing.lg),
-              _Block(
-                title: WordStrings.meaning,
-                body: _word.meaning,
-                metrics: metrics,
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              _Block(
-                title: WordStrings.exampleInStory,
-                body: _word.sentence,
-                metrics: metrics,
-              ),
+              if (_word.meaning?.isNotEmpty ?? false) ...<Widget>[
+                const SizedBox(height: AppSpacing.lg),
+                _Block(
+                  title: WordStrings.meaning,
+                  body: _word.meaning!,
+                  metrics: metrics,
+                ),
+              ],
+              if (_word.sentenceStory?.isNotEmpty ?? false) ...<Widget>[
+                const SizedBox(height: AppSpacing.lg),
+                _Block(
+                  title: WordStrings.exampleInStory,
+                  body: _word.sentenceStory!,
+                  metrics: metrics,
+                ),
+              ],
               const SizedBox(height: AppSpacing.xl),
+              // 예문이 하나라도 있어야 따라 말할 수 있습니다.
+              if (_word.hasPracticeSentence &&
+                  widget.onPractice != null) ...<Widget>[
+                KidPrimaryButton(
+                  icon: AppIcons.speak,
+                  label: WordStrings.practice,
+                  labelStyle: metrics.text(AppTypography.kidButton),
+                  expand: true,
+                  onPressed: () {
+                    // 시트 위에 쌓지 않고, 닫은 뒤 목록 context 가 이동합니다.
+                    Navigator.of(context).pop();
+                    widget.onPractice!();
+                  },
+                ),
+                const SizedBox(height: AppSpacing.md),
+              ],
               KidPrimaryButton(
                 icon: AppIcons.close,
                 label: WordStrings.close,

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:goodquestion/core/constants/app_strings.dart';
@@ -5,6 +7,7 @@ import 'package:goodquestion/core/error/failure.dart';
 import 'package:goodquestion/core/theme/app_theme.dart';
 import 'package:goodquestion/core/widgets/app_bottom_nav.dart';
 import 'package:goodquestion/features/word/domain/entities/saved_word.dart';
+import 'package:goodquestion/features/word/domain/entities/sentence_practice.dart';
 import 'package:goodquestion/features/word/domain/entities/word_book.dart';
 import 'package:goodquestion/features/word/domain/entities/word_group.dart';
 import 'package:goodquestion/features/word/domain/repositories/word_repository.dart';
@@ -20,7 +23,7 @@ class _StubRepository implements WordRepository {
 
   final WordBook? book;
   final Object? error;
-  final Map<int, bool> likes = <int, bool>{};
+  final Map<String, bool> likes = <String, bool>{};
 
   @override
   Future<WordBook> getWordBook() async {
@@ -29,11 +32,21 @@ class _StubRepository implements WordRepository {
   }
 
   @override
-  Future<bool> toggleLike(int wordId) async {
+  Future<bool> toggleLike(String wordId) async {
     final bool next = !(likes[wordId] ?? false);
     likes[wordId] = next;
     return next;
   }
+
+  @override
+  Future<SentencePracticeResult> practiceSentence({
+    required String wordId,
+    required SentenceType sentenceType,
+    required String spokenText,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<String> transcribe(Uint8List wavBytes) => throw UnimplementedError();
 }
 
 const WordBook _book = WordBook(
@@ -41,34 +54,34 @@ const WordBook _book = WordBook(
   childName: '하늘이',
   groups: <WordGroup>[
     WordGroup(
-      storyId: 11,
+      storyId: 's11',
       storyTitle: '방귀 뀌는 며느리',
       words: <SavedWord>[
         SavedWord(
-          wordId: 101,
+          wordId: 'w101',
           word: '며느리',
           meaning: '아들과 결혼한 사람이에요.',
-          sentence: '며느리가 살았어요.',
+          sentenceStory: '며느리가 살았어요.',
           liked: false,
         ),
         SavedWord(
-          wordId: 102,
+          wordId: 'w102',
           word: '사랑방',
           meaning: '손님을 맞이하는 방이에요.',
-          sentence: '사랑방에서 만났어요.',
+          sentenceStory: '사랑방에서 만났어요.',
           liked: false,
         ),
       ],
     ),
     WordGroup(
-      storyId: 21,
+      storyId: 's21',
       storyTitle: '해와 달이 된 오누이',
       words: <SavedWord>[
         SavedWord(
-          wordId: 201,
+          wordId: 'w201',
           word: '오누이',
           meaning: '오빠와 여동생이에요.',
-          sentence: '오누이가 남았어요.',
+          sentenceStory: '오누이가 남았어요.',
           liked: true,
         ),
       ],
@@ -129,6 +142,8 @@ void main() {
     expect(find.text(WordStrings.meaning), findsOneWidget);
     expect(find.text('아들과 결혼한 사람이에요.'), findsOneWidget);
     expect(find.text('며느리가 살았어요.'), findsOneWidget);
+    // 예문이 있으니 따라 말하기 입구도 보여야 합니다.
+    expect(find.text(WordStrings.practice), findsOneWidget);
   });
 
   testWidgets('모달에서 좋아요를 바꾸면 목록 카드에 반영된다', (WidgetTester tester) async {

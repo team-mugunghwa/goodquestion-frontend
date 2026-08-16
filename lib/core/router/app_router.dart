@@ -23,6 +23,8 @@ import '../../features/play/presentation/views/play_recap_view.dart';
 import '../../features/play/presentation/views/play_view.dart';
 import '../../features/story/presentation/views/story_detail_view.dart';
 import '../../features/story/presentation/views/story_list_view.dart';
+import '../../features/word/domain/entities/saved_word.dart';
+import '../../features/word/presentation/views/sentence_practice_view.dart';
 import '../../features/word/presentation/views/word_list_view.dart';
 import '../di/injector.dart';
 import '../widgets/route_placeholder_view.dart';
@@ -120,6 +122,20 @@ GoRouter createAppRouter({
         path: AppRoutes.words,
         builder: (BuildContext context, GoRouterState state) =>
             const WordListPage(),
+        routes: <RouteBase>[
+          GoRoute(
+            path: ':${AppRoutes.wordIdParam}/practice',
+            builder: (BuildContext context, GoRouterState state) {
+              // 목록이 push 하면서 단어를 extra 로 실어 보냅니다. 주소로 바로
+              // 들어오면(새로고침·딥링크) 화면이 서버에서 다시 찾습니다.
+              final Object? extra = state.extra;
+              return SentencePracticePage(
+                wordId: state.pathParameters[AppRoutes.wordIdParam]!,
+                initialWord: extra is SavedWord ? extra : null,
+              );
+            },
+          ),
+        ],
       ),
       GoRoute(
         path: AppRoutes.myPage,

@@ -197,11 +197,76 @@ abstract final class WordStrings {
 
   static String listenTo(String word) => '$word 발음 듣기';
 
+  /// 이야기 정보 없이 담긴 단어들의 그룹 이름. (스토리 제목이 빈 경우)
+  static const String noStory = '따로 담은 단어';
+
   // ── 단어 상세 모달(모달 #2) ──
   static const String meaning = '무슨 뜻이냐면';
   static const String exampleInStory = '이야기에서는 이렇게 나왔어';
   static const String like = '좋아요';
+  static const String practice = '따라 말하기';
   static const String close = '닫기';
+}
+
+/// 예문 따라 말하기(`/words/:wordId/practice`) 전용 문구.
+///
+/// 아이 화면입니다. 캐릭터가 말을 걸고, 못 알아들은 건 아이 탓이 아닙니다 -
+/// "인식 실패" 대신 "잘 안 들렸어"라고 말합니다.
+abstract final class SentencePracticeStrings {
+  static const String title = '따라 말하기';
+
+  // ── 1단계 예문 고르기 ──
+  static const String pickGuide = '어떤 문장을 따라 말해 볼까?';
+  static const String typeStory = '이야기 예문';
+  static const String typeDaily = '일상 예문';
+  static const String typeAdvanced = '심화 예문';
+
+  /// 따라 말할 예문이 하나도 없는 단어로 들어온 경우. (딥링크 등)
+  static const String noSentence = '이 단어는 아직 따라 말할 문장이 없어.';
+  static const String backToWords = '단어장으로';
+
+  // ── 2단계 말하기 ──
+  static const String speakGuide = '이 문장을 천천히 따라 말해 봐';
+  static const String micReady = '마이크를 누르고 말해 봐';
+  static String micRecording(int seconds) => '듣고 있어, $seconds초\n다 말했으면 다시 눌러 줘';
+  static const String micTranscribing = '네 목소리를 글자로 옮기고 있어...';
+  static const String micSubmitting = '얼마나 닮게 말했는지 보고 있어...';
+
+  /// 스크린리더용 마이크 라벨.
+  static const String micStart = '눌러서 말하기';
+  static const String micStop = '말하기 끝내기';
+
+  // ── 마이크 옆 짧은 안내 ──
+  static const String hintNotHeard = '잘 안 들렸어. 한 번만 더 말해 줄래?';
+  static const String hintTooLong = '조금 길었어. 짧게 말해 볼까?';
+  static const String hintWait = '지금은 잘 안 들려. 조금 있다가 다시 해 볼까?';
+  static const String hintMicPermission = '마이크를 켜 주면 네 목소리를 들을 수 있어.';
+  static const String hintMicFailed = '마이크가 안 켜졌어. 다시 한번 눌러 줄래?';
+
+  // ── 3단계 결과 ──
+  static const String rewardedTitle = '우와, 문장이랑 똑같았어!';
+
+  /// "+2" - 이번에 받은 별가루.
+  static String stardustGain(int amount) => '+$amount';
+  static const String stardustBalanceLabel = '내 별가루';
+
+  static const String alreadyRewardedTitle = '이번에도 멋지게 말했어!';
+  static const String alreadyRewardedBody = '이 문장은 벌써 별가루를 받았어.\n다른 예문도 해 볼까?';
+
+  static const String dailyLimitTitle = '오늘도 정말 잘 말했어!';
+  static const String dailyLimitBody = '오늘 별가루 주머니가 가득 찼어.\n내일 또 하자!';
+
+  static const String notMatchedTitle = '거의 다 왔어!';
+  static String similarity(int percent) => '문장이랑 $percent% 닮았어';
+  static const String targetLabel = '따라 할 문장';
+  static const String spokenLabel = '이렇게 들렸어';
+  static const String retry = '다시 말하기';
+
+  static const String anotherSentence = '다른 예문 해보기';
+
+  /// `EXAMPLE_SENTENCE_MISSING` - 예문 확장 전에 담은 단어.
+  static const String sentenceMissing = '이 문장은 아직 준비하고 있어.\n다른 예문을 골라 볼까?';
+  static const String pickAgain = '예문 고르기';
 }
 
 /// 마이페이지(`/mypage`) 전용 문구.

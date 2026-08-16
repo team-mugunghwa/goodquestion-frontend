@@ -1,7 +1,10 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:goodquestion/core/error/failure.dart';
 import 'package:goodquestion/core/state/view_state.dart';
 import 'package:goodquestion/features/word/domain/entities/saved_word.dart';
+import 'package:goodquestion/features/word/domain/entities/sentence_practice.dart';
 import 'package:goodquestion/features/word/domain/entities/word_book.dart';
 import 'package:goodquestion/features/word/domain/entities/word_group.dart';
 import 'package:goodquestion/features/word/domain/repositories/word_repository.dart';
@@ -14,7 +17,7 @@ class _StubRepository implements WordRepository {
 
   final WordBook? book;
   final Object? error;
-  final Map<int, bool> likes = <int, bool>{};
+  final Map<String, bool> likes = <String, bool>{};
 
   @override
   Future<WordBook> getWordBook() async {
@@ -23,11 +26,21 @@ class _StubRepository implements WordRepository {
   }
 
   @override
-  Future<bool> toggleLike(int wordId) async {
+  Future<bool> toggleLike(String wordId) async {
     final bool next = !(likes[wordId] ?? false);
     likes[wordId] = next;
     return next;
   }
+
+  @override
+  Future<SentencePracticeResult> practiceSentence({
+    required String wordId,
+    required SentenceType sentenceType,
+    required String spokenText,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<String> transcribe(Uint8List wavBytes) => throw UnimplementedError();
 }
 
 const WordBook _book = WordBook(
@@ -35,34 +48,34 @@ const WordBook _book = WordBook(
   childName: '하늘이',
   groups: <WordGroup>[
     WordGroup(
-      storyId: 11,
+      storyId: 's11',
       storyTitle: '방귀 뀌는 며느리',
       words: <SavedWord>[
         SavedWord(
-          wordId: 101,
+          wordId: 'w101',
           word: '며느리',
           meaning: '아들과 결혼한 사람이에요.',
-          sentence: '며느리가 살았어요.',
+          sentenceStory: '며느리가 살았어요.',
           liked: false,
         ),
         SavedWord(
-          wordId: 102,
+          wordId: 'w102',
           word: '사랑방',
           meaning: '손님을 맞이하는 방이에요.',
-          sentence: '사랑방에서 만났어요.',
+          sentenceStory: '사랑방에서 만났어요.',
           liked: false,
         ),
       ],
     ),
     WordGroup(
-      storyId: 21,
+      storyId: 's21',
       storyTitle: '해와 달이 된 오누이',
       words: <SavedWord>[
         SavedWord(
-          wordId: 201,
+          wordId: 'w201',
           word: '오누이',
           meaning: '오빠와 여동생이에요.',
-          sentence: '오누이가 남았어요.',
+          sentenceStory: '오누이가 남았어요.',
           liked: true,
         ),
       ],
@@ -93,7 +106,7 @@ void main() {
     final vm = viewModelOf(_StubRepository(book: _book));
     await vm.load();
 
-    vm.selectStory(21);
+    vm.selectStory('s21');
 
     expect(vm.visibleGroups, hasLength(1));
     expect(vm.visibleGroups.first.storyTitle, '해와 달이 된 오누이');
@@ -102,7 +115,7 @@ void main() {
   test('전체로 되돌리면 다시 다 보인다', () async {
     final vm = viewModelOf(_StubRepository(book: _book));
     await vm.load();
-    vm.selectStory(21);
+    vm.selectStory('s21');
 
     vm.selectStory(WordListViewModel.allStoryId);
 
@@ -123,12 +136,12 @@ void main() {
     final vm = viewModelOf(_StubRepository(book: _book));
     await vm.load();
 
-    await vm.toggleLike(101);
+    await vm.toggleLike('w101');
 
-    expect(vm.wordOf(101)?.liked, isTrue);
+    expect(vm.wordOf('w101')?.liked, isTrue);
     // 다른 단어는 건드리지 않습니다.
-    expect(vm.wordOf(102)?.liked, isFalse);
-    expect(vm.wordOf(201)?.liked, isTrue);
+    expect(vm.wordOf('w102')?.liked, isFalse);
+    expect(vm.wordOf('w201')?.liked, isTrue);
   });
 
   test('실패하면 error 와 메시지가 남는다', () async {

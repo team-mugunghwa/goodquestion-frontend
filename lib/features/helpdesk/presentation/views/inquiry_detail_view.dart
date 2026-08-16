@@ -130,10 +130,7 @@ class _Body extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: AppSpacing.md),
-                SelectableText(
-                  inquiry.answer!.content,
-                  style: text.bodyMedium,
-                ),
+                SelectableText(inquiry.answer!.content, style: text.bodyMedium),
               ],
             ),
           ),

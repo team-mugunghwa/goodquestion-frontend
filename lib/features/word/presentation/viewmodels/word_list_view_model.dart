@@ -9,17 +9,17 @@ import '../../domain/usecases/toggle_word_like_use_case.dart';
 class WordListViewModel extends BaseViewModel {
   WordListViewModel(this._getWordBook, this._toggleLike);
 
-  /// 이야기 필터의 "전체".
-  static const int allStoryId = -1;
+  /// 이야기 필터의 "전체". 실제 storyId(UUID·빈 문자열)와 겹치지 않는 값.
+  static const String allStoryId = 'all';
 
   final GetWordBookUseCase _getWordBook;
   final ToggleWordLikeUseCase _toggleLike;
 
   WordBook? _book;
-  int _selectedStoryId = allStoryId;
+  String _selectedStoryId = allStoryId;
 
   WordBook? get book => _book;
-  int get selectedStoryId => _selectedStoryId;
+  String get selectedStoryId => _selectedStoryId;
 
   int get totalCount => _book?.totalCount ?? 0;
   String? get childName => _book?.childName;
@@ -46,7 +46,7 @@ class WordListViewModel extends BaseViewModel {
     _book = await _getWordBook();
   });
 
-  void selectStory(int storyId) {
+  void selectStory(String storyId) {
     if (_selectedStoryId == storyId) return;
     _selectedStoryId = storyId;
     safeNotify();
@@ -56,7 +56,7 @@ class WordListViewModel extends BaseViewModel {
   ///
   /// 다시 불러오지 않고 **손에 있는 값만 갈아 끼웁니다** — 모달을 닫을 때마다
   /// 스켈레톤이 번쩍이면 아이가 자기가 뭘 망가뜨린 줄 압니다.
-  Future<void> toggleLike(int wordId) async {
+  Future<void> toggleLike(String wordId) async {
     final bool liked = await _toggleLike(wordId);
     final WordBook? current = _book;
     if (current == null) return;
@@ -85,7 +85,7 @@ class WordListViewModel extends BaseViewModel {
   }
 
   /// 모달이 최신 좋아요 상태를 읽을 수 있게 합니다.
-  SavedWord? wordOf(int wordId) {
+  SavedWord? wordOf(String wordId) {
     for (final WordGroup group in allGroups) {
       for (final SavedWord word in group.words) {
         if (word.wordId == wordId) return word;

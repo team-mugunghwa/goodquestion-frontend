@@ -35,7 +35,10 @@ abstract class HelpdeskRepository {
 
   /// 푸시 기기 등록. 앱이 뜰 때마다 부릅니다 - 토큰은 재설치나 미사용으로
   /// 바뀌고, 바뀐 것을 서버가 알 방법이 이 호출뿐입니다.
-  Future<void> registerDevice({required String token, required String platform});
+  Future<void> registerDevice({
+    required String token,
+    required String platform,
+  });
 
   /// 로그아웃할 때. 이 기기로는 더 이상 알림이 가지 않습니다.
   Future<void> unregisterDevice(String token);

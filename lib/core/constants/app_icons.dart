@@ -52,6 +52,9 @@ abstract final class AppIcons {
   /// 다시 녹음.
   static const IconData retry = Icons.refresh_rounded;
 
+  /// 말하기 끝내기. 녹음 중인 마이크 버튼이 이 아이콘으로 바뀝니다.
+  static const IconData stop = Icons.stop_rounded;
+
   /// 타이핑으로 고치기. **보조 수단이므로 마이크보다 작게 둡니다.**
   static const IconData typeInstead = Icons.keyboard_rounded;
 

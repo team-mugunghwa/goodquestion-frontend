@@ -4,10 +4,11 @@ import 'package:flutter/services.dart' show AssetBundle, rootBundle;
 
 import '../../../../core/constants/app_assets.dart';
 import '../../../../core/error/exceptions.dart';
-import '../dtos/word_book_dto.dart';
+import '../dtos/word_response_dto.dart';
 
 /// 번들된 더미 JSON 에서 단어장을 읽습니다.
-/// → `docs/DECISIONS.md` 015
+/// 더미는 서버 `GET /children/{childId}/words` 응답(`List<WordResponse>`)과
+/// 1:1 입니다. → `docs/DECISIONS.md` 015
 class WordLocalDataSource {
   const WordLocalDataSource({this.bundle});
 
@@ -16,12 +17,15 @@ class WordLocalDataSource {
 
   AssetBundle get _assets => bundle ?? rootBundle;
 
-  Future<WordBookDto> fetchWordBook() async {
+  Future<List<WordResponseDto>> fetchWords() async {
     final String raw = await _assets.loadString(AppAssets.wordsDummy);
     final Object? decoded = jsonDecode(raw);
-    if (decoded is! Map<String, dynamic>) {
-      throw const ParseException('단어장 더미(words_screen.json)의 최상위가 객체가 아닙니다.');
+    if (decoded is! List<dynamic>) {
+      throw const ParseException('단어장 더미(words_screen.json)의 최상위가 배열이 아닙니다.');
     }
-    return WordBookDto.fromJson(decoded);
+    return decoded
+        .whereType<Map<String, dynamic>>()
+        .map(WordResponseDto.fromJson)
+        .toList(growable: false);
   }
 }

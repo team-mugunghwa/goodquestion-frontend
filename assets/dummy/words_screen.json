@@ -1,68 +1,72 @@
-{
-  "child": {
-    "name": "하늘이",
-    "avatar": null
+[
+  {
+    "id": "0b2f6a4e-8d1c-4f3a-9a21-101000000001",
+    "word": "며느리",
+    "meaning": "아들과 결혼한 사람이에요.",
+    "exampleSentence": "옛날에 방귀를 참는 며느리가 살았어요.",
+    "exampleSentenceDaily": "할머니 댁에서 며느리 이야기를 들었어요.",
+    "exampleSentenceAdvanced": "며느리는 식구들 몰래 한숨을 길게 쉬었어요.",
+    "entryType": "FAVORITE",
+    "sourceSceneId": null,
+    "storyId": "5a1d2c3b-0f4e-4a6b-8c7d-110000000011",
+    "storyTitle": "방귀 뀌는 며느리",
+    "storyImageUrl": null,
+    "createdAt": "2026-08-08T11:20:00Z"
   },
-  "totalCount": 5,
-  "groups": [
-    {
-      "storyId": 11,
-      "storyTitle": "방귀 뀌는 며느리",
-      "storyImage": null,
-      "words": [
-        {
-          "wordId": 101,
-          "word": "며느리",
-          "meaning": "아들과 결혼한 사람이에요.",
-          "sentence": "옛날에 방귀를 참는 며느리가 살았어요.",
-          "audio": "assets/sounds/word_101.mp3",
-          "liked": true,
-          "savedAt": "2026-08-08T11:20:00Z"
-        },
-        {
-          "wordId": 102,
-          "word": "사랑방",
-          "meaning": "손님을 맞이하는 방이에요.",
-          "sentence": "아버지는 사랑방에서 손님을 만났어요.",
-          "audio": "assets/sounds/word_102.mp3",
-          "liked": false,
-          "savedAt": "2026-08-08T11:24:00Z"
-        },
-        {
-          "wordId": 103,
-          "word": "참다",
-          "meaning": "하고 싶은 걸 꾹 누르는 거예요.",
-          "sentence": "며느리는 방귀를 오래 참았어요.",
-          "audio": "assets/sounds/word_103.mp3",
-          "liked": false,
-          "savedAt": "2026-08-08T11:31:00Z"
-        }
-      ]
-    },
-    {
-      "storyId": 21,
-      "storyTitle": "해와 달이 된 오누이",
-      "storyImage": null,
-      "words": [
-        {
-          "wordId": 201,
-          "word": "오누이",
-          "meaning": "오빠와 여동생을 함께 부르는 말이에요.",
-          "sentence": "산속에 오누이 둘만 남았어요.",
-          "audio": "assets/sounds/word_201.mp3",
-          "liked": true,
-          "savedAt": "2026-08-07T09:05:00Z"
-        },
-        {
-          "wordId": 202,
-          "word": "동아줄",
-          "meaning": "아주 굵고 튼튼한 줄이에요.",
-          "sentence": "하늘에서 동아줄이 내려왔어요.",
-          "audio": "assets/sounds/word_202.mp3",
-          "liked": false,
-          "savedAt": "2026-08-07T09:12:00Z"
-        }
-      ]
-    }
-  ]
-}
+  {
+    "id": "0b2f6a4e-8d1c-4f3a-9a21-101000000002",
+    "word": "사랑방",
+    "meaning": "손님을 맞이하는 방이에요.",
+    "exampleSentence": "아버지는 사랑방에서 손님을 만났어요.",
+    "exampleSentenceDaily": "우리 집에는 사랑방 같은 작은 방이 있어요.",
+    "exampleSentenceAdvanced": "사랑방에는 오래된 책과 붓이 가지런히 놓여 있었어요.",
+    "entryType": "UNKNOWN",
+    "sourceSceneId": null,
+    "storyId": "5a1d2c3b-0f4e-4a6b-8c7d-110000000011",
+    "storyTitle": "방귀 뀌는 며느리",
+    "storyImageUrl": null,
+    "createdAt": "2026-08-08T11:24:00Z"
+  },
+  {
+    "id": "0b2f6a4e-8d1c-4f3a-9a21-101000000003",
+    "word": "참다",
+    "meaning": "하고 싶은 걸 꾹 누르는 거예요.",
+    "exampleSentence": "며느리는 방귀를 오래 참았어요.",
+    "exampleSentenceDaily": null,
+    "exampleSentenceAdvanced": null,
+    "entryType": "UNKNOWN",
+    "sourceSceneId": null,
+    "storyId": "5a1d2c3b-0f4e-4a6b-8c7d-110000000011",
+    "storyTitle": "방귀 뀌는 며느리",
+    "storyImageUrl": null,
+    "createdAt": "2026-08-08T11:31:00Z"
+  },
+  {
+    "id": "0b2f6a4e-8d1c-4f3a-9a21-201000000001",
+    "word": "오누이",
+    "meaning": "오빠와 여동생을 함께 부르는 말이에요.",
+    "exampleSentence": "산속에 오누이 둘만 남았어요.",
+    "exampleSentenceDaily": "옆집 오누이는 늘 같이 학교에 가요.",
+    "exampleSentenceAdvanced": "오누이는 서로 손을 꼭 잡고 어두운 길을 걸었어요.",
+    "entryType": "FAVORITE",
+    "sourceSceneId": null,
+    "storyId": "5a1d2c3b-0f4e-4a6b-8c7d-210000000021",
+    "storyTitle": "해와 달이 된 오누이",
+    "storyImageUrl": null,
+    "createdAt": "2026-08-07T09:05:00Z"
+  },
+  {
+    "id": "0b2f6a4e-8d1c-4f3a-9a21-201000000002",
+    "word": "동아줄",
+    "meaning": "아주 굵고 튼튼한 줄이에요.",
+    "exampleSentence": "하늘에서 동아줄이 내려왔어요.",
+    "exampleSentenceDaily": "운동회에서 동아줄로 줄다리기를 했어요.",
+    "exampleSentenceAdvanced": "낡은 동아줄은 무게를 이기지 못하고 툭 끊어졌어요.",
+    "entryType": "UNKNOWN",
+    "sourceSceneId": null,
+    "storyId": "5a1d2c3b-0f4e-4a6b-8c7d-210000000021",
+    "storyTitle": "해와 달이 된 오누이",
+    "storyImageUrl": null,
+    "createdAt": "2026-08-07T09:12:00Z"
+  }
+]

@@ -256,19 +256,20 @@ class _StoryChips extends StatelessWidget {
   Widget build(BuildContext context) {
     return KidFilterChips(
       metrics: metrics,
-      selectedId: '${vm.selectedStoryId}',
-      onSelected: (String id) =>
-          vm.selectStory(int.tryParse(id) ?? WordListViewModel.allStoryId),
+      selectedId: vm.selectedStoryId,
+      onSelected: vm.selectStory,
       items: <KidFilterChipData>[
         const KidFilterChipData(
-          id: '${WordListViewModel.allStoryId}',
+          id: WordListViewModel.allStoryId,
           label: AppStrings.filterAll,
           icon: AppIcons.topicAll,
         ),
         for (final WordGroup group in vm.allGroups)
           KidFilterChipData(
-            id: '${group.storyId}',
-            label: group.storyTitle,
+            id: group.storyId,
+            label: group.storyTitle.isEmpty
+                ? WordStrings.noStory
+                : group.storyTitle,
             image: group.storyImage,
           ),
       ],
@@ -323,6 +324,12 @@ class _GroupList extends StatelessWidget {
       metrics: metrics,
       onToggleLike: () => vm.toggleLike(word.wordId),
       latest: () => vm.wordOf(word.wordId),
+      // 시트가 닫힌 뒤 이 context(목록)에서 push 합니다. 상세로 가는 건
+      // context.go 가 아니라 push - 돌아왔을 때 필터가 남아야 합니다.
+      onPractice: () => context.push(
+        AppRoutes.wordPracticeOf(word.wordId),
+        extra: vm.wordOf(word.wordId) ?? word,
+      ),
     );
   }
 }
@@ -352,7 +359,7 @@ class _GroupHeader extends StatelessWidget {
         const SizedBox(width: AppSpacing.md),
         Expanded(
           child: Text(
-            group.storyTitle,
+            group.storyTitle.isEmpty ? WordStrings.noStory : group.storyTitle,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: metrics.text(AppTypography.kidTitle),
