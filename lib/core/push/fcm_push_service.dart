@@ -10,7 +10,7 @@ import 'push_service.dart';
 /// FCM 으로 기기 토큰을 얻습니다.
 ///
 /// **설정이 없으면 만들어지지 않습니다.** [create] 가 null 을 돌려주고 호출부가
-/// [NoopPushService] 를 씁니다 — 로컬과 CI 에 Firebase 키를 두지 않기 위해서입니다.
+/// [NoopPushService] 를 씁니다 - 로컬과 CI 에 Firebase 키를 두지 않기 위해서입니다.
 class FcmPushService implements PushService {
   FcmPushService._(this._messaging);
 

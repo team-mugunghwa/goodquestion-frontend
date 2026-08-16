@@ -1,6 +1,6 @@
 /// 고객 지원 영역의 도메인 모델.
 ///
-/// 공지 · 이용 안내 · 문의 · 알림은 화면이 다르지만 하나의 흐름입니다 —
+/// 공지 / 이용 안내 / 문의 / 알림은 화면이 다르지만 하나의 흐름입니다 -
 /// 공지를 읽다 궁금해서 문의를 쓰고, 답변이 오면 알림으로 돌아옵니다.
 /// 그래서 feature 를 넷으로 쪼개지 않고 `helpdesk` 하나에 담았습니다.
 ///
@@ -56,9 +56,9 @@ class Notice {
 
 enum GuideCategory {
   basic('BASIC', '서비스 소개'),
-  account('ACCOUNT', '계정·아이 프로필'),
+  account('ACCOUNT', '계정/아이 프로필'),
   play('PLAY', '이야기 진행'),
-  reward('REWARD', '별가루·행성'),
+  reward('REWARD', '별가루/행성'),
   trouble('TROUBLE', '문제 해결');
 
   const GuideCategory(this.code, this.label);

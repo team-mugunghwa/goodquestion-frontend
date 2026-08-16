@@ -206,7 +206,7 @@ Future<void> configureDependencies() async {
       () => ToggleWordLikeUseCase(getIt<WordRepository>()),
     );
 
-  // ---- helpdesk (공지 · 이용 안내 · 문의 · 알림) ----
+  // ---- helpdesk (공지 / 이용 안내 / 문의 / 알림) ----
   //
   // 목업 저장소가 없습니다. 이 데이터는 관리자 콘솔이 만들고 서버가 내려주는
   // 것이라 화면만 먼저 만들 이유가 없었습니다.

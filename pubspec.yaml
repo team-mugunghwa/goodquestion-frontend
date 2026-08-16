@@ -38,7 +38,7 @@ dependencies:
 
   # 푸시 알림. 고객센터 답변이 등록되면 서버가 FCM 으로 보냅니다.
   # 설정값(env/*.json 의 FIREBASE_*)이 없으면 초기화 자체를 건너뛰므로
-  # 로컬과 CI 에서는 Firebase 없이도 그대로 뜹니다. → lib/core/push/
+  # 로컬과 CI 에서는 Firebase 없이도 그대로 뜹니다. -> lib/core/push/
   firebase_core: ^4.1.1
   firebase_messaging: ^16.0.2
 

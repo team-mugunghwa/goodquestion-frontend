@@ -53,7 +53,7 @@ abstract final class AppRoutes {
   /// 이용 안내.
   static const String guides = '/guides';
 
-  /// 고객센터 — 내 문의 목록.
+  /// 고객센터 - 내 문의 목록.
   ///
   /// **관리자 콘솔이 답변 알림에 `/support/{inquiryId}` 를 실어 보냅니다.**
   /// 이 경로를 바꾸면 이미 나간 알림이 갈 곳을 잃습니다.
