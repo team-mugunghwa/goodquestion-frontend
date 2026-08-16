@@ -13,7 +13,8 @@ class StoryThumbnail extends StatelessWidget {
     super.key,
     required this.image,
     required this.fallbackIcon,
-    this.aspectRatio = wide,
+    this.aspectRatio = portrait,
+    this.alignment = Alignment.center,
     this.iconSize = AppSizes.iconChild,
     this.topicTag,
     this.title,
@@ -40,12 +41,23 @@ class StoryThumbnail extends StatelessWidget {
     return file == null ? null : 'assets/images/covers/$file.png';
   }
 
-  /// 16:9 — 홈 카드(이어하기·추천)의 기본. (`docs/DESIGN_SYSTEM.md` 10장)
-  static const double wide = 16 / 9;
-
-  /// 2:3 — 그림책 표지 비율. 이야기 목록(`/stories`) 카드 전용.
-  /// 세로 표지 밑에 제목이 붙는 "책장에 꽂힌 그림책" 느낌을 냅니다.
+  /// 2:3 — **표지 원본과 같은 비율.** 표지를 쓰는 자리의 기본값입니다.
+  ///
+  /// 표지 원본(1024×1536)은 전부 세로 그림입니다. 다른 비율로 담으면
+  /// [BoxFit.cover] 가 잘라내는데, 그림책 표지에서 잘려 나가는 건 대개
+  /// 인물의 얼굴입니다. 그래서 **표지는 자르지 않습니다** —
+  /// 자를 수밖에 없는 자리라면 그 비율로 그린 그림을 따로 씁니다.
+  /// (`docs/COVER_ART_GUIDE.md` 7장)
+  ///
+  /// 예외는 홈 히어로 하나뿐이고, 거기서는 [alignment] 로 어디를 남길지
+  /// 직접 지정합니다.
   static const double portrait = 2 / 3;
+
+  /// 16:9 — 표지가 아니라 **띠**로 쓰는 자리. 이야기 상세의 폰 레이아웃뿐입니다.
+  ///
+  /// 여기에 세로 표지를 넣으면 세로 44%만 남습니다. 새로 쓸 자리를 만들기
+  /// 전에 [portrait] 로 세울 수 없는지 먼저 보세요.
+  static const double wide = 16 / 9;
 
   /// 정사각. 행성 썸네일·필터 칩처럼 원이나 작은 타일로 쓰는 자리.
   static const double square = 1;
@@ -62,6 +74,14 @@ class StoryThumbnail extends StatelessWidget {
   /// 이야기 상세의 대표 이미지처럼 높이를 직접 정해야 할 때 쓰세요 —
   /// 태블릿에서 16:9 를 전폭으로 깔면 이미지 하나가 화면을 다 먹습니다.
   final double? aspectRatio;
+
+  /// [BoxFit.cover] 가 잘라낼 때 **어디를 남길지.**
+  ///
+  /// 자르지 않는 자리(=[portrait])에서는 아무 효과가 없으므로 건드리지 마세요.
+  /// 자를 수밖에 없는 자리에서만 의미가 있습니다. 지금은 홈 히어로 하나이고,
+  /// 거기서 [Alignment.center] 를 그대로 두면 세로 표지의 **허리**가 남습니다
+  /// — 인물의 얼굴이 통째로 위로 잘려 나가서 표지를 쓴 의미가 사라집니다.
+  final Alignment alignment;
 
   /// 칩처럼 작은 자리에서는 [AppSizes.iconInline] 로 줄이세요.
   final double iconSize;
@@ -88,7 +108,11 @@ class StoryThumbnail extends StatelessWidget {
     // 서버 이미지가 없거나 실패했을 때: 제목으로 찾은 로컬 표지 → 코드 표지.
     final Widget onMissing = localCover == null
         ? fallback
-        : _LocalAsset(path: localCover, fallback: fallback);
+        : _LocalAsset(
+            path: localCover,
+            alignment: alignment,
+            fallback: fallback,
+          );
 
     final Widget content;
     if (path != null && path.startsWith('http')) {
@@ -96,6 +120,7 @@ class StoryThumbnail extends StatelessWidget {
       content = Image.network(
         path,
         fit: BoxFit.cover,
+        alignment: alignment,
         excludeFromSemantics: true,
         gaplessPlayback: true,
         errorBuilder: (BuildContext context, Object error, StackTrace? stack) =>
@@ -106,10 +131,18 @@ class StoryThumbnail extends StatelessWidget {
       );
     } else if (path != null) {
       // 더미·기존 코드가 넘기는 로컬 에셋 경로. 실패하면 제목 표지→코드 표지.
-      content = _LocalAsset(path: path, fallback: onMissing);
+      content = _LocalAsset(
+        path: path,
+        alignment: alignment,
+        fallback: onMissing,
+      );
     } else if (localCover != null) {
       // 우선순위 2 — 제목으로 찾은 로컬 표지.
-      content = _LocalAsset(path: localCover, fallback: fallback);
+      content = _LocalAsset(
+        path: localCover,
+        alignment: alignment,
+        fallback: fallback,
+      );
     } else {
       // 우선순위 3 — 코드로 그린 표지.
       content = fallback;
@@ -124,15 +157,21 @@ class StoryThumbnail extends StatelessWidget {
 /// `Image.asset` + 실패 시 코드 표지 폴백. 파일이 빠졌을 때 빨간 에러
 /// 상자 대신 표지가 뜹니다.
 class _LocalAsset extends StatelessWidget {
-  const _LocalAsset({required this.path, required this.fallback});
+  const _LocalAsset({
+    required this.path,
+    required this.fallback,
+    this.alignment = Alignment.center,
+  });
 
   final String path;
+  final Alignment alignment;
   final Widget fallback;
 
   @override
   Widget build(BuildContext context) => Image.asset(
     path,
     fit: BoxFit.cover,
+    alignment: alignment,
     excludeFromSemantics: true,
     errorBuilder: (BuildContext context, Object error, StackTrace? stack) =>
         fallback,

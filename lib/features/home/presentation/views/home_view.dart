@@ -13,6 +13,7 @@ import '../../../../core/widgets/app_canvas.dart';
 import '../../../../core/widgets/app_state_views.dart';
 import '../../../../core/widgets/screen_metrics.dart';
 import '../../domain/entities/home_summary.dart';
+import '../../domain/entities/in_progress_session.dart';
 import '../../domain/entities/recommended_story.dart';
 import '../../domain/usecases/get_home_summary_use_case.dart';
 import '../viewmodels/home_view_model.dart';
@@ -23,6 +24,7 @@ import '../widgets/home_skeleton.dart';
 import '../widgets/home_top_bar.dart';
 import '../widgets/recommended_stories_section.dart';
 import '../widgets/start_story_card.dart';
+import '../widgets/today_story_card.dart';
 
 /// 홈 — 이어하기 · 추천 이야기 · 행성 위젯 · 하단 내비 허브.
 ///
@@ -34,9 +36,20 @@ import '../widgets/start_story_card.dart';
 /// | 섹션 | 내용 |
 /// |---|---|
 /// | 1 | 상단 바 — 아이 프로필 · 별가루 잔액 · 내 행성 입구 |
-/// | 2 | 이어하기 카드 (없으면 "새 이야기 시작" 카드) |
-/// | 3 | 추천 이야기 2~3개 (고정 큐레이션) |
-/// | 5 | 하단 내비 (고정) |
+/// | 2 | 히어로 — 이어하기 / 오늘의 이야기 / (둘 다 없으면) 새 이야기 시작 |
+/// | 3 | 추천 이야기 2~3개 (고정 큐레이션, 히어로에 쓴 편은 제외) |
+/// | 4 | 하단 내비 (고정) |
+///
+/// 섹션2는 표지를 카드 전폭 배경으로 깔고 글자를 그 위에 얹는 배너입니다
+/// ([HomeHeroCard]). 세 상태가 같은 껍데기를 써서, 이어하던 이야기가 있든
+/// 없든 아이의 손이 가는 자리가 바뀌지 않습니다. 높이는 글자가 정하고
+/// 사진이 그 높이를 채워서, 빈 여백이 구조적으로 0 입니다.
+///
+/// 섹션3은 반대로 **세로 2:3 표지를 통째로 세운 책장**입니다. 앱의 원칙은
+/// "표지는 자르지 않는다"이고 목록·상세·책장이 전부 그 원칙을 따릅니다 —
+/// 히어로만 예외입니다. 그래서 같은 표지가 홈 위쪽에서는 얼굴 부근 띠로,
+/// 아래 책장에서는 온전한 한 장으로 보입니다.
+/// (`docs/COVER_ART_GUIDE.md` 7장)
 ///
 /// 바탕은 `AppCanvas.day`. 이 앱은 낮(홈·이야기)에서 시작해 밤(완료·행성)에서
 /// 끝납니다. → `docs/DESIGN_SYSTEM.md`
@@ -159,7 +172,7 @@ class HomeView extends StatelessWidget {
   }
 }
 
-/// 섹션2~4. 스크롤되는 본문입니다.
+/// 섹션2~3. 스크롤되는 본문입니다.
 class _HomeContent extends StatelessWidget {
   const _HomeContent({super.key, required this.summary, required this.metrics});
 
@@ -168,52 +181,107 @@ class _HomeContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final session = summary.inProgressSession;
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        metrics.screenPadding,
-        AppSpacing.lg,
-        metrics.screenPadding,
-        metrics.screenPadding,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          if (session == null)
-            StartStoryCard(
-              metrics: metrics,
-              onStart: () =>
-                  _guarded(context, () => context.go(AppRoutes.stories)),
-            )
-          else
-            ContinueCard(
-              session: session,
-              metrics: metrics,
-              onResume: () => _guarded(
+    final InProgressSession? session = summary.inProgressSession;
+    final List<RecommendedStory> recommended = summary.recommendedStories;
+    // 이어하기가 없으면 추천 1순위가 히어로로 올라갑니다. 그 한 편은 아래
+    // 목록에서 빼서 같은 표지가 한 화면에 두 번 나오지 않게 합니다.
+    // (이어하기가 있을 때는 빼지 않습니다 — 목록은 목록대로 온전해야 합니다)
+    final RecommendedStory? todayStory =
+        session == null && recommended.isNotEmpty ? recommended.first : null;
+    final List<RecommendedStory> listed = todayStory == null
+        ? recommended
+        : recommended.sublist(1);
+
+    // 본문에 실제로 주어진 세로(뷰포트 − 상단 바 − 하단 내비)를 재서 아래
+    // 책장의 표지 폭을 정합니다. 표지를 자르지 않기로 하면 표지 폭이 곧 높이
+    // (×1.5)라, 세로 예산을 모르면 "표지와 제목까지 첫 화면 안에"를 못 지킵니다.
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) =>
+          SingleChildScrollView(
+            // 위쪽 여백만 md 입니다. 세로 표지를 자르지 않기로 하면서 본문이
+            // 세로로 길어졌고, 상단 바가 이미 자기 여백을 갖고 있어 여기서
+            // lg 까지 벌리면 그 8dp 가 책장의 라벨을 첫 화면 밖으로 밀어냅니다.
+            padding: EdgeInsets.fromLTRB(
+              metrics.screenPadding,
+              AppSpacing.md,
+              metrics.screenPadding,
+              metrics.screenPadding,
+            ),
+            child: _column(
+              context,
+              session,
+              todayStory,
+              listed,
+              RecommendedStoriesSection.coverWidthOf(
                 context,
-                // 전체 장면 수는 홈만 알고 있습니다 - 재생 화면 진행바가
-                // 쓰도록 함께 넘깁니다. → [AppRoutes.playOf]
-                () => context.go(
-                  AppRoutes.playOf(
-                    session.sessionId,
-                    totalScenes: session.totalScenes,
-                  ),
+                metrics,
+                constraints.maxWidth - metrics.screenPadding * 2,
+                constraints.maxHeight,
+              ),
+            ),
+          ),
+    );
+  }
+
+  Widget _column(
+    BuildContext context,
+    InProgressSession? session,
+    RecommendedStory? todayStory,
+    List<RecommendedStory> listed,
+    double coverWidth,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        if (session != null)
+          ContinueCard(
+            session: session,
+            metrics: metrics,
+            onResume: () => _guarded(
+              context,
+              // 전체 장면 수는 홈만 알고 있습니다 - 재생 화면 진행바가
+              // 쓰도록 함께 넘깁니다. → [AppRoutes.playOf]
+              () => context.go(
+                AppRoutes.playOf(
+                  session.sessionId,
+                  totalScenes: session.totalScenes,
                 ),
               ),
             ),
-          SizedBox(height: metrics.sectionGap),
-          RecommendedStoriesSection(
-            stories: summary.recommendedStories,
+          )
+        else if (todayStory != null)
+          TodayStoryCard(
+            story: todayStory,
             metrics: metrics,
-            // push 입니다 — 상세의 뒤로가기가 홈으로 돌아와야 합니다.
-            onStoryTap: (RecommendedStory story) => _guarded(
+            // 추천 카드 탭과 같은 동작입니다 — 세션은 상세에서 시작합니다.
+            onTap: () => _guarded(
               context,
-              () => context.push(AppRoutes.storyDetailOf(story.storyId)),
+              () => context.push(AppRoutes.storyDetailOf(todayStory.storyId)),
             ),
-            onMoreTap: () => context.go(AppRoutes.stories),
+          )
+        else
+          // 추천 큐레이션까지 비었을 때의 마지막 안전망.
+          StartStoryCard(
+            metrics: metrics,
+            onStart: () =>
+                _guarded(context, () => context.go(AppRoutes.stories)),
           ),
-        ],
-      ),
+        // 히어로와 추천 사이는 sectionGap(태블릿 64) 대신 lg 입니다.
+        // 세로 표지를 자르지 않으면 책 한 권이 폭의 1.5배로 길어지는데, 그 사이를
+        // 64로 벌리면 표지 밑 라벨이 첫 화면 밖으로 밀립니다.
+        const SizedBox(height: AppSpacing.lg),
+        RecommendedStoriesSection(
+          stories: listed,
+          metrics: metrics,
+          coverWidth: coverWidth,
+          // push 입니다 — 상세의 뒤로가기가 홈으로 돌아와야 합니다.
+          onStoryTap: (RecommendedStory story) => _guarded(
+            context,
+            () => context.push(AppRoutes.storyDetailOf(story.storyId)),
+          ),
+          onMoreTap: () => context.go(AppRoutes.stories),
+        ),
+      ],
     );
   }
 

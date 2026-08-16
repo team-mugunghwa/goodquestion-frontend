@@ -16,7 +16,6 @@ import '../../../../core/widgets/app_state_views.dart';
 import '../../../../core/widgets/screen_metrics.dart';
 import '../../../../core/widgets/skeleton_box.dart';
 import '../../../../core/widgets/story_card.dart';
-import '../../../../core/widgets/story_thumbnail.dart';
 import '../../domain/entities/story_summary.dart';
 import '../../domain/entities/story_topic.dart';
 import '../../domain/usecases/get_story_catalog_use_case.dart';
@@ -232,8 +231,6 @@ class _Grid extends StatelessWidget {
           estimatedMinutes: story.estimatedMinutes,
           topicLabel: _topicLabel(story),
           metrics: metrics,
-          // 목록은 그림책 세로 표지. 홈 카드(16:9)와 의도적으로 다릅니다.
-          coverAspectRatio: StoryThumbnail.portrait,
           // 목록 카드의 제목은 큰 글씨 한 줄. (PRD F-03)
           titleMaxLines: 1,
           // go 가 아니라 push — 목록을 스택에 남겨야 상세에서 돌아왔을 때
