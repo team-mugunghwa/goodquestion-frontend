@@ -103,14 +103,17 @@ abstract final class StoryListStrings {
 
 /// 이야기 상세(`/stories/:storyId`) 전용 문구.
 abstract final class StoryDetailStrings {
-  /// 도입문·역할 설명을 소리로 듣는 버튼. 이 화면의 음성 우선 원칙의 핵심.
+  /// 도입문을 소리로 듣는 버튼. 이 화면의 음성 우선 원칙의 핵심.
   static const String listen = '들려줘';
 
   /// 이 화면의 단일 핵심 액션. 세션이 생성되는 유일한 지점입니다.
   static const String start = '시작하기';
 
-  /// "이 이야기에서 너는 ○○이야!"
-  static String roleTitle(String roleName) => '이 이야기에서 너는\n"$roleName"야!';
+  /// 역할 카드의 눈길잡이. 주인공은 아랫줄의 이름이라 이 줄은 작게 둡니다.
+  static const String roleIntro = '이 이야기에서 너는';
+
+  /// 역할 카드에서 가장 큰 글자. 서버가 주는 역할 정보는 이 이름 하나뿐입니다.
+  static String roleName(String name) => '"$name"야!';
 
   /// 없는 storyId 로 들어온 경우.
   static const String notFound = '앗, 이 이야기를 찾을 수 없어.';
@@ -200,6 +203,8 @@ abstract final class WordStrings {
   /// 뜻이 아직 없는 단어. 빈 칸을 두면 고장으로 보입니다.
   static const String meaningMissing = '아직 뜻을 준비하고 있어.';
   static const String exampleInStory = '이야기에서는 이렇게 나왔어';
+  static const String exampleInDaily = '평소에는 이렇게 써';
+  static const String exampleAdvanced = '조금 어려운 문장에도 도전!';
   static const String like = '좋아요';
   static const String close = '닫기';
 }

@@ -35,10 +35,23 @@ import '../widgets/role_card.dart';
 /// |---|---|
 /// | 1 | 상단 바 — 뒤로가기 + 제목 |
 /// | 2 | 대표 비주얼 |
-/// | 3 | 메타 칩 — 시간 · 난이도 · 주제 |
-/// | 4 | 도입문 + "들려줘" |
+/// | 3 | 메타 칩(시간·난이도·주제) + 소개 한 줄 — 보호자가 고를 때 보는 정보 |
+/// | 4 | 도입문 + "들려줘" — 아이에게 읽어 주는 글 |
 /// | 5 | 내 역할 카드 |
 /// | 6 | 하단 고정 "시작하기" |
+///
+/// 섹션3의 소개(`summary`)와 섹션4의 도입문(`introText`)은 **읽는 사람이
+/// 다릅니다.** 소개는 "무슨 이야기인지" 알려 주는 3인칭 설명이라 보호자
+/// 것이고, 도입문은 아이에게 들려주는 말입니다. 같은 카드에 같은 크기로
+/// 붙여 두면 아이가 자기 것이 아닌 문장부터 읽습니다.
+///
+/// ## 빈 값은 빈 상자가 아니라 없는 섹션입니다
+///
+/// 서버 시드가 아직 안 채워져서 `intro` · `childRole` 이 **빈 문자열로 오는
+/// 이야기가 대부분**입니다. 빈 문단이나 빈 파스텔 상자를 그리면 화면이
+/// 고장 난 것처럼 보입니다. 값이 없으면 그 섹션을 통째로 안 그립니다 —
+/// 남는 것(그림 · 칩 · 시작하기)만으로도 이야기를 시작하는 데는 지장이
+/// 없습니다.
 ///
 /// **시작하기가 서비스 전체에서 세션이 생기는 유일한 지점**입니다.
 /// 이어하기(홈)는 이 화면을 거치지 않고 바로 `/play` 로 복원됩니다.
@@ -216,7 +229,8 @@ class _Content extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
-          // 섹션3 — 메타 칩. 주로 보호자가 보는 판단 정보라 작게 둡니다.
+          // 섹션3 — 메타 칩과 소개. 둘 다 **보호자가 고를 때 보는 판단
+          // 정보**라 한 덩어리로 묶고, 아이 본문(24sp)보다 작게 둡니다.
           Wrap(
             spacing: AppSpacing.sm,
             runSpacing: AppSpacing.sm,
@@ -239,18 +253,58 @@ class _Content extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: AppSpacing.lg),
-          // 섹션4 — 도입문. 글자는 보조이고 "들려줘"가 본체입니다.
-          _IntroCard(story: story, metrics: metrics),
-          SizedBox(height: metrics.sectionGap),
-          // 섹션5 — 내 역할.
-          RoleCard(role: story.role, metrics: metrics),
+          if (story.summary.isNotEmpty) ...<Widget>[
+            // 칩과의 간격은 md — 섹션 사이(lg)보다 좁아야 "칩에 딸린 설명"
+            // 으로 읽힙니다.
+            const SizedBox(height: AppSpacing.md),
+            // Align 이 없으면 바깥 Column 의 stretch 가 폭을 꽉 채워 버려서
+            // ConstrainedBox 가 무시됩니다. 태블릿에서 한 줄이 화면 폭만큼
+            // 길어집니다.
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: AppSizes.bubbleMaxWidth,
+                ),
+                child: Text(
+                  story.summary,
+                  // 18sp 인 kidLabel 을 굵기만 풀어 씁니다. 3인칭 설명문이라
+                  // 라벨 굵기(700)면 제목처럼 보이고, 아이 본문 크기(24sp)면
+                  // 도입문과 구분이 안 됩니다.
+                  style: metrics
+                      .text(AppTypography.kidLabel)
+                      .copyWith(
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.ink500,
+                      ),
+                ),
+              ),
+            ),
+          ],
+          // 섹션4 — 도입문. 아이에게 들려주는 말입니다.
+          // 서버 `intro` 가 비고 음성도 없으면 카드를 통째로 안 그립니다.
+          if (story.introText.isNotEmpty ||
+              story.introAudio != null) ...<Widget>[
+            const SizedBox(height: AppSpacing.lg),
+            _IntroCard(story: story, metrics: metrics),
+          ],
+          // 섹션5 — 내 역할. 이름이 비면(시드 미완) 빈 파스텔 상자 대신
+          // 아무것도 안 그립니다.
+          if (story.role.name.isNotEmpty) ...<Widget>[
+            SizedBox(height: metrics.sectionGap),
+            RoleCard(role: story.role, metrics: metrics),
+          ],
         ],
       ),
     );
   }
 }
 
+/// 섹션4 — 도입/상황 한 덩어리와 "들려줘".
+///
+/// 서버 `intro` 는 기획의 "도입"과 "상황"을 합쳐 담습니다
+/// (`데이터베이스_설계.md` §3.1). 여기서 문단을 임의로 쪼개지 않습니다 —
+/// 원문의 줄바꿈이 곧 문단입니다.
 class _IntroCard extends StatelessWidget {
   const _IntroCard({required this.story, required this.metrics});
 
@@ -259,6 +313,9 @@ class _IntroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final String? audio = story.introAudio;
+    final bool hasText = story.introText.isNotEmpty;
+
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
@@ -269,37 +326,37 @@ class _IntroCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: AppSizes.bubbleMaxWidth,
+          if (hasText)
+            ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: AppSizes.bubbleMaxWidth,
+              ),
+              child: Text(
+                story.introText,
+                style: metrics.text(AppTypography.kidBody),
+              ),
             ),
-            child: Text(
-              story.introText,
-              style: metrics.text(AppTypography.kidBody),
+          // "들려줘"는 **재생할 음성이 있을 때만** 그립니다.
+          //
+          // 서버가 아직 도입 음성을 안 내려줘서(TTS 501) 이 버튼은 지금
+          // 100% 비활성입니다. 영영 안 눌리는 큰 버튼을 아이 화면 한가운데
+          // 두면, 저학년은 "안 되는 이유"를 추론하지 못하고 계속 누르다가
+          // 앱이 고장 났다고 결론 냅니다. 비활성 회색보다 없는 편이 낫습니다.
+          // TTS 가 붙어 `introAudio` 가 채워지면 버튼은 저절로 돌아옵니다.
+          if (audio != null) ...<Widget>[
+            if (hasText) const SizedBox(height: AppSpacing.lg),
+            Align(
+              alignment: Alignment.center,
+              child: SpeakerButton(
+                audio: audio,
+                semanticLabel: StoryDetailStrings.listen,
+                label: StoryDetailStrings.listen,
+                labelStyle: metrics.text(AppTypography.kidButton),
+                size: AppSizes.tapChildPrimary,
+                filled: true,
+              ),
             ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: AppSizes.bubbleMaxWidth,
-            ),
-            child: Text(
-              story.situationText,
-              style: metrics.text(AppTypography.kidBody),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          Align(
-            alignment: Alignment.center,
-            child: SpeakerButton(
-              audio: story.introAudio,
-              semanticLabel: StoryDetailStrings.listen,
-              label: StoryDetailStrings.listen,
-              labelStyle: metrics.text(AppTypography.kidButton),
-              size: AppSizes.tapChildPrimary,
-              filled: true,
-            ),
-          ),
+          ],
         ],
       ),
     );

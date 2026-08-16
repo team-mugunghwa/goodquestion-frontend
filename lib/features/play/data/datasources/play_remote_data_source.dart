@@ -46,6 +46,9 @@ class PlayRemoteDataSource {
                 return PlayOpeningMessage(
                   text: text.trim(),
                   audioUrl: messageValue['audioUrl'] as String?,
+                  audioTimings: PlaySessionDto.audioTimings(
+                    messageValue['audioTimings'],
+                  ),
                   alreadyOpened: data['alreadyOpened'] as bool? ?? false,
                 );
               }
@@ -91,6 +94,7 @@ class PlayRemoteDataSource {
             if (text != null && text.trim().isNotEmpty) {
               return PlayTranscription(
                 text: text.trim(),
+                rawText: (data['rawText'] as String?)?.trim(),
                 confidence: (data['confidence'] as num?)?.toDouble(),
                 lowConfidence: data['lowConfidence'] as bool? ?? false,
               );
