@@ -10,6 +10,7 @@ import '../../../../core/constants/app_icons.dart';
 import '../../../../core/error/failure.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/widgets/app_state_views.dart';
+import '../../data/dialogue_word_capture.dart';
 import '../../domain/entities/play_session.dart';
 import '../../domain/repositories/play_repository.dart';
 import '../character/dialogue_character_manifest.dart';
@@ -35,6 +36,7 @@ class PlayPage extends StatefulWidget {
     this.repository,
     this.voiceRecorder,
     this.audioPlayer,
+    this.wordCapture,
     super.key,
   });
 
@@ -57,6 +59,10 @@ class PlayPage extends StatefulWidget {
   final PlayRepository? repository;
   final MissionVoiceRecorder? voiceRecorder;
   final StoryAudioPlayer? audioPlayer;
+
+  /// 고정 대사에서 아이가 고른 단어를 단어장에 담는 통로. null 이면 단어
+  /// 선택 기능이 꺼집니다(미리보기·테스트).
+  final DialogueWordCapture? wordCapture;
 
   @override
   State<PlayPage> createState() => _PlayPageState();
@@ -90,6 +96,23 @@ class _PlayPageState extends State<PlayPage> {
   List<String> _characterSentences = const <String>[];
   int _characterSentenceIndex = 0;
   int _speechToken = 0;
+
+  /// 지금 말풍선의 대사가 DB 고정 대사인가(장면 오프닝). LLM이 만든 동적
+  /// 대사는 오탈자나 오인식 반영 가능성이 있어 단어장에 담게 하지 않습니다 -
+  /// 단어장은 아이가 두고두고 다시 보는 곳이라 원문 품질이 보장된 글만
+  /// 들어가야 합니다.
+  bool _fixedDialogue = false;
+
+  /// 아이가 담을까 말까 고르는 중인 단어. null 이 아니면 말풍선에
+  /// "담을까요?" 확인 줄이 뜹니다.
+  String? _pendingWord;
+
+  /// [_pendingWord] 를 고른 순간의 문장. 확인하는 사이 대사가 다음 문장으로
+  /// 넘어가도 예문은 단어가 실제로 나온 문장이어야 합니다.
+  String? _pendingWordSentence;
+  bool _savingWord = false;
+  String? _wordNotice;
+  Timer? _wordNoticeTimer;
 
   /// 캐릭터 대사 루프가 아직 살아 있는지. 일시정지를 풀 때 이 값이 true 면
   /// 루프가 스스로 이어 읽으므로 대사를 다시 틀어 주지 않습니다.
@@ -224,6 +247,7 @@ class _PlayPageState extends State<PlayPage> {
     _questionTimer?.cancel();
     _listeningTimer?.cancel();
     _storyTimer?.cancel();
+    _wordNoticeTimer?.cancel();
     _confirmTimer?.cancel();
     // 화면을 떠나면 기다리던 발화 루프들도 풀어 줍니다 - 안 풀면 취소된
     // 타이머·닫힌 문 앞에서 영영 매달린 채로 남습니다.
@@ -256,6 +280,8 @@ class _PlayPageState extends State<PlayPage> {
         _snapshot = snapshot;
         _mission = recoveredMission;
         _characterReply = null;
+        _fixedDialogue = false;
+        _pendingWord = null;
         _lastChildText = recoveredChild?.text;
         _lastSttLowConfidence = recoveredChild?.sttLowConfidence ?? false;
         // 복원한 발화는 이 장면의 것입니다 - 이어서 부르는
@@ -345,6 +371,7 @@ class _PlayPageState extends State<PlayPage> {
     }
     if ((snapshot.openingText ?? '').trim().isNotEmpty) {
       _characterReply = snapshot.openingText;
+      _fixedDialogue = true;
       unawaited(
         _playCharacterMessage(
           snapshot.openingText!,
@@ -369,7 +396,10 @@ class _PlayPageState extends State<PlayPage> {
         widget.sessionId,
       );
       if (!mounted) return;
-      setState(() => _characterReply = opening.text);
+      setState(() {
+        _characterReply = opening.text;
+        _fixedDialogue = true;
+      });
       await _playCharacterMessage(
         opening.text,
         audioUrl: opening.audioUrl,
@@ -381,6 +411,85 @@ class _PlayPageState extends State<PlayPage> {
       if (await _tryAutoRecover(error)) return;
       setState(() => _loadError = _describeFailure(error));
     }
+  }
+
+  /// 고정 대사의 단어를 아이가 눌렀다. 구두점만 걷어내고 잡아 둔다 -
+  /// 조사는 떼지 않는다. 형태소 분석 없이 끝 글자를 자르면 "마을"의 "을"처럼
+  /// 낱말 일부를 조사로 오인해 단어를 훼손한다. 조사째 담긴 단어도 서버 뜻
+  /// 생성이 낱말 기준으로 풀어 준다.
+  void _onDialogueWordTap(String token) {
+    final String word = token.replaceAll(_wordTrimPattern, '').trim();
+    if (word.isEmpty || _savingWord) return;
+    setState(() {
+      _pendingWord = word;
+      // 예문은 고정 대사에서만 잡는다. 동적 대사 문장은 아이 발화의 오인식
+      // 인용이 섞일 수 있어, 서버가 사전/생성 예문으로 채우게 비워 보낸다.
+      _pendingWordSentence = _fixedDialogue ? _visibleCharacterText : null;
+      _wordNotice = null;
+    });
+  }
+
+  static final RegExp _wordTrimPattern = RegExp(
+    '[.,!?"\'\u2026:;()\\[\\]~\u00b7]',
+  );
+
+  Future<void> _confirmWordSave() async {
+    final DialogueWordCapture? capture = widget.wordCapture;
+    final String? word = _pendingWord;
+    if (capture == null || word == null || _savingWord) return;
+    final String? sentence = _pendingWordSentence;
+    setState(() => _savingWord = true);
+    try {
+      final WordCaptureOutcome outcome = await capture.save(
+        word: word,
+        sourceSceneId: _snapshot?.currentScene?.sceneId,
+        exampleSentence: sentence,
+      );
+      if (!mounted) return;
+      // 안내는 서버가 실제 저장한 표제어로 한다("기왓장이" -> "기왓장").
+      // 아이가 단어장 화면에서 보게 될 형태와 같아야 헷갈리지 않는다.
+      final String savedWord = outcome.savedWord ?? word;
+      _showWordNotice(switch (outcome.result) {
+        WordCaptureResult.saved => "'$savedWord' 단어장에 담았어요",
+        WordCaptureResult.duplicate => "'$word' 이미 담아 둔 단어예요",
+      });
+    } on Failure catch (error) {
+      if (!mounted) return;
+      // 담기 실패로 이야기 흐름을 막지 않는다 - 안내만 하고 대화는 그대로.
+      // INVALID_WORD는 실패가 아니라 판정이다 - 동적 대사의 오인식 단어를
+      // 서버가 거른 것이니 문구도 그렇게 말한다.
+      final bool notRealWord =
+          error is ServerFailure && error.code == 'INVALID_WORD';
+      _showWordNotice(
+        notRealWord
+            ? '이 말은 단어장에 담기 어려워요. 다른 단어를 골라 볼까?'
+            : '지금은 담을 수 없어요. 나중에 다시 눌러 볼까?',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingWord = false;
+          _pendingWord = null;
+          _pendingWordSentence = null;
+        });
+      }
+    }
+  }
+
+  void _cancelWordSave() {
+    if (_savingWord) return;
+    setState(() {
+      _pendingWord = null;
+      _pendingWordSentence = null;
+    });
+  }
+
+  void _showWordNotice(String message) {
+    _wordNoticeTimer?.cancel();
+    setState(() => _wordNotice = message);
+    _wordNoticeTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _wordNotice = null);
+    });
   }
 
   String get _visibleCharacterText {
@@ -427,6 +536,8 @@ class _PlayPageState extends State<PlayPage> {
         _submittingUtterance = false;
         _transcribingVoice = false;
         _characterReply = result.characterText;
+        _fixedDialogue = false;
+        _pendingWord = null;
       });
       await _presentTurnResult(result);
     } on Failure catch (error) {
@@ -819,6 +930,8 @@ class _PlayPageState extends State<PlayPage> {
         _submittingMission = false;
         _missionCompleted = true;
         _characterReply = result.characterText;
+        _fixedDialogue = false;
+        _pendingWord = null;
       });
       await Future<void>.delayed(const Duration(milliseconds: 950));
       if (!mounted) return;
@@ -1527,6 +1640,17 @@ class _PlayPageState extends State<PlayPage> {
                         pendingConfirmText: _pendingTranscription?.text,
                         onConfirmPending: _confirmPending,
                         onRetryPending: _retryPending,
+                        // 담기 통로가 있으면 고정/동적 대사 모두 단어를
+                        // 누를 수 있습니다. 동적 대사의 오인식 단어는 서버
+                        // 유효성 관문(422 INVALID_WORD)이 걸러 줍니다.
+                        onWordTap: widget.wordCapture != null
+                            ? _onDialogueWordTap
+                            : null,
+                        pendingWord: _pendingWord,
+                        savingWord: _savingWord,
+                        wordNotice: _wordNotice,
+                        onConfirmWord: _confirmWordSave,
+                        onCancelWord: _cancelWordSave,
                       ),
                     ),
                   ],
@@ -1914,6 +2038,12 @@ class _DialogueCanvas extends StatelessWidget {
     this.pendingConfirmText,
     this.onConfirmPending,
     this.onRetryPending,
+    this.onWordTap,
+    this.pendingWord,
+    this.savingWord = false,
+    this.wordNotice,
+    this.onConfirmWord,
+    this.onCancelWord,
   });
 
   /// 제작한 표정 에셋이 있는 장면에서만 값이 있다. null이면 [characterAsset] 한 장으로 그린다.
@@ -1935,6 +2065,15 @@ class _DialogueCanvas extends StatelessWidget {
   /// 무음/인식 실패로 다시 말해야 할 때만 값이 있다. [lastSttLowConfidence]
   /// 와 달리 화면을 안 바꾸고 마이크 옆에만 짧게 띄운다.
   final String? sttHint;
+
+  /// 고정 대사일 때만 값이 있다. null 이면 말풍선은 지금처럼 통짜 글로
+  /// 그려지고 단어를 누를 수 없다(동적 대사).
+  final void Function(String token)? onWordTap;
+  final String? pendingWord;
+  final bool savingWord;
+  final String? wordNotice;
+  final VoidCallback? onConfirmWord;
+  final VoidCallback? onCancelWord;
 
   /// 저신뢰 인식 결과를 제출하기 전에 아이가 확인하는 중이면 그 텍스트.
   /// 값이 있으면 말풍선이 "맞아요 / 다시 말할래요" 버튼을 보여준다.
@@ -1992,6 +2131,12 @@ class _DialogueCanvas extends StatelessWidget {
                 characterName: characterName,
                 question: question,
                 compact: compact,
+                onWordTap: onWordTap,
+                pendingWord: pendingWord,
+                savingWord: savingWord,
+                wordNotice: wordNotice,
+                onConfirmWord: onConfirmWord,
+                onCancelWord: onCancelWord,
                 // 아이 말풍선(아래)과 서로 밀어내지 않도록 위아래로 나눠
                 // 씁니다. 좁은 폭에서 대사가 길어져도 잘리는 대신 이 안에서
                 // 굴러갑니다.
@@ -2076,11 +2221,25 @@ class _QuestionBubble extends StatelessWidget {
     required this.question,
     required this.compact,
     required this.maxHeight,
+    this.onWordTap,
+    this.pendingWord,
+    this.savingWord = false,
+    this.wordNotice,
+    this.onConfirmWord,
+    this.onCancelWord,
   });
 
   /// 말풍선이 차지해도 되는 최대 높이. 아이 말풍선을 밀어내지 않도록
   /// [_DialogueCanvas] 가 화면 높이에서 계산해 넘깁니다.
   final double maxHeight;
+
+  TextStyle get _questionStyle => TextStyle(
+    color: const Color(0xFF172A3E),
+    fontSize: _fontSize,
+    height: 1.35,
+    fontWeight: FontWeight.w900,
+    letterSpacing: -.5,
+  );
 
   /// 길이에 따라 한 단계씩 줄어드는 글자 크기. 자르는 대신 줄입니다.
   double get _fontSize {
@@ -2092,6 +2251,14 @@ class _QuestionBubble extends StatelessWidget {
   final String characterName;
   final String question;
   final bool compact;
+
+  /// 값이 있으면 대사가 단어 단위로 눌리는 고정 대사다. → [_TappableDialogue]
+  final void Function(String token)? onWordTap;
+  final String? pendingWord;
+  final bool savingWord;
+  final String? wordNotice;
+  final VoidCallback? onConfirmWord;
+  final VoidCallback? onCancelWord;
 
   @override
   Widget build(BuildContext context) {
@@ -2166,23 +2333,197 @@ class _QuestionBubble extends StatelessWidget {
                   child: Semantics(
                     liveRegion: true,
                     label: question,
-                    child: Text(
-                      question,
-                      style: TextStyle(
-                        color: const Color(0xFF172A3E),
-                        fontSize: _fontSize,
-                        height: 1.35,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -.5,
-                      ),
-                    ),
+                    child: onWordTap == null
+                        ? Text(question, style: _questionStyle)
+                        : _TappableDialogue(
+                            text: question,
+                            style: _questionStyle,
+                            selectedWord: pendingWord,
+                            onWordTap: onWordTap!,
+                          ),
                   ),
                 ),
               ),
+              if (pendingWord != null) ...<Widget>[
+                const SizedBox(height: 12),
+                _WordSaveBar(
+                  word: pendingWord!,
+                  saving: savingWord,
+                  compact: compact,
+                  onSave: onConfirmWord,
+                  onCancel: onCancelWord,
+                ),
+              ] else if (wordNotice != null) ...<Widget>[
+                const SizedBox(height: 10),
+                Text(
+                  wordNotice!,
+                  style: const TextStyle(
+                    color: Color(0xFF4EA883),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 고정 대사를 단어 단위로 눌리게 그린다.
+///
+/// RichText + TapGestureRecognizer 대신 Wrap을 쓴다 - recognizer는 dispose
+/// 관리가 필요해 StatefulWidget이 되고, Wrap이면 토큰마다 위젯이라 테스트에서
+/// find.text('단어')로 바로 잡힌다. 줄바꿈은 어차피 공백 단위라 결과가 같다.
+class _TappableDialogue extends StatelessWidget {
+  const _TappableDialogue({
+    required this.text,
+    required this.style,
+    required this.onWordTap,
+    this.selectedWord,
+  });
+
+  final String text;
+  final TextStyle style;
+  final void Function(String token) onWordTap;
+  final String? selectedWord;
+
+  @override
+  Widget build(BuildContext context) {
+    final List<String> tokens = text
+        .split(RegExp(r'\s+'))
+        .where((String token) => token.isNotEmpty)
+        .toList(growable: false);
+    return Wrap(
+      spacing: (style.fontSize ?? 27) * .26,
+      runSpacing: 6,
+      children: <Widget>[
+        for (final String token in tokens)
+          GestureDetector(
+            onTap: () => onWordTap(token),
+            behavior: HitTestBehavior.opaque,
+            child: Text(
+              token,
+              style: _isSelected(token)
+                  ? style.copyWith(
+                      color: const Color(0xFF1C6BC8),
+                      decoration: TextDecoration.underline,
+                      decorationColor: const Color(0xFF1C6BC8),
+                      decorationThickness: 2.5,
+                    )
+                  : style,
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// 구두점을 걷어낸 뒤 비교한다 - "기왓장이" 토큰을 눌러 "기왓장이"가
+  /// 선택돼도, 토큰 끝 물음표 등으로 어긋나지 않게.
+  bool _isSelected(String token) {
+    final String? selected = selectedWord;
+    if (selected == null) return false;
+    return token == selected || token.startsWith(selected);
+  }
+}
+
+/// "이 단어를 담을까요?" 확인 줄. 시험이 아니라 담기이므로 버튼은 둘뿐이고
+/// 어느 쪽을 골라도 이야기는 그대로 이어진다.
+class _WordSaveBar extends StatelessWidget {
+  const _WordSaveBar({
+    required this.word,
+    required this.saving,
+    required this.compact,
+    required this.onSave,
+    required this.onCancel,
+  });
+
+  final String word;
+  final bool saving;
+  final bool compact;
+  final VoidCallback? onSave;
+  final VoidCallback? onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 12 : 16,
+        vertical: compact ? 8 : 10,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF9CC4EE), width: 2),
+      ),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Text(
+              "'$word' 단어장에 담을까요?",
+              style: const TextStyle(
+                color: Color(0xFF1C4F86),
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          _WordSaveButton(
+            label: saving ? '담는 중...' : '담기',
+            emphasized: true,
+            onTap: saving ? null : onSave,
+          ),
+          const SizedBox(width: 8),
+          _WordSaveButton(
+            label: '그냥 둘게요',
+            emphasized: false,
+            onTap: saving ? null : onCancel,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WordSaveButton extends StatelessWidget {
+  const _WordSaveButton({
+    required this.label,
+    required this.emphasized,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool emphasized;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        // 초등 저학년 손가락 기준 최소 44 - 텍스트가 작아도 판은 크게.
+        constraints: const BoxConstraints(minHeight: 44),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: emphasized ? const Color(0xFF2E7CD6) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: emphasized
+              ? null
+              : Border.all(color: const Color(0xFF9CC4EE), width: 1.5),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: emphasized ? Colors.white : const Color(0xFF1C4F86),
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
     );
   }
 }
