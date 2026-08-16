@@ -83,6 +83,8 @@ class SavedWordDto {
     required this.meaning,
     required this.sentence,
     required this.liked,
+    this.sentenceDaily,
+    this.sentenceAdvanced,
     this.audio,
     this.savedAt,
   });
@@ -92,6 +94,10 @@ class SavedWordDto {
     word: json['word'] as String? ?? '',
     meaning: json['meaning'] as String? ?? '',
     sentence: json['sentence'] as String? ?? '',
+    // 서버 응답 필드명과 같은 키를 쓴다(exampleSentenceDaily/Advanced) -
+    // 실서버 연동 시 매핑이 그대로 이어지게. 예문 3종(V14) 이전 데이터는 null.
+    sentenceDaily: json['exampleSentenceDaily'] as String?,
+    sentenceAdvanced: json['exampleSentenceAdvanced'] as String?,
     audio: json['audio'] as String?,
     liked: json['liked'] as bool? ?? false,
     savedAt: json['savedAt'] as String?,
@@ -101,6 +107,8 @@ class SavedWordDto {
   final String word;
   final String meaning;
   final String sentence;
+  final String? sentenceDaily;
+  final String? sentenceAdvanced;
   final String? audio;
   final bool liked;
 
@@ -112,6 +120,8 @@ class SavedWordDto {
     word: word,
     meaning: meaning,
     sentence: sentence,
+    sentenceDaily: sentenceDaily,
+    sentenceAdvanced: sentenceAdvanced,
     audio: audio,
     liked: liked,
     // 타임존 없는 문자열이 와도 화면이 죽지 않게 방어합니다.
