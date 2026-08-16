@@ -103,14 +103,17 @@ abstract final class StoryListStrings {
 
 /// 이야기 상세(`/stories/:storyId`) 전용 문구.
 abstract final class StoryDetailStrings {
-  /// 도입문·역할 설명을 소리로 듣는 버튼. 이 화면의 음성 우선 원칙의 핵심.
+  /// 도입문을 소리로 듣는 버튼. 이 화면의 음성 우선 원칙의 핵심.
   static const String listen = '들려줘';
 
   /// 이 화면의 단일 핵심 액션. 세션이 생성되는 유일한 지점입니다.
   static const String start = '시작하기';
 
-  /// "이 이야기에서 너는 ○○이야!"
-  static String roleTitle(String roleName) => '이 이야기에서 너는\n"$roleName"야!';
+  /// 역할 카드의 눈길잡이. 주인공은 아랫줄의 이름이라 이 줄은 작게 둡니다.
+  static const String roleIntro = '이 이야기에서 너는';
+
+  /// 역할 카드에서 가장 큰 글자. 서버가 주는 역할 정보는 이 이름 하나뿐입니다.
+  static String roleName(String name) => '"$name"야!';
 
   /// 없는 storyId 로 들어온 경우.
   static const String notFound = '앗, 이 이야기를 찾을 수 없어.';
@@ -163,6 +166,22 @@ abstract final class RecapStrings {
   static const String finish = '다 했어';
   static const String saving = '저장 중';
 
+  /// 녹음을 끝내고 글자를 받아 오는 사이.
+  static const String retellTranscribing = '무슨 이야기인지 듣고 있어…';
+
+  // ── 마이크·STT 안내 ──
+  // 화면을 통째로 에러로 바꾸지 않습니다. 아이는 말하는 중이고, 이 부류는
+  // 다시 말하거나 잠시 뒤에 하면 풀립니다. (`play_view.dart` 와 같은 표)
+  static const String micDenied = '마이크를 쓰게 해 줄래?';
+  static const String micFailed = '마이크를 켜지 못했어. 다시 눌러 볼까?';
+  static const String sttEmpty = '잘 못 들었어요. 다시 말해 볼까?';
+  static const String sttTooLong = '말이 조금 길었어요. 짧게 말해 볼까?';
+  static const String sttUnavailable = '지금은 잘 안 들려요. 잠시 뒤에 다시 말해 볼까?';
+
+  /// 완료 저장이 실패했을 때. **다시 누르면 된다**를 반드시 함께 말합니다 -
+  /// 안 그러면 아이가 활동을 처음부터 다시 합니다.
+  static String saveFailed(String reason) => '$reason 다시 눌러 볼까?';
+
   static String sceneOrder(int order, String title) => '$order번째 장면, $title';
 
   /// 낱말이 붙은 장면. 장면과 낱말을 **한 덩어리**로 읽어 줍니다 — 따로 읽으면
@@ -175,6 +194,12 @@ abstract final class RecapStrings {
 
   // ── 완료 ──
   static const String completed = '이야기를 멋지게 들려줬어!';
+
+  /// 이번 완주로 받은 별가루. 서버가 지급한 실제 수치입니다.
+  static String completedStardust(int earned) => '별가루 $earned개를 받았어!';
+
+  static String completedUnlocked(int count) => '새 아이템 $count개가 열렸어!';
+
   static const String completedAction = '마치기';
 }
 
@@ -196,7 +221,12 @@ abstract final class WordStrings {
 
   // ── 단어 상세 모달(모달 #2) ──
   static const String meaning = '무슨 뜻이냐면';
+
+  /// 뜻이 아직 없는 단어. 빈 칸을 두면 고장으로 보입니다.
+  static const String meaningMissing = '아직 뜻을 준비하고 있어.';
   static const String exampleInStory = '이야기에서는 이렇게 나왔어';
+  static const String exampleInDaily = '평소에는 이렇게 써';
+  static const String exampleAdvanced = '조금 어려운 문장에도 도전!';
   static const String like = '좋아요';
   static const String close = '닫기';
 }

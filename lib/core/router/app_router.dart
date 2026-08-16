@@ -11,6 +11,7 @@ import '../../features/mypage/presentation/views/report_detail_view.dart';
 import '../../features/mypage/presentation/views/report_list_view.dart';
 import '../../features/mypage/presentation/views/settings_view.dart';
 import '../../features/planet/presentation/views/planet_view.dart';
+import '../../features/play/data/dialogue_word_capture.dart';
 import '../../features/play/domain/repositories/play_repository.dart';
 import '../../features/play/presentation/views/play_recap_view.dart';
 import '../../features/play/presentation/views/play_view.dart';
@@ -93,6 +94,7 @@ GoRouter createAppRouter({
             state.uri.queryParameters[AppRoutes.totalScenesParam] ?? '',
           ),
           repository: getIt<PlayRepository>(),
+          wordCapture: getIt<DialogueWordCapture>(),
         ),
         routes: <RouteBase>[
           GoRoute(
@@ -100,6 +102,7 @@ GoRouter createAppRouter({
             builder: (BuildContext context, GoRouterState state) =>
                 PlayRecapPage(
                   sessionId: state.pathParameters[AppRoutes.sessionIdParam]!,
+                  repository: getIt<PlayRepository>(),
                 ),
           ),
         ],

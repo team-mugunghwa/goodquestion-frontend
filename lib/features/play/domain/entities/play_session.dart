@@ -262,3 +262,86 @@ class PlaySessionSnapshot {
   final PlayMission? mission;
   final List<PlayMessage> messages;
 }
+
+// ─────────────────────────────────────────────────────────
+// 말하기 후 활동 (`/api/sessions/{id}/post-activity`)
+// → `docs/API.md` 2.10 · `docs/이야기_전개_가이드.md` 3.7
+// ─────────────────────────────────────────────────────────
+
+/// 순서 맞추기 카드 한 장. **그림 경로는 서버가 주지 않습니다** - 화면이
+/// [cardId] 의 번호로 프런트 에셋을 찾습니다.
+class PlayPostActivityCard {
+  const PlayPostActivityCard({required this.cardId, required this.text});
+
+  final String cardId;
+
+  /// 장면 설명. 화면에는 그리지 않고 스크린리더 라벨로만 씁니다 - 글로
+  /// 보여 주면 그림만 보고 맞추는 활동에서 정답이 새어 나갑니다.
+  final String text;
+}
+
+/// `POST .../post-activity/start` 응답.
+class PlayPostActivityStart {
+  const PlayPostActivityStart({
+    required this.cards,
+    required this.attemptCount,
+  });
+
+  /// **서버가 이미 섞어서 준 순서**입니다(세션마다 시드 고정). 프런트가 또
+  /// 섞으면 다시 들어올 때마다 배치가 달라집니다.
+  final List<PlayPostActivityCard> cards;
+
+  final int attemptCount;
+}
+
+/// `POST .../post-activity/order` 응답. **정답 판정은 서버만 합니다.**
+class PlayCardOrderResult {
+  const PlayCardOrderResult({
+    required this.correct,
+    this.retellingKeywords = const <String>[],
+  });
+
+  final bool correct;
+
+  /// 맞혔을 때만 값이 있습니다(오답이면 서버가 null → 빈 목록). 순서를 맞히기
+  /// 전에는 화면에 내보내면 안 됩니다 - 낱말이 곧 순서의 단서입니다.
+  final List<String> retellingKeywords;
+}
+
+class PlayStardust {
+  const PlayStardust({required this.earned, required this.balance});
+
+  final int earned;
+  final int balance;
+}
+
+class PlayUnlockedItem {
+  const PlayUnlockedItem({
+    required this.itemId,
+    required this.name,
+    this.thumbnailUrl,
+  });
+
+  final String itemId;
+  final String name;
+  final String? thumbnailUrl;
+}
+
+/// `POST .../post-activity/retelling` 응답. 이 호출 하나로 **세션 완료 ·
+/// 별가루 지급 · 아이템 해금**이 끝납니다.
+class PlayRetellingResult {
+  const PlayRetellingResult({
+    required this.sessionStatus,
+    this.completedAt,
+    this.stardust,
+    this.unlockedItems = const <PlayUnlockedItem>[],
+  });
+
+  final String sessionStatus;
+  final DateTime? completedAt;
+
+  /// 지급 내역(`breakdown`)은 아이 화면에서 쓰지 않아 받은 개수와 잔액만
+  /// 들고 옵니다.
+  final PlayStardust? stardust;
+  final List<PlayUnlockedItem> unlockedItems;
+}

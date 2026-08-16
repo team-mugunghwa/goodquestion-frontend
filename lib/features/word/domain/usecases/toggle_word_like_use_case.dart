@@ -6,5 +6,5 @@ class ToggleWordLikeUseCase {
 
   final WordRepository _repository;
 
-  Future<bool> call(int wordId) => _repository.toggleLike(wordId);
+  Future<bool> call(String wordId) => _repository.toggleLike(wordId);
 }

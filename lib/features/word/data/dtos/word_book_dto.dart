@@ -51,8 +51,10 @@ class WordGroupDto {
     this.storyImage,
   });
 
+  // 더미 JSON 은 ID 가 숫자입니다. 서버는 UUID 문자열이라, 읽는 자리에서
+  // 문자열로 맞춥니다 — 더미를 고치는 것보다 여기가 한 곳입니다.
   factory WordGroupDto.fromJson(Map<String, dynamic> json) => WordGroupDto(
-    storyId: json['storyId'] as int? ?? 0,
+    storyId: json['storyId']?.toString(),
     storyTitle: json['storyTitle'] as String? ?? '',
     storyImage: json['storyImage'] as String?,
     words: (json['words'] as List<dynamic>? ?? <dynamic>[])
@@ -61,7 +63,7 @@ class WordGroupDto {
         .toList(growable: false),
   );
 
-  final int storyId;
+  final String? storyId;
   final String storyTitle;
   final String? storyImage;
   final List<SavedWordDto> words;
@@ -83,24 +85,32 @@ class SavedWordDto {
     required this.meaning,
     required this.sentence,
     required this.liked,
+    this.sentenceDaily,
+    this.sentenceAdvanced,
     this.audio,
     this.savedAt,
   });
 
   factory SavedWordDto.fromJson(Map<String, dynamic> json) => SavedWordDto(
-    wordId: json['wordId'] as int? ?? 0,
+    wordId: json['wordId']?.toString() ?? '',
     word: json['word'] as String? ?? '',
     meaning: json['meaning'] as String? ?? '',
     sentence: json['sentence'] as String? ?? '',
+    // 서버 응답 필드명과 같은 키를 쓴다(exampleSentenceDaily/Advanced) -
+    // 실서버 연동 시 매핑이 그대로 이어지게. 예문 3종(V14) 이전 데이터는 null.
+    sentenceDaily: json['exampleSentenceDaily'] as String?,
+    sentenceAdvanced: json['exampleSentenceAdvanced'] as String?,
     audio: json['audio'] as String?,
     liked: json['liked'] as bool? ?? false,
     savedAt: json['savedAt'] as String?,
   );
 
-  final int wordId;
+  final String wordId;
   final String word;
   final String meaning;
   final String sentence;
+  final String? sentenceDaily;
+  final String? sentenceAdvanced;
   final String? audio;
   final bool liked;
 
@@ -112,6 +122,8 @@ class SavedWordDto {
     word: word,
     meaning: meaning,
     sentence: sentence,
+    sentenceDaily: sentenceDaily,
+    sentenceAdvanced: sentenceAdvanced,
     audio: audio,
     liked: liked,
     // 타임존 없는 문자열이 와도 화면이 죽지 않게 방어합니다.

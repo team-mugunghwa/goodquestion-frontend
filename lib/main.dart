@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 
 import 'app.dart';
+import 'core/audio/speech_service.dart';
 import 'core/di/injector.dart';
 
 Future<void> main() async {
@@ -20,6 +21,10 @@ Future<void> main() async {
   ]);
 
   await configureDependencies();
+
+  // 기기에 한국어 목소리가 있는지 여기서 한 번 확인해 둡니다. 없으면 스피커
+  // 버튼이 비활성될 뿐, 앱은 그대로 뜹니다 — 소리 때문에 화면을 막지 않습니다.
+  await SpeechService.instance.init();
 
   runApp(const GoodQuestionApp());
 }
