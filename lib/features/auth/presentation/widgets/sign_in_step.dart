@@ -72,9 +72,9 @@ class _SectionCard extends StatelessWidget {
     padding: const EdgeInsets.all(28),
     decoration: BoxDecoration(
       // 우주 배경이 살짝 비치도록 아주 옅게 투명합니다.
+      // 테두리 없이 그림자만으로 띄워야 카드가 종이가 아니라 면으로 보입니다.
       color: AppColors.surface.withValues(alpha: 0.94),
       borderRadius: BorderRadius.circular(AppRadius.lg),
-      border: Border.all(color: AppColors.ink100),
       boxShadow: AppShadows.lift,
     ),
     child: Column(
@@ -257,10 +257,12 @@ class _EmailPanel extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
+        // 가운뎃점으로 잇던 세 링크를 간격만으로 나란히 둡니다.
+        // 문자 구분자는 버튼 사이에서 눌리지 않는 글자로 남아 지저분합니다.
         Wrap(
           alignment: WrapAlignment.center,
           crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 2,
+          spacing: AppSpacing.sm,
           children: <Widget>[
             TextButton(
               onPressed: busy ? null : vm.toggleSignUpMode,
@@ -270,12 +272,10 @@ class _EmailPanel extends StatelessWidget {
                     : AuthStrings.signUpWithEmail,
               ),
             ),
-            const Text('·'),
             TextButton(
               onPressed: busy ? null : () => context.go(AppRoutes.findId),
               child: const Text(AuthStrings.findId),
             ),
-            const Text('·'),
             TextButton(
               onPressed: busy ? null : () => context.go(AppRoutes.findPassword),
               child: const Text(AuthStrings.findPassword),

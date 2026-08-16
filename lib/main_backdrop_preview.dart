@@ -4,6 +4,11 @@ import 'package:provider/provider.dart';
 
 import 'core/router/app_routes.dart';
 import 'core/theme/app_theme.dart';
+import 'features/home/data/datasources/home_local_data_source.dart';
+import 'features/home/data/repositories/home_repository_mock.dart';
+import 'features/home/domain/usecases/get_home_summary_use_case.dart';
+import 'features/home/presentation/viewmodels/home_view_model.dart';
+import 'features/home/presentation/views/home_view.dart';
 import 'features/story/data/datasources/story_local_data_source.dart';
 import 'features/story/data/repositories/story_repository_mock.dart';
 import 'features/story/domain/usecases/get_story_catalog_use_case.dart';
@@ -54,8 +59,18 @@ final GoRouter _router = GoRouter(
         child: const StoryListView(),
       ),
     ),
+    GoRoute(
+      path: AppRoutes.home,
+      builder: (_, _) => ChangeNotifierProvider<HomeViewModel>(
+        create: (_) => HomeViewModel(
+          const GetHomeSummaryUseCase(
+            HomeRepositoryMock(HomeLocalDataSource()),
+          ),
+        )..load(),
+        child: const HomeView(),
+      ),
+    ),
     // 프리뷰 범위 밖의 목적지들. 하단 내비·카드 탭이 죽지 않게만 받아 줍니다.
-    GoRoute(path: AppRoutes.home, builder: (_, _) => const _OutOfScope()),
     GoRoute(path: AppRoutes.myPage, builder: (_, _) => const _OutOfScope()),
     GoRoute(
       path: AppRoutes.storyDetailPath,

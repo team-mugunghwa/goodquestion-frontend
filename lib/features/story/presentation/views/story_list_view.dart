@@ -6,7 +6,6 @@ import '../../../../core/constants/app_icons.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/router/app_routes.dart';
-import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
@@ -67,11 +66,9 @@ class StoryListView extends StatelessWidget {
           children: <Widget>[
             // 이야기 카드 그리드가 화면을 덮어도, 로딩·빈 상태에서 하늘이
             // 비어 보이지 않게 별과 달을 깔아 둡니다.
-            const CosmicBackdrop(
-              seed: 23,
-              planetCenterX: 0.22,
-              bottomInset: AppSizes.bottomNav,
-            ),
+            // 내비가 떠 있는 알약이 되면서 달은 화면 바닥까지 내려앉습니다.
+            // 알약 뒤로 달이 비쳐 배경과 내비가 한 장면이 됩니다.
+            const CosmicBackdrop(seed: 23, planetCenterX: 0.22),
             SafeArea(bottom: false, child: _layout(context, vm)),
           ],
         ),
@@ -176,21 +173,11 @@ class _Header extends StatelessWidget {
         metrics.screenPadding,
         AppSpacing.lg,
       ),
-      child: Row(
-        children: <Widget>[
-          const Icon(
-            AppIcons.stories,
-            size: AppSizes.iconChild,
-            color: AppColors.brandBlueDeep,
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Text(
-              StoryListStrings.title,
-              style: metrics.text(AppTypography.kidTitle),
-            ),
-          ),
-        ],
+      // 제목 앞 아이콘을 뗐습니다. 아이콘+제목 조합은 제목을 메뉴처럼
+      // 보이게 합니다 — 큰 글자 하나가 화면의 얼굴입니다.
+      child: Text(
+        StoryListStrings.title,
+        style: metrics.text(AppTypography.kidTitle),
       ),
     );
   }

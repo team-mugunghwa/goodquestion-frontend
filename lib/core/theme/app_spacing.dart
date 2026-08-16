@@ -57,6 +57,10 @@ abstract final class AppSizes {
   /// 아이 화면 아이콘.
   static const double iconChild = 40;
 
+  /// 하단 내비게이션 아이콘. [iconChild] 40 은 라벨과 함께 두면 내비가
+  /// 둔해 보여서, 내비에서만 한 단계 줄입니다. 터치 타겟은 탭 전체입니다.
+  static const double iconNav = 32;
+
   /// 보호자 화면 아이콘.
   static const double iconGuardian = 24;
 

@@ -49,12 +49,36 @@ class WordCard extends StatelessWidget {
               child: Container(
                 height: AppSizes.tapChildPrimary,
                 alignment: Alignment.centerLeft,
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-                child: Text(
-                  word.word,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: metrics.text(AppTypography.kidTitle),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                child: Row(
+                  children: <Widget>[
+                    // 첫 글자 배지 — 글자만 나열된 목록에 시선이 앉을 자리를
+                    // 만듭니다. 파스텔 면 + 잉크 글자 규칙 그대로입니다.
+                    Container(
+                      width: AppSizes.tapChildSecondary - AppSpacing.md,
+                      height: AppSizes.tapChildSecondary - AppSpacing.md,
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(
+                        color: AppColors.brandBlueSurface,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        word.word.isEmpty ? '' : word.word.substring(0, 1),
+                        style: metrics
+                            .text(AppTypography.kidLabel)
+                            .copyWith(color: AppColors.brandBlueDeep),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Text(
+                        word.word,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: metrics.text(AppTypography.kidTitle),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
