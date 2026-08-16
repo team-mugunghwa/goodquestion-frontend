@@ -1,8 +1,11 @@
+import 'dart:typed_data';
+
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failure.dart';
 import '../../../mypage/domain/entities/my_page_summary.dart';
 import '../../../mypage/domain/repositories/my_page_repository.dart';
 import '../../domain/entities/saved_word.dart';
+import '../../domain/entities/sentence_practice.dart';
 import '../../domain/entities/word_book.dart';
 import '../../domain/entities/word_group.dart';
 import '../../domain/repositories/word_repository.dart';
@@ -50,6 +53,25 @@ class WordRepositoryImpl implements WordRepository {
     );
     return updated.liked;
   });
+
+  @override
+  Future<SentencePracticeResult> practiceSentence({
+    required String wordId,
+    required SentenceType sentenceType,
+    required String spokenText,
+  }) => _guard(() async {
+    final MyPageChild child = await _selectedChild();
+    return (await _remote.practiceSentence(
+      child.childId,
+      wordId,
+      sentenceType: sentenceType.serverValue,
+      spokenText: spokenText,
+    )).toEntity();
+  });
+
+  @override
+  Future<String> transcribe(Uint8List wavBytes) =>
+      _guard(() => _remote.transcribe(wavBytes));
 
   /// 서버 순서(최신순)를 그대로 두고 **처음 나온 이야기 순서로** 묶습니다.
   /// 정렬을 다시 하지 않습니다 — 최근에 담은 이야기가 위에 오는 게 서버의

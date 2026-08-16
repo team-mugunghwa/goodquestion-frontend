@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import '../entities/sentence_practice.dart';
 import '../entities/word_book.dart';
 
 /// 담아 둔 단어의 출처.
@@ -12,4 +15,17 @@ abstract class WordRepository {
   /// 목록은 분류로 거르지 않습니다. 거르면 하트를 누른 단어가 목록에서
   /// 사라져 아이가 자기가 지운 줄 압니다. → `docs/API.md` 2.12
   Future<bool> toggleLike(String wordId);
+
+  /// 아이가 따라 말한 문장을 서버에 채점받습니다.
+  ///
+  /// 해당 종류의 예문이 없는 단어면 `ServerFailure` 코드
+  /// `EXAMPLE_SENTENCE_MISSING` 이 옵니다. (예문 확장 전에 담은 단어)
+  Future<SentencePracticeResult> practiceSentence({
+    required String wordId,
+    required SentenceType sentenceType,
+    required String spokenText,
+  });
+
+  /// 녹음(WAV)을 글자로 바꿉니다. 알아듣지 못했으면 예외를 던집니다.
+  Future<String> transcribe(Uint8List wavBytes);
 }
