@@ -292,7 +292,7 @@ class _PlayPageState extends State<PlayPage> {
     _releaseSpeechWait();
     _releaseNarrationWait();
     _openPauseGate();
-    _stopFollowingTimings();
+    _cancelTimingFollow();
     unawaited(_voiceRecorder.dispose());
     unawaited(_audioPlayer.dispose());
     super.dispose();
@@ -1444,26 +1444,46 @@ class _PlayPageState extends State<PlayPage> {
       : source;
 
   /// 재생 위치가 문장 실측 구간을 지날 때마다 [apply]에 문장 인덱스를 준다.
-  void _followTimings(
+  ///
+  /// 건 구독을 돌려준다 — 뒷정리는 **자기 것만** 끊어야 하기 때문이다
+  /// ([_stopFollowingTimings]).
+  StreamSubscription<Duration> _followTimings(
     List<PlayAudioTiming> timings,
     int sentenceCount,
     void Function(int index) apply,
   ) {
     unawaited(_timingSub?.cancel());
-    _timingSub = _audioPlayer.onPosition.listen((Duration position) {
-      final double seconds = position.inMilliseconds / 1000.0;
-      int index = 0;
-      for (final PlayAudioTiming timing in timings) {
-        if (seconds >= timing.start) index = timing.index;
-      }
-      if (sentenceCount > 0 && index >= sentenceCount) {
-        index = sentenceCount - 1;
-      }
-      apply(index);
-    });
+    final StreamSubscription<Duration> subscription = _audioPlayer.onPosition
+        .listen((Duration position) {
+          final double seconds = position.inMilliseconds / 1000.0;
+          int index = 0;
+          for (final PlayAudioTiming timing in timings) {
+            if (seconds >= timing.start) index = timing.index;
+          }
+          if (sentenceCount > 0 && index >= sentenceCount) {
+            index = sentenceCount - 1;
+          }
+          apply(index);
+        });
+    _timingSub = subscription;
+    return subscription;
   }
 
-  void _stopFollowingTimings() {
+  /// **자기가 건 구독만** 끊는다.
+  ///
+  /// 다시 듣기는 앞 재생이 아직 `playUrl` 을 기다리는 동안 새 재생을 건다
+  /// (`stop()` 을 기다리지 않는다). 그래서 새 구독이 먼저 걸리고, 곧이어
+  /// 풀려난 앞 재생의 뒷정리가 뒤늦게 돈다 — 그때 필드를 통째로 비우면
+  /// 방금 건 구독이 끊겨서 **소리는 끝까지 나오는데 자막만 첫 문장에 멈춘다.**
+  void _stopFollowingTimings(StreamSubscription<Duration>? subscription) {
+    unawaited(subscription?.cancel());
+    if (identical(_timingSub, subscription)) _timingSub = null;
+  }
+
+  /// 지금 걸린 구독을 주인과 무관하게 끊는다. 발화를 통째로 끊거나
+  /// ([_stopSpeaking]) 화면을 떠날 때만 쓴다 — 뒤이어 새 재생이 걸리는
+  /// 자리에서 쓰면 위의 문제가 그대로 돌아온다.
+  void _cancelTimingFollow() {
     unawaited(_timingSub?.cancel());
     _timingSub = null;
   }
@@ -1480,12 +1500,16 @@ class _PlayPageState extends State<PlayPage> {
   }) async {
     await _awaitResume(token);
     if (!mounted || token != _speechToken) return true;
-    _followTimings(timings, sentenceCount, (int index) {
-      if (!mounted || token != _speechToken) return;
-      if (_characterSentenceIndex != index) {
-        setState(() => _characterSentenceIndex = index);
-      }
-    });
+    final StreamSubscription<Duration> subscription = _followTimings(
+      timings,
+      sentenceCount,
+      (int index) {
+        if (!mounted || token != _speechToken) return;
+        if (_characterSentenceIndex != index) {
+          setState(() => _characterSentenceIndex = index);
+        }
+      },
+    );
     try {
       await _audioPlayer.playUrl(_resolveMediaUrl(audioUrl));
       return true;
@@ -1493,7 +1517,7 @@ class _PlayPageState extends State<PlayPage> {
       debugPrint('[dialogue] prerendered play FAILED: $error');
       return false;
     } finally {
-      _stopFollowingTimings();
+      _stopFollowingTimings(subscription);
     }
   }
 
@@ -1506,12 +1530,16 @@ class _PlayPageState extends State<PlayPage> {
   }) async {
     final String? audioUrl = scene.narrationAudioUrl;
     if (audioUrl == null) return false;
-    _followTimings(scene.narrationTimings, sentenceCount, (int index) {
-      if (!mounted || token != _speechToken) return;
-      if (_narrationIndex != index) {
-        setState(() => _narrationIndex = index);
-      }
-    });
+    final StreamSubscription<Duration> subscription = _followTimings(
+      scene.narrationTimings,
+      sentenceCount,
+      (int index) {
+        if (!mounted || token != _speechToken) return;
+        if (_narrationIndex != index) {
+          setState(() => _narrationIndex = index);
+        }
+      },
+    );
     try {
       await _audioPlayer.playUrl(_resolveMediaUrl(audioUrl));
       return true;
@@ -1519,7 +1547,7 @@ class _PlayPageState extends State<PlayPage> {
       debugPrint('[narration] prerendered play FAILED: $error');
       return false;
     } finally {
-      _stopFollowingTimings();
+      _stopFollowingTimings(subscription);
     }
   }
 
@@ -1735,7 +1763,7 @@ class _PlayPageState extends State<PlayPage> {
   /// 지금 나오고 있는 말과 예약된 다음 문장을 모두 끊습니다.
   void _stopSpeaking() {
     _speechToken++;
-    _stopFollowingTimings();
+    _cancelTimingFollow();
     _questionTimer?.cancel();
     _listeningTimer?.cancel();
     _storyTimer?.cancel();

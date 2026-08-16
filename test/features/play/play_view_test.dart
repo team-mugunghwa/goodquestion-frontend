@@ -518,6 +518,61 @@ void main() {
     expect(audioPlayer.playCount, greaterThanOrEqualTo(1));
   });
 
+  testWidgets('다시 듣기로 다시 틀어도 자막이 재생 위치를 따라간다', (WidgetTester tester) async {
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    final _StoryNarrationSpyRepository repository =
+        _StoryNarrationSpyRepository()
+          ..initialSnapshot = const PlaySessionSnapshot(
+            phase: PlayPhase.story,
+            currentScene: PlayScene(
+              sceneId: 'scene-1',
+              sceneOrder: 1,
+              sceneType: PlaySceneType.story,
+              narrationSentences: <String>['첫 문장이에요.', '두 번째 문장이에요.'],
+              narrationAudioUrl: '/tts/banggui/sc_banggui_01.mp3',
+              narrationTimings: <PlayAudioTiming>[
+                PlayAudioTiming(index: 0, start: 0, end: 6.2),
+                PlayAudioTiming(index: 1, start: 6.8, end: 13.2),
+              ],
+            ),
+          );
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      settle: false,
+    );
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+
+    // 첫 재생 - 위치를 흘리면 자막이 넘어갑니다.
+    audioPlayer.emitPosition(const Duration(seconds: 7));
+    for (int i = 0; i < 3; i++) {
+      await tester.pump();
+    }
+    expect(find.text('두 번째 문장이에요.'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('다시 듣기'));
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    expect(find.text('첫 문장이에요.'), findsOneWidget, reason: '다시 듣기는 장면 처음부터입니다');
+    expect(audioPlayer.playCount, 2);
+
+    // 다시 튼 재생에서도 위치를 따라가야 합니다. 앞 재생의 뒷정리가 새로 건
+    // 위치 구독을 끊어 버리면, 소리는 끝까지 나오는데 자막만 첫 문장에 멈춥니다.
+    audioPlayer.emitPosition(const Duration(seconds: 7));
+    for (int i = 0; i < 3; i++) {
+      await tester.pump();
+    }
+    expect(
+      find.text('두 번째 문장이에요.'),
+      findsOneWidget,
+      reason: '다시 듣기에서도 첫 재생과 똑같이 음성 진행에 맞춰 문장이 넘어가야 합니다',
+    );
+  });
+
   testWidgets('사전 렌더 오프닝 대사는 문장이 여러 개여도 파일 하나로 재생한다', (
     WidgetTester tester,
   ) async {
