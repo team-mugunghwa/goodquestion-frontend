@@ -69,11 +69,17 @@ class _HandoffPreviewApp extends StatelessWidget {
 class _EndedSessionRepository implements PlayRepository {
   @override
   Future<PlaySessionSnapshot> resume(String sessionId) async =>
-      const PlaySessionSnapshot(phase: PlayPhase.postActivity, currentScene: null);
+      const PlaySessionSnapshot(
+        phase: PlayPhase.postActivity,
+        currentScene: null,
+      );
 
   @override
   Future<PlaySessionSnapshot> completeStoryScene(String sessionId) async =>
-      const PlaySessionSnapshot(phase: PlayPhase.postActivity, currentScene: null);
+      const PlaySessionSnapshot(
+        phase: PlayPhase.postActivity,
+        currentScene: null,
+      );
 
   @override
   Future<List<PlayMessage>> sceneMessages(
