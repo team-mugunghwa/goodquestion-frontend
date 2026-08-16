@@ -3,7 +3,9 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:goodquestion/core/error/failure.dart';
+import 'package:goodquestion/core/router/app_routes.dart';
 import 'package:goodquestion/core/theme/app_theme.dart';
 import 'package:goodquestion/core/widgets/kid_button.dart';
 import 'package:goodquestion/features/play/domain/entities/play_session.dart';
@@ -329,6 +331,58 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.text('이야기를 멋지게 들려줬어!'), findsOneWidget);
+  });
+
+  testWidgets('마치기는 재생 화면을 거치지 않고 홈으로 간다', (WidgetTester tester) async {
+    // 이 화면은 재생 화면 아래 중첩 라우트입니다. pop 으로 물러서면 방금
+    // 끝낸 재생 화면에 머물러 홈까지 도달하지 못합니다.
+    final _RecapSpyRepository repository = _RecapSpyRepository();
+    tester.view.physicalSize = const Size(1280, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final GoRouter router = GoRouter(
+      initialLocation: AppRoutes.playRecapOf('session-1'),
+      routes: <RouteBase>[
+        GoRoute(
+          path: AppRoutes.home,
+          builder: (_, __) => const Scaffold(body: Text('홈 화면')),
+        ),
+        GoRoute(
+          path: AppRoutes.playPath,
+          builder: (_, __) => const Scaffold(body: Text('재생 화면')),
+          routes: <RouteBase>[
+            GoRoute(
+              path: 'recap',
+              builder: (_, GoRouterState state) => PlayRecapPage(
+                sessionId: state.pathParameters[AppRoutes.sessionIdParam]!,
+                repository: repository,
+                voiceRecorder: _FakeRecorder(),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp.router(theme: AppTheme.light, routerConfig: router),
+    );
+    await tester.pump();
+    await submitOrder(tester);
+    await speak(tester);
+    await tester.tap(find.text('다 했어'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    await tester.tap(find.text('마치기'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('홈 화면'), findsOneWidget);
+    expect(find.text('재생 화면'), findsNothing);
+    expect(find.byType(PlayRecapPage), findsNothing);
   });
 
   testWidgets('카드를 못 받아 오면 다시 시도할 수 있다', (WidgetTester tester) async {

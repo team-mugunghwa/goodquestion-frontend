@@ -3,11 +3,13 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_icons.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/error/failure.dart';
+import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_shadows.dart';
@@ -686,7 +688,7 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
         messageStyle: metrics.text(AppTypography.kidTitle),
         actionIcon: AppIcons.home,
         actionLabel: RecapStrings.completedAction,
-        onAction: () => Navigator.of(context).maybePop(),
+        onAction: _goHome,
       ),
     };
   }
@@ -700,6 +702,23 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
           for (final RecapSceneCard? card in _slots)
             if (card != null) card,
         ];
+
+  /// 마치기 — **pop 이 아니라 go 입니다.**
+  ///
+  /// 이 화면은 재생 화면 아래 중첩 라우트라 pop 하면 방금 끝낸 재생 화면으로
+  /// 돌아갑니다. 거기서 세션을 다시 불러 홈으로 튕겨 주기를 기대할 수는
+  /// 없습니다 - 실제로 홈까지 가지 못하고 재생 화면에 머뭅니다. 끝난 활동의
+  /// 다음 자리는 홈이므로 곧장 홈으로 갑니다.
+  ///
+  /// 라우터가 없는 자리(미리보기·위젯 테스트)에서는 pop 으로 물러섭니다.
+  void _goHome() {
+    final GoRouter? router = GoRouter.maybeOf(context);
+    if (router == null) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    router.go(AppRoutes.home);
+  }
 
   /// 완료 화면 문구. 별가루와 해금 아이템은 **서버 응답에서** 옵니다.
   String get _completedMessage {
