@@ -6,6 +6,7 @@ import '../../../../core/constants/app_icons.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
@@ -175,9 +176,21 @@ class _Header extends StatelessWidget {
       ),
       // 제목 앞 아이콘을 뗐습니다. 아이콘+제목 조합은 제목을 메뉴처럼
       // 보이게 합니다 — 큰 글자 하나가 화면의 얼굴입니다.
-      child: Text(
-        StoryListStrings.title,
-        style: metrics.text(AppTypography.kidTitle),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            StoryListStrings.title,
+            style: metrics.text(AppTypography.kidTitle),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            StoryListStrings.subtitle,
+            style: metrics
+                .text(AppTypography.kidLabel)
+                .copyWith(color: AppColors.ink500),
+          ),
+        ],
       ),
     );
   }

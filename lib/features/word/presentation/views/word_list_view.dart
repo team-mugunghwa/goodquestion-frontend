@@ -187,24 +187,34 @@ class _Header extends StatelessWidget {
         metrics.screenPadding,
         AppSpacing.lg,
       ),
+      // 제목 + 부제 두 줄. 개수 배지를 따로 달지 않고 부제 문장에 녹입니다.
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: <Widget>[
           Expanded(
-            child: Text(
-              WordStrings.title,
-              style: metrics.text(AppTypography.kidTitle),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  WordStrings.title,
+                  style: metrics.text(AppTypography.kidTitle),
+                ),
+                if (vm.state.isSuccess) ...<Widget>[
+                  const SizedBox(height: AppSpacing.xs),
+                  Semantics(
+                    label: WordStrings.savedCount(vm.totalCount),
+                    excludeSemantics: true,
+                    child: Text(
+                      WordStrings.subtitle(vm.totalCount),
+                      style: metrics
+                          .text(AppTypography.kidLabel)
+                          .copyWith(color: AppColors.ink500),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-          if (vm.state.isSuccess)
-            Semantics(
-              label: WordStrings.savedCount(vm.totalCount),
-              excludeSemantics: true,
-              child: KidInfoChip(
-                icon: AppIcons.savedWord,
-                label: '${vm.totalCount}',
-                metrics: metrics,
-              ),
-            ),
           const SizedBox(width: AppSpacing.md),
           _Avatar(name: vm.childName, image: vm.childAvatar),
         ],
@@ -315,14 +325,31 @@ class _GroupList extends StatelessWidget {
               _GroupHeader(group: group, metrics: metrics),
               const SizedBox(height: AppSpacing.md),
             ],
-            for (final SavedWord word in group.words) ...<Widget>[
-              WordCard(
-                word: word,
-                metrics: metrics,
-                onTap: () => _openDetail(context, word),
-              ),
-              const SizedBox(height: AppSpacing.md),
-            ],
+            // 태블릿(넓은 폭)에서는 2열 타일로 깔아 세로 스크롤을 줄입니다.
+            // 전폭 리스트는 넓은 화면에서 오른쪽 절반이 빈 채로 흘러갑니다.
+            LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
+                final int columns = metrics.isWide ? 2 : 1;
+                final double width =
+                    (constraints.maxWidth - (columns - 1) * AppSpacing.md) /
+                    columns;
+                return Wrap(
+                  spacing: AppSpacing.md,
+                  runSpacing: AppSpacing.md,
+                  children: <Widget>[
+                    for (final SavedWord word in group.words)
+                      SizedBox(
+                        width: width,
+                        child: WordCard(
+                          word: word,
+                          metrics: metrics,
+                          onTap: () => _openDetail(context, word),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
           ],
         );
       },

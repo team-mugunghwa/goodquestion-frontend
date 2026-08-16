@@ -97,7 +97,7 @@ void main() {
   testWidgets('상단 바·추천·행성·하단 내비가 함께 보인다', (WidgetTester tester) async {
     await pumpHome(tester, _StubRepository(summary: _withSession));
 
-    expect(find.text('하늘이'), findsOneWidget);
+    expect(find.text(HomeStrings.greeting('하늘이')), findsOneWidget);
     // 섹션 제목은 키워드만 색을 입히려고 RichText 로 그립니다.
     expect(
       find.text(HomeStrings.recommendedTitle, findRichText: true),

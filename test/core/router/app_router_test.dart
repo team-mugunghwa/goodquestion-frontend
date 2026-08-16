@@ -171,7 +171,7 @@ void main() {
 
   testWidgets('/login 로 들어가면 로그인 스텝이 뜬다', (WidgetTester tester) async {
     await pumpAt(tester, AppRoutes.login);
-    expect(find.text(AuthStrings.socialSignIn), findsOneWidget);
+    // 소셜 우선 단일 카드로 바뀌면서 카드 제목 대신 구분선 라벨을 봅니다.
     expect(find.text(AuthStrings.emailSignIn), findsOneWidget);
   });
 

@@ -19,52 +19,60 @@ class SignInStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        final bool twoColumns = constraints.maxWidth >= 760;
-        final Widget social = _SectionCard(
-          title: AuthStrings.socialSignIn,
-          child: _SocialPanel(vm: vm, options: options),
-        );
-        final Widget email = _SectionCard(
-          title: AuthStrings.emailSignIn,
-          child: _EmailPanel(vm: vm),
-        );
-
-        return ListView(
-          padding: const EdgeInsets.fromLTRB(24, 28, 24, 40),
-          children: <Widget>[
-            Image.asset(AppAssets.logo, height: 62, fit: BoxFit.contain),
-            const SizedBox(height: 10),
-            Text(
-              AuthStrings.tagline,
-              textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(color: AppColors.ink500),
-            ),
-            const SizedBox(height: 28),
-            if (twoColumns)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    // 소셜 우선의 단일 카드. 태블릿에서 카드 두 장을 나란히 두면 시선이
+    // 갈라지고 폼이 낮게 눌립니다 — 가운데 한 장이 읽는 순서를 만듭니다.
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 40, 24, 40),
+      children: <Widget>[
+        Image.asset(AppAssets.logo, height: 62, fit: BoxFit.contain),
+        const SizedBox(height: 10),
+        Text(
+          AuthStrings.tagline,
+          textAlign: TextAlign.center,
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(color: AppColors.ink500),
+        ),
+        const SizedBox(height: 28),
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: _SectionCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  Expanded(child: social),
-                  const SizedBox(width: 20),
-                  Expanded(child: email),
+                  _SocialPanel(vm: vm, options: options),
+                  const SizedBox(height: 24),
+                  // "또는 이메일로" 구분선. 이메일은 보조 경로입니다.
+                  Row(
+                    children: <Widget>[
+                      const Expanded(child: Divider()),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Text(
+                          AuthStrings.emailSignIn,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: AppColors.ink500),
+                        ),
+                      ),
+                      const Expanded(child: Divider()),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  _EmailPanel(vm: vm),
                 ],
-              )
-            else ...<Widget>[social, const SizedBox(height: 16), email],
-          ],
-        );
-      },
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
 
 class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.title, required this.child});
+  const _SectionCard({required this.child});
 
-  final String title;
   final Widget child;
 
   @override
@@ -77,20 +85,7 @@ class _SectionCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(AppRadius.lg),
       boxShadow: AppShadows.lift,
     ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Text(
-          title,
-          textAlign: TextAlign.center,
-          style: Theme.of(
-            context,
-          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 24),
-        child,
-      ],
-    ),
+    child: child,
   );
 }
 

@@ -48,6 +48,10 @@ abstract final class NavStrings {
 /// 홈(`/`) 전용 문구.
 abstract final class HomeStrings {
   // ── 섹션1 상단 바 ──
+  /// 인사말 헤더. 이름이 없으면 [greetingNoName] 을 씁니다.
+  static String greeting(String name) => '안녕, $name!';
+  static const String greetingNoName = '안녕!';
+  static const String greetingSub = '오늘은 어떤 이야기를 해볼까?';
   static const String profileSemantics = '아이 바꾸기';
   static const String stardust = '별가루';
 
@@ -95,6 +99,9 @@ abstract final class HomeStrings {
 /// 이야기 목록(`/stories`) 전용 문구.
 abstract final class StoryListStrings {
   static const String title = '어떤 이야기를 해볼까?';
+
+  /// 제목 아래 한 줄. 화면의 일을 아이 말로 알려 줍니다.
+  static const String subtitle = '마음에 드는 그림을 골라 봐';
 
   /// 고른 주제에 이야기가 없을 때. 아이 탓이 아니라는 톤.
   static const String emptyTopic = '이 주제는 아직 이야기가 없어.\n다른 것도 볼까?';
@@ -244,6 +251,9 @@ abstract final class RecapStrings {
 /// 단어장(`/words`) 전용 문구.
 abstract final class WordStrings {
   static const String title = '내 단어장';
+
+  /// 제목 아래 한 줄. 담은 개수를 자연스러운 문장으로 녹입니다.
+  static String subtitle(int count) => '이야기에서 만난 단어 $count개를 다시 만나요';
 
   /// 총 담은 단어 수. 스크린리더용 풀 문장.
   static String savedCount(int count) => '담은 단어 $count개';

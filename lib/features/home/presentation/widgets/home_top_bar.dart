@@ -54,7 +54,7 @@ class HomeTopBar extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.fromLTRB(
         metrics.screenPadding,
-        AppSpacing.sm,
+        AppSpacing.md,
         metrics.screenPadding,
         AppSpacing.sm,
       ),
@@ -161,12 +161,28 @@ class _ProfileArea extends StatelessWidget {
             // 아이 프로필이 없으면 이름 자리를 비워 둡니다. 여기서 "이름을
             // 만들어"라고 부르면, 정작 불러오기에 실패한 경우에도 그렇게 보입니다.
             else if (profile != null)
+              // 이름표 대신 인사말 두 줄. 홈이 아이에게 말을 거는 화면이
+              // 됩니다 — 캐릭터가 말한다는 문구 원칙 그대로입니다.
               Flexible(
-                child: Text(
-                  profile.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: metrics.text(AppTypography.kidLabel),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Text(
+                      HomeStrings.greeting(profile.name),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: metrics.text(AppTypography.kidTitle),
+                    ),
+                    Text(
+                      HomeStrings.greetingSub,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: metrics
+                          .text(AppTypography.kidLabel)
+                          .copyWith(color: AppColors.ink500),
+                    ),
+                  ],
                 ),
               ),
             const SizedBox(width: AppSpacing.sm),
