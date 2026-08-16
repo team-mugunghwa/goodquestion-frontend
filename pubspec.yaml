@@ -50,6 +50,10 @@ dependencies:
   # (docs/DECISIONS.md 019). 목소리가 없는 기기에서는 버튼이 비활성됩니다
   flutter_tts: ^4.2.5
 
+  # 장면 배경 영상(무음, 서버 정적 서빙). videoUrl 이 없거나 재생에 실패하면
+  # 기존 imageUrl 이미지로 폴백합니다 → lib/features/play/presentation/views/
+  video_player: ^2.14.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

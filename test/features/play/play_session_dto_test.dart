@@ -13,6 +13,7 @@ void main() {
           'sceneType': 'STORY',
           'narrationSentences': <String>['첫 문장', '둘째 문장'],
           'imageUrl': 'https://example.com/scene.png',
+          'videoUrl': '/stories/banggui/scenes/01_intro.mp4',
           'characterName': null,
           'maxTurns': null,
         },
@@ -32,6 +33,10 @@ void main() {
     expect(result.phase, PlayPhase.story);
     expect(result.currentScene?.sceneType, PlaySceneType.story);
     expect(result.currentScene?.narrationSentences, <String>['첫 문장', '둘째 문장']);
+    expect(
+      result.currentScene?.videoUrl,
+      '/stories/banggui/scenes/01_intro.mp4',
+    );
     expect(result.messages.single.text, '나도 도와줄래요.');
   });
 
@@ -58,6 +63,9 @@ void main() {
 
     expect(result.phase, PlayPhase.dialogue);
     expect(result.currentScene?.characterName, '토리');
+    // videoUrl 키가 없는 응답(백엔드 #104 이전 서버·영상 없는 장면)은
+    // null로 파싱되어 이미지 배경으로 동작해야 한다.
+    expect(result.currentScene?.videoUrl, isNull);
     expect(result.openingText, '넌 어떻게 생각해?');
   });
 

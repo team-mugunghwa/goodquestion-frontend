@@ -298,6 +298,9 @@ class PlaySessionDto {
       },
       narrationSentences: sentences,
       imageUrl: value['imageUrl'] as String?,
+      // 컬럼이 아직 없는 서버(백엔드 #104 이전)는 키 자체가 안 오고, 영상이
+      // 없는 장면(7·9)은 null이 온다 - 둘 다 이미지 배경으로 동작해야 한다.
+      videoUrl: value['videoUrl'] as String?,
       characterName: value['characterName'] as String?,
       maxTurns: (value['maxTurns'] as num?)?.toInt(),
       narrationAudioUrl: value['narrationAudioUrl'] as String?,

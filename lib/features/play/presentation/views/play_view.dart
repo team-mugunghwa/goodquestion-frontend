@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../../../core/config/app_config.dart';
 import '../../../../core/constants/app_icons.dart';
@@ -1916,14 +1917,20 @@ class _PlayPageState extends State<PlayPage> {
           return Stack(
             fit: StackFit.expand,
             children: <Widget>[
-              _StoryBackdrop(
+              _SceneBackdrop(
                 // 제작한 장면 배경이 있으면 그것이 우선이다. 서버 imageUrl은 배경과 캐릭터가
                 // 합쳐진 한 장이라 캐릭터를 따로 얹으면 인물이 둘로 보인다.
-                asset:
+                imageAsset:
                     _character?.scene.backgroundAsset ??
                     _retainedStoryImageUrl ??
                     dialogueScene?.imageUrl ??
                     widget.backgroundAsset,
+                // 같은 이유로 캐릭터 무대가 떠 있으면 장면 영상도 틀지 않는다 -
+                // 서버 영상은 캐릭터가 구워져 들어간 한 장이라 표정 무대와 겹치면
+                // 인물이 둘이 된다. 무대가 없는 폴백 화면에서만 영상을 얹는다.
+                videoUrl: _character == null ? dialogueScene?.videoUrl : null,
+                // DIALOGUE 장면은 아이가 말하는 동안 화면이 계속 돌아야 한다.
+                loop: dialogueScene?.sceneType == PlaySceneType.dialogue,
               ),
               const _BackdropShade(),
               SafeArea(
@@ -2119,7 +2126,12 @@ class _StorySceneView extends StatelessWidget {
       body: Stack(
         fit: StackFit.expand,
         children: <Widget>[
-          _StoryBackdrop(asset: scene.imageUrl),
+          _SceneBackdrop(
+            imageAsset: scene.imageUrl,
+            videoUrl: scene.videoUrl,
+            // STORY 장면은 1회 재생 후 마지막 프레임에 머문다.
+            loop: scene.sceneType == PlaySceneType.dialogue,
+          ),
           const _BackdropShade(),
           SafeArea(
             minimum: const EdgeInsets.all(22),
@@ -2195,6 +2207,169 @@ class _StorySceneView extends StatelessWidget {
                 : _PauseOverlay(onResume: onPause, onExit: onLeave),
         ],
       ),
+    );
+  }
+}
+
+/// 장면 배경 한 층. [videoUrl]이 없으면 지금처럼 이미지 한 장이고, 있으면
+/// 이미지를 밑에 깐 채 영상이 준비된 뒤에만 위에 얹는다 - 초기화 전·초기화
+/// 실패·재생 오류 어느 경우든 밑의 이미지가 그대로 보여서 흰 화면이나
+/// 깜빡임 없이 기존 배경으로 떨어진다.
+/// → 팀원공유 `전달_장면영상과_추가요청.md` §1·§2-1
+class _SceneBackdrop extends StatelessWidget {
+  const _SceneBackdrop({this.imageAsset, this.videoUrl, this.loop = false});
+
+  final String? imageAsset;
+  final String? videoUrl;
+
+  /// 반복 여부는 별도 플래그가 아니라 `scene_type`이 정한다 -
+  /// STORY는 1회 재생 후 마지막 프레임 유지, DIALOGUE는 계속 반복.
+  final bool loop;
+
+  @override
+  Widget build(BuildContext context) {
+    final String? url = videoUrl;
+    if (url == null || url.isEmpty) {
+      return _StoryBackdrop(asset: imageAsset);
+    }
+    return _SceneVideoBackdrop(
+      videoUrl: url,
+      loop: loop,
+      imageAsset: imageAsset,
+    );
+  }
+}
+
+class _SceneVideoBackdrop extends StatefulWidget {
+  const _SceneVideoBackdrop({
+    required this.videoUrl,
+    required this.loop,
+    this.imageAsset,
+  });
+
+  final String videoUrl;
+  final bool loop;
+  final String? imageAsset;
+
+  @override
+  State<_SceneVideoBackdrop> createState() => _SceneVideoBackdropState();
+}
+
+class _SceneVideoBackdropState extends State<_SceneVideoBackdrop> {
+  VideoPlayerController? _controller;
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _start();
+  }
+
+  @override
+  void didUpdateWidget(_SceneVideoBackdrop oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.videoUrl != widget.videoUrl) {
+      // 장면 전환 - 이전 장면 컨트롤러를 정리하고 새로 만든다.
+      _disposeController();
+      setState(_start);
+    } else if (oldWidget.loop != widget.loop) {
+      unawaited(_controller?.setLooping(widget.loop));
+    }
+  }
+
+  /// 서버가 `/stories/...` 상대경로를 주므로 API base의 origin에 붙인다.
+  /// base가 `/api`로 끝나도 절대경로 resolve는 path를 통째로 바꾸므로
+  /// `/api`가 앞에 남지 않는다(이미지 배경과 같은 규칙).
+  Uri? get _resolvedUri {
+    final String raw = widget.videoUrl.startsWith('/')
+        ? Uri.parse(AppConfig.apiBaseUrl).resolve(widget.videoUrl).toString()
+        : widget.videoUrl;
+    final Uri? uri = Uri.tryParse(raw);
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+      return null;
+    }
+    return uri;
+  }
+
+  void _start() {
+    _ready = false;
+    final Uri? uri = _resolvedUri;
+    if (uri == null) return; // 이해할 수 없는 주소 - 이미지로만 간다.
+    final VideoPlayerController controller = VideoPlayerController.networkUrl(
+      uri,
+    );
+    _controller = controller;
+    controller.addListener(_onControllerChanged);
+    unawaited(
+      controller
+          .initialize()
+          .then((_) async {
+            if (!mounted || _controller != controller) return;
+            // 영상 자체가 무음이지만(나레이션은 scene_audio가 따로 맡는다)
+            // 웹 자동재생 정책이 음소거를 요구하므로 명시해 둔다.
+            await controller.setVolume(0);
+            await controller.setLooping(widget.loop);
+            await controller.play();
+            if (!mounted || _controller != controller) return;
+            setState(() => _ready = true);
+          })
+          .catchError((Object _) {
+            // 초기화·자동재생 실패 - _ready가 false로 남아 이미지가 보인다.
+            if (!mounted || _controller != controller) return;
+            setState(() => _ready = false);
+          }),
+    );
+  }
+
+  void _onControllerChanged() {
+    final VideoPlayerController? controller = _controller;
+    if (controller == null || !mounted) return;
+    // 재생 도중 오류가 나면 영상 층을 내리고 이미지로 돌아간다.
+    if (controller.value.hasError && _ready) {
+      setState(() => _ready = false);
+    }
+  }
+
+  void _disposeController() {
+    final VideoPlayerController? controller = _controller;
+    _controller = null;
+    if (controller != null) {
+      controller.removeListener(_onControllerChanged);
+      unawaited(controller.dispose());
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposeController();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final VideoPlayerController? controller = _controller;
+    final bool showVideo =
+        _ready &&
+        controller != null &&
+        controller.value.isInitialized &&
+        !controller.value.hasError &&
+        controller.value.size.width > 0 &&
+        controller.value.size.height > 0;
+    return Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        _StoryBackdrop(asset: widget.imageAsset),
+        if (showVideo)
+          FittedBox(
+            fit: BoxFit.cover,
+            clipBehavior: Clip.hardEdge,
+            child: SizedBox(
+              width: controller.value.size.width,
+              height: controller.value.size.height,
+              child: VideoPlayer(controller),
+            ),
+          ),
+      ],
     );
   }
 }
