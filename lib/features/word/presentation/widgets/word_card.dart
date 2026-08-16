@@ -61,6 +61,7 @@ class WordCard extends StatelessWidget {
           ),
           SpeakerButton(
             audio: word.audio,
+            speakText: word.word,
             semanticLabel: WordStrings.listenTo(word.word),
           ),
           const SizedBox(width: AppSpacing.md),

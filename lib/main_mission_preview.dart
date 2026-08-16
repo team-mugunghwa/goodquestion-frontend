@@ -178,6 +178,26 @@ class _MissionPreviewRepository implements PlayRepository {
   }) async => const PlaySpeechAudio(audioUrl: 'preview://speech');
 
   @override
+  Future<PlayPostActivityStart> startPostActivity(String sessionId) async =>
+      const PlayPostActivityStart(
+        cards: <PlayPostActivityCard>[],
+        attemptCount: 0,
+      );
+
+  @override
+  Future<PlayCardOrderResult> submitCardOrder(
+    String sessionId, {
+    required List<String> submittedOrder,
+  }) async => const PlayCardOrderResult(correct: true);
+
+  @override
+  Future<PlayRetellingResult> submitRetelling(
+    String sessionId, {
+    required String text,
+    String? sttRawText,
+  }) async => const PlayRetellingResult(sessionStatus: 'COMPLETED');
+
+  @override
   Future<void> stop(String sessionId) async {}
 
   @override
@@ -229,6 +249,9 @@ class _MissionPreviewRepository implements PlayRepository {
 }
 
 class _PreviewAudioPlayer implements StoryAudioPlayer {
+  @override
+  Stream<Duration> get onPosition => const Stream<Duration>.empty();
+
   const _PreviewAudioPlayer();
 
   @override

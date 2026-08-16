@@ -4,6 +4,7 @@ import 'package:goodquestion/core/constants/app_strings.dart';
 import 'package:goodquestion/core/error/failure.dart';
 import 'package:goodquestion/core/theme/app_theme.dart';
 import 'package:goodquestion/core/widgets/app_bottom_nav.dart';
+import 'package:goodquestion/core/widgets/story_thumbnail.dart';
 import 'package:goodquestion/features/word/domain/entities/saved_word.dart';
 import 'package:goodquestion/features/word/domain/entities/word_book.dart';
 import 'package:goodquestion/features/word/domain/entities/word_group.dart';
@@ -20,7 +21,7 @@ class _StubRepository implements WordRepository {
 
   final WordBook? book;
   final Object? error;
-  final Map<int, bool> likes = <int, bool>{};
+  final Map<String, bool> likes = <String, bool>{};
 
   @override
   Future<WordBook> getWordBook() async {
@@ -29,7 +30,7 @@ class _StubRepository implements WordRepository {
   }
 
   @override
-  Future<bool> toggleLike(int wordId) async {
+  Future<bool> toggleLike(String wordId) async {
     final bool next = !(likes[wordId] ?? false);
     likes[wordId] = next;
     return next;
@@ -41,18 +42,18 @@ const WordBook _book = WordBook(
   childName: '하늘이',
   groups: <WordGroup>[
     WordGroup(
-      storyId: 11,
+      storyId: '11',
       storyTitle: '방귀 뀌는 며느리',
       words: <SavedWord>[
         SavedWord(
-          wordId: 101,
+          wordId: '101',
           word: '며느리',
           meaning: '아들과 결혼한 사람이에요.',
           sentence: '며느리가 살았어요.',
           liked: false,
         ),
         SavedWord(
-          wordId: 102,
+          wordId: '102',
           word: '사랑방',
           meaning: '손님을 맞이하는 방이에요.',
           sentence: '사랑방에서 만났어요.',
@@ -61,11 +62,11 @@ const WordBook _book = WordBook(
       ],
     ),
     WordGroup(
-      storyId: 21,
+      storyId: '21',
       storyTitle: '해와 달이 된 오누이',
       words: <SavedWord>[
         SavedWord(
-          wordId: 201,
+          wordId: '201',
           word: '오누이',
           meaning: '오빠와 여동생이에요.',
           sentence: '오누이가 남았어요.',
@@ -77,6 +78,27 @@ const WordBook _book = WordBook(
 );
 
 const WordBook _emptyBook = WordBook(totalCount: 0, groups: <WordGroup>[]);
+
+/// 장면 없이 저장돼 어느 이야기에서 왔는지 모르는 단어.
+const WordBook _noStoryBook = WordBook(
+  totalCount: 1,
+  childName: '하늘이',
+  groups: <WordGroup>[
+    WordGroup(
+      storyId: null,
+      storyTitle: '',
+      words: <SavedWord>[
+        SavedWord(
+          wordId: '301',
+          word: '장대',
+          meaning: '',
+          sentence: '긴 장대로도 닿지 않았습니다.',
+          liked: false,
+        ),
+      ],
+    ),
+  ],
+);
 
 void main() {
   Future<void> pump(
@@ -110,6 +132,27 @@ void main() {
     expect(find.text('방귀 뀌는 며느리'), findsWidgets);
     expect(find.byType(WordCard), findsNWidgets(3));
     expect(find.byType(AppBottomNav), findsOneWidget);
+  });
+
+  testWidgets('이야기를 모르는 묶음은 헤더도 칩도 만들지 않는다', (WidgetTester tester) async {
+    await pump(tester, _StubRepository(book: _noStoryBook));
+
+    // 단어는 그대로 보입니다.
+    expect(find.text('장대'), findsOneWidget);
+    expect(find.byType(WordCard), findsOneWidget);
+    // 헤더를 세우지 않습니다 — 헤더의 이야기 썸네일이 없어야 합니다.
+    expect(find.byType(StoryThumbnail), findsNothing);
+    // 고를 이야기가 없으니 칩은 "전체" 하나뿐입니다.
+    expect(find.text(AppStrings.filterAll), findsOneWidget);
+  });
+
+  testWidgets('뜻이 비어 있어도 모달이 빈 칸으로 남지 않는다', (WidgetTester tester) async {
+    await pump(tester, _StubRepository(book: _noStoryBook));
+
+    await tester.tap(find.text('장대').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text(WordStrings.meaningMissing), findsOneWidget);
   });
 
   testWidgets('목록에는 뜻과 예문이 나오지 않는다', (WidgetTester tester) async {

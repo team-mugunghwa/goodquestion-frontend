@@ -200,6 +200,75 @@ void main() {
     );
   });
 
+  testWidgets('저신뢰 인식은 바로 제출하지 않고 확인을 거친다', (WidgetTester tester) async {
+    final _SttRetrySpyRepository repository = _SttRetrySpyRepository()
+      ..lowConfidenceAlways = true;
+    await pumpPlay(tester, repository: repository);
+
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
+
+    // 제출이 잡혀 있고, 들은 내용과 두 버튼이 보인다.
+    expect(
+      repository.submittedTexts,
+      isEmpty,
+      reason: '서버가 잘못 들었을 수 있다고 한 결과를 바로 제출하면 안 됩니다',
+    );
+    expect(find.text('이렇게 들었어요. 맞아요?'), findsOneWidget);
+    expect(find.text('방귀를 참으면 안 돼요'), findsOneWidget);
+    expect(find.text('맞아요'), findsOneWidget);
+    expect(find.text('다시 말할래요'), findsOneWidget);
+
+    // "맞아요" - 교정본은 text로, 벤더 원문은 sttRawText로 제출된다.
+    await tester.tap(find.text('맞아요'));
+    await tester.pumpAndSettle();
+    expect(repository.submittedTexts, <String>['방귀를 참으면 안 돼요']);
+    expect(
+      repository.submittedRawTexts,
+      <String?>['방비를 참으면 안 돼요'],
+      reason: 'sttRawText에는 교정 전 원문이 가야 합니다 - text를 되올리면 원문 유실',
+    );
+  });
+
+  testWidgets('저신뢰 확인에서 다시 말하면 제출 없이 재녹음하고 재시도 횟수를 센다', (
+    WidgetTester tester,
+  ) async {
+    final _SttRetrySpyRepository repository = _SttRetrySpyRepository()
+      ..lowConfidenceAlways = true;
+    await pumpPlay(tester, repository: repository);
+
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('다시 말할래요'));
+    await tester.pumpAndSettle();
+
+    expect(repository.submittedTexts, isEmpty);
+    // 재녹음이 자동으로 시작돼 있어야 한다 - 아이가 마이크를 또 찾게 하지 않는다.
+    expect(find.byTooltip('말하기 완료'), findsOneWidget);
+
+    // 두 번째 발화를 확정하면 재시도 횟수 1이 실려 간다.
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('맞아요'));
+    await tester.pumpAndSettle();
+    expect(repository.lastSttRetryCount, 1);
+  });
+
+  testWidgets('저신뢰 확인은 6초 무반응이면 그대로 제출한다', (WidgetTester tester) async {
+    final _SttRetrySpyRepository repository = _SttRetrySpyRepository()
+      ..lowConfidenceAlways = true;
+    await pumpPlay(tester, repository: repository);
+
+    await tester.tap(find.byTooltip('말하기 완료'));
+    await tester.pumpAndSettle();
+    expect(repository.submittedTexts, isEmpty);
+
+    // 확인은 시험이 아니다 - 답을 못 고르는 아이도 이야기는 계속돼야 한다.
+    await tester.pump(const Duration(seconds: 7));
+    await tester.pumpAndSettle();
+    expect(repository.submittedTexts, <String>['방귀를 참으면 안 돼요']);
+  });
+
   testWidgets('STORY(전개) 장면은 문장마다 내레이션 음성을 실제로 요청한다', (
     WidgetTester tester,
   ) async {
@@ -322,6 +391,111 @@ void main() {
       reason: '음소거 중에도 합성은 그대로 합니다 - 켜는 순간 바로 들려야 합니다',
     );
     expect(audioPlayer.muted, isTrue, reason: '새 문장을 틀어도 음소거 상태가 유지돼야 합니다');
+  });
+
+  testWidgets('사전 렌더 내레이션은 파일 하나로 재생하고 합성을 부르지 않는다', (
+    WidgetTester tester,
+  ) async {
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    final _StoryNarrationSpyRepository repository =
+        _StoryNarrationSpyRepository()
+          ..initialSnapshot = const PlaySessionSnapshot(
+            phase: PlayPhase.story,
+            currentScene: PlayScene(
+              sceneId: 'scene-1',
+              sceneOrder: 1,
+              sceneType: PlaySceneType.story,
+              narrationSentences: <String>['첫 문장이에요.', '두 번째 문장이에요.'],
+              narrationAudioUrl: '/tts/banggui/sc_banggui_01.mp3',
+              narrationTimings: <PlayAudioTiming>[
+                PlayAudioTiming(index: 0, start: 0, end: 6.2),
+                PlayAudioTiming(index: 1, start: 6.8, end: 13.2),
+              ],
+            ),
+          );
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      settle: false,
+    );
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+
+    expect(audioPlayer.playCount, 1, reason: '장면 전체가 파일 하나여야 합니다');
+    expect(
+      repository.synthesizedTexts,
+      isEmpty,
+      reason: '사전 렌더가 있는데 문장별 합성을 또 부르면 왕복 비용이 그대로 남습니다',
+    );
+    expect(find.text('첫 문장이에요.'), findsOneWidget);
+
+    // 자막 시계는 벽시계가 아니라 **재생 위치**입니다 - 위치를 흘려야 넘어갑니다.
+    audioPlayer.emitPosition(const Duration(seconds: 7));
+    for (int i = 0; i < 3; i++) {
+      await tester.pump();
+    }
+    expect(find.text('두 번째 문장이에요.'), findsOneWidget);
+
+    // 파일이 끝나면 700ms 뒤 장면 완료로 넘어갑니다(기존 규칙 그대로).
+    audioPlayer.finishPlayback();
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    await tester.pump(const Duration(milliseconds: 750));
+    expect(audioPlayer.playCount, greaterThanOrEqualTo(1));
+  });
+
+  testWidgets('사전 렌더 오프닝 대사는 문장이 여러 개여도 파일 하나로 재생한다', (
+    WidgetTester tester,
+  ) async {
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    final _StoryNarrationSpyRepository repository =
+        _StoryNarrationSpyRepository()
+          ..initialSnapshot = const PlaySessionSnapshot(
+            phase: PlayPhase.dialogue,
+            currentScene: PlayScene(
+              sceneId: 'scene-5',
+              sceneOrder: 5,
+              sceneType: PlaySceneType.dialogue,
+              narrationSentences: <String>[],
+              characterName: '시아버지',
+            ),
+            openingText: '아이고 이게 무슨 일이냐! 우리 집안이 다 흔들리는구나!',
+            openingAudioUrl: '/tts/banggui/sc_banggui_05_opening.mp3',
+            openingAudioTimings: <PlayAudioTiming>[
+              PlayAudioTiming(index: 0, start: 0, end: 3.1),
+              PlayAudioTiming(index: 1, start: 3.7, end: 7.4),
+            ],
+          );
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      settle: false,
+    );
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+
+    // 예전에는 문장이 2개 이상이면 audioUrl 을 버리고 문장마다 재합성했습니다.
+    expect(audioPlayer.playCount, 1, reason: '대사 전체가 파일 하나여야 합니다');
+    expect(repository.synthesizedTexts, isEmpty);
+    expect(find.textContaining('아이고 이게 무슨 일이냐!'), findsOneWidget);
+
+    audioPlayer.emitPosition(const Duration(seconds: 4));
+    for (int i = 0; i < 3; i++) {
+      await tester.pump();
+    }
+    expect(find.textContaining('우리 집안이 다 흔들리는구나!'), findsOneWidget);
+
+    // 파일이 끝나면 아이 차례(마이크)로 넘어갑니다.
+    audioPlayer.finishPlayback();
+    for (int i = 0; i < 6; i++) {
+      await tester.pump();
+    }
+    expect(find.bySemanticsLabel('마이크 켜짐'), findsOneWidget);
   });
 
   testWidgets('전개 화면에서 소리를 다시 켜면 되감지 않고 그 지점부터 들린다', (
@@ -1015,6 +1189,26 @@ class _DialogueSpyRepository implements PlayRepository {
   );
 
   @override
+  Future<PlayPostActivityStart> startPostActivity(String sessionId) async =>
+      const PlayPostActivityStart(
+        cards: <PlayPostActivityCard>[],
+        attemptCount: 0,
+      );
+
+  @override
+  Future<PlayCardOrderResult> submitCardOrder(
+    String sessionId, {
+    required List<String> submittedOrder,
+  }) async => const PlayCardOrderResult(correct: true);
+
+  @override
+  Future<PlayRetellingResult> submitRetelling(
+    String sessionId, {
+    required String text,
+    String? sttRawText,
+  }) async => const PlayRetellingResult(sessionStatus: 'COMPLETED');
+
+  @override
   Future<void> stop(String sessionId) async {}
 }
 
@@ -1137,6 +1331,26 @@ class _SceneFlowSpyRepository implements PlayRepository {
   }
 
   @override
+  Future<PlayPostActivityStart> startPostActivity(String sessionId) async =>
+      const PlayPostActivityStart(
+        cards: <PlayPostActivityCard>[],
+        attemptCount: 0,
+      );
+
+  @override
+  Future<PlayCardOrderResult> submitCardOrder(
+    String sessionId, {
+    required List<String> submittedOrder,
+  }) async => const PlayCardOrderResult(correct: true);
+
+  @override
+  Future<PlayRetellingResult> submitRetelling(
+    String sessionId, {
+    required String text,
+    String? sttRawText,
+  }) async => const PlayRetellingResult(sessionStatus: 'COMPLETED');
+
+  @override
   Future<void> stop(String sessionId) async {}
 }
 
@@ -1160,6 +1374,15 @@ class _FakeVoiceRecorder implements MissionVoiceRecorder {
 /// 기다림을 풀어 줍니다. 소리 끄기가 실제로 소리를 끊는지 보려면 이 동작이
 /// 있어야 합니다 - 곧바로 끝나 버리는 가짜로는 아무것도 확인되지 않습니다.
 class _SpyAudioPlayer implements StoryAudioPlayer {
+  /// 테스트가 재생 위치를 직접 흘려 자막 넘김(timings)을 검증한다.
+  final StreamController<Duration> positions =
+      StreamController<Duration>.broadcast();
+
+  @override
+  Stream<Duration> get onPosition => positions.stream;
+
+  void emitPosition(Duration position) => positions.add(position);
+
   int playCount = 0;
   int stopCount = 0;
   int pauseCount = 0;
@@ -1226,6 +1449,9 @@ class _SpyAudioPlayer implements StoryAudioPlayer {
 }
 
 class _FakeAudioPlayer implements StoryAudioPlayer {
+  @override
+  Stream<Duration> get onPosition => const Stream<Duration>.empty();
+
   const _FakeAudioPlayer();
 
   @override
@@ -1319,6 +1545,26 @@ class _StopSpyRepository implements PlayRepository {
   );
 
   @override
+  Future<PlayPostActivityStart> startPostActivity(String sessionId) async =>
+      const PlayPostActivityStart(
+        cards: <PlayPostActivityCard>[],
+        attemptCount: 0,
+      );
+
+  @override
+  Future<PlayCardOrderResult> submitCardOrder(
+    String sessionId, {
+    required List<String> submittedOrder,
+  }) async => const PlayCardOrderResult(correct: true);
+
+  @override
+  Future<PlayRetellingResult> submitRetelling(
+    String sessionId, {
+    required String text,
+    String? sttRawText,
+  }) async => const PlayRetellingResult(sessionStatus: 'COMPLETED');
+
+  @override
   Future<void> stop(String sessionId) async {
     stoppedSessionId = sessionId;
   }
@@ -1329,6 +1575,13 @@ class _StopSpyRepository implements PlayRepository {
 class _SttRetrySpyRepository implements PlayRepository {
   int _transcribeCalls = 0;
   int? lastSttRetryCount;
+
+  /// true면 모든 인식 결과를 저신뢰로 돌려준다 - 확인 단계 테스트용.
+  bool lowConfidenceAlways = false;
+
+  /// 제출된 발화들. 확인 단계가 "제출을 잡아 두는지"를 이걸로 판정한다.
+  final List<String> submittedTexts = <String>[];
+  final List<String?> submittedRawTexts = <String?>[];
 
   @override
   Future<PlaySessionSnapshot> resume(String sessionId) async =>
@@ -1369,6 +1622,14 @@ class _SttRetrySpyRepository implements PlayRepository {
   @override
   Future<PlayTranscription> transcribeAudio(Uint8List wavBytes) async {
     _transcribeCalls++;
+    if (lowConfidenceAlways) {
+      return const PlayTranscription(
+        text: '방귀를 참으면 안 돼요',
+        rawText: '방비를 참으면 안 돼요',
+        confidence: .3,
+        lowConfidence: true,
+      );
+    }
     if (_transcribeCalls == 1) {
       throw const ServerFailure(message: '무음이거나 인식 실패', code: 'STT_EMPTY_TEXT');
     }
@@ -1396,6 +1657,8 @@ class _SttRetrySpyRepository implements PlayRepository {
     String? idempotencyKey,
   }) async {
     lastSttRetryCount = sttRetryCount;
+    submittedTexts.add(text);
+    submittedRawTexts.add(sttRawText);
     return const PlayTurnResult(
       characterText: null,
       characterAudioUrl: null,
@@ -1403,6 +1666,26 @@ class _SttRetrySpyRepository implements PlayRepository {
       sceneTransition: null,
     );
   }
+
+  @override
+  Future<PlayPostActivityStart> startPostActivity(String sessionId) async =>
+      const PlayPostActivityStart(
+        cards: <PlayPostActivityCard>[],
+        attemptCount: 0,
+      );
+
+  @override
+  Future<PlayCardOrderResult> submitCardOrder(
+    String sessionId, {
+    required List<String> submittedOrder,
+  }) async => const PlayCardOrderResult(correct: true);
+
+  @override
+  Future<PlayRetellingResult> submitRetelling(
+    String sessionId, {
+    required String text,
+    String? sttRawText,
+  }) async => const PlayRetellingResult(sessionStatus: 'COMPLETED');
 
   @override
   Future<void> stop(String sessionId) async {}
@@ -1419,8 +1702,13 @@ class _StoryNarrationSpyRepository implements PlayRepository {
   /// 이걸 채워서 서로 다른 장면으로 실제로 넘어가게 합니다.
   PlaySessionSnapshot? nextSceneOnComplete;
 
+  /// 첫 스냅숏 교체용 - 사전 렌더 내레이션(narrationAudioUrl) 시나리오처럼
+  /// 기본 장면과 다른 모양이 필요할 때 채웁니다.
+  PlaySessionSnapshot? initialSnapshot;
+
   @override
   Future<PlaySessionSnapshot> resume(String sessionId) async =>
+      initialSnapshot ??
       const PlaySessionSnapshot(
         phase: PlayPhase.story,
         currentScene: PlayScene(
@@ -1477,6 +1765,26 @@ class _StoryNarrationSpyRepository implements PlayRepository {
     mission: null,
     sceneTransition: null,
   );
+
+  @override
+  Future<PlayPostActivityStart> startPostActivity(String sessionId) async =>
+      const PlayPostActivityStart(
+        cards: <PlayPostActivityCard>[],
+        attemptCount: 0,
+      );
+
+  @override
+  Future<PlayCardOrderResult> submitCardOrder(
+    String sessionId, {
+    required List<String> submittedOrder,
+  }) async => const PlayCardOrderResult(correct: true);
+
+  @override
+  Future<PlayRetellingResult> submitRetelling(
+    String sessionId, {
+    required String text,
+    String? sttRawText,
+  }) async => const PlayRetellingResult(sessionStatus: 'COMPLETED');
 
   @override
   Future<void> stop(String sessionId) async {}

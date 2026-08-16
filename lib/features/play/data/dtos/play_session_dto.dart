@@ -14,6 +14,7 @@ class PlaySessionDto {
       currentScene: _scene(json['currentScene']),
       openingText: _messageText(json['lastCharacterMessage']),
       openingAudioUrl: _messageAudioUrl(json['lastCharacterMessage']),
+      openingAudioTimings: _messageAudioTimings(json['lastCharacterMessage']),
       mission: mission(json['exposedMission']),
       messages: messages(json['messages']),
     );
@@ -25,6 +26,7 @@ class PlaySessionDto {
         currentScene: _scene(json['currentScene']),
         openingText: _messageText(json['openingMessage']),
         openingAudioUrl: _messageAudioUrl(json['openingMessage']),
+        openingAudioTimings: _messageAudioTimings(json['openingMessage']),
       );
 
   static PlayMission? mission(Object? value) {
@@ -59,10 +61,14 @@ class PlaySessionDto {
       PlayTurnResult(
         characterText: _messageText(json['characterMessage']),
         characterAudioUrl: _messageAudioUrl(json['characterMessage']),
+        characterAudioTimings: _messageAudioTimings(json['characterMessage']),
         mission: mission(json['mission']),
         sceneTransition: _transition(json['sceneTransition']),
         closingReactionText: _messageText(json['closingReaction']),
         closingReactionAudioUrl: _messageAudioUrl(json['closingReaction']),
+        closingReactionAudioTimings: _messageAudioTimings(
+          json['closingReaction'],
+        ),
         analysis: _analysis(json['analysis']),
         progress: _progress(json['progress']),
       );
@@ -125,6 +131,85 @@ class PlaySessionDto {
             .where((item) => item.text.isNotEmpty)
             .toList(growable: false)
       : const <PlayMessage>[];
+
+  // ── 말하기 후 활동 → `docs/API.md` 3.9 ──
+
+  static PlayPostActivityStart postActivityStart(Object? value) {
+    if (value is! Map<String, dynamic>) {
+      throw const ParseException('후속 활동 시작 응답 형식이 올바르지 않습니다.');
+    }
+    final Object? cards = value['cards'];
+    if (cards is! List) {
+      throw const ParseException('후속 활동 카드 목록이 없습니다.');
+    }
+    return PlayPostActivityStart(
+      cards: cards
+          .whereType<Map<String, dynamic>>()
+          .map(
+            (Map<String, dynamic> item) => PlayPostActivityCard(
+              cardId: item['cardId'] as String? ?? '',
+              text: item['text'] as String? ?? '',
+            ),
+          )
+          .where((PlayPostActivityCard card) => card.cardId.isNotEmpty)
+          .toList(growable: false),
+      attemptCount: (value['attemptCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  static PlayCardOrderResult cardOrderResult(Object? value) {
+    if (value is! Map<String, dynamic>) {
+      throw const ParseException('순서 채점 응답 형식이 올바르지 않습니다.');
+    }
+    final Object? correct = value['correct'];
+    if (correct is! bool) {
+      throw const ParseException('순서 채점 결과가 없습니다.');
+    }
+    return PlayCardOrderResult(
+      correct: correct,
+      // 오답이면 서버가 null 을 줍니다 - 빈 목록으로 받아 화면이 분기 하나로
+      // 처리하게 합니다.
+      retellingKeywords: _stringList(value['retellingKeywords']),
+    );
+  }
+
+  static PlayRetellingResult retellingResult(Object? value) {
+    if (value is! Map<String, dynamic>) {
+      throw const ParseException('후속 활동 완료 응답 형식이 올바르지 않습니다.');
+    }
+    final Object? status = value['sessionStatus'];
+    if (status is! String || status.isEmpty) {
+      throw const ParseException('후속 활동 완료 응답에 세션 상태가 없습니다.');
+    }
+    final Object? stardust = value['stardust'];
+    final Object? items = value['unlockedItems'];
+    return PlayRetellingResult(
+      sessionStatus: status,
+      completedAt: DateTime.tryParse(value['completedAt'] as String? ?? ''),
+      stardust: stardust is Map<String, dynamic>
+          ? PlayStardust(
+              earned: (stardust['earned'] as num?)?.toInt() ?? 0,
+              balance: (stardust['balance'] as num?)?.toInt() ?? 0,
+            )
+          : null,
+      unlockedItems: items is List
+          ? items
+                .whereType<Map<String, dynamic>>()
+                .map(
+                  (Map<String, dynamic> item) => PlayUnlockedItem(
+                    itemId: item['itemId']?.toString() ?? '',
+                    name: item['name'] as String? ?? '',
+                    thumbnailUrl: item['thumbnailUrl'] as String?,
+                  ),
+                )
+                .toList(growable: false)
+          : const <PlayUnlockedItem>[],
+    );
+  }
+
+  static List<String> _stringList(Object? value) => value is List
+      ? value.whereType<String>().toList(growable: false)
+      : const <String>[];
 
   static PlaySceneTransition? _transition(Object? value) {
     if (value == null) return null;
@@ -215,6 +300,8 @@ class PlaySessionDto {
       imageUrl: value['imageUrl'] as String?,
       characterName: value['characterName'] as String?,
       maxTurns: (value['maxTurns'] as num?)?.toInt(),
+      narrationAudioUrl: value['narrationAudioUrl'] as String?,
+      narrationTimings: audioTimings(value['narrationTimings']),
     );
   }
 
@@ -223,4 +310,33 @@ class PlaySessionDto {
 
   static String? _messageAudioUrl(Object? value) =>
       value is Map<String, dynamic> ? value['audioUrl'] as String? : null;
+
+  static List<PlayAudioTiming> _messageAudioTimings(Object? value) =>
+      value is Map<String, dynamic>
+      ? audioTimings(value['audioTimings'])
+      : const <PlayAudioTiming>[];
+
+  /// `[{index,start,end}]` — 서버가 문장마다 따로 합성해 잰 실측 구간(초).
+  ///
+  /// 형식이 어긋난 항목은 조용히 버린다 — 자막 실측 동기화는 부가 기능이라
+  /// 이것 때문에 응답 전체 파싱이 죽으면 안 된다(소리·자막은 폴백으로 나온다).
+  static List<PlayAudioTiming> audioTimings(Object? value) {
+    if (value is! List) return const <PlayAudioTiming>[];
+    final List<PlayAudioTiming> timings = <PlayAudioTiming>[];
+    for (final Object? item in value) {
+      if (item is! Map<String, dynamic>) continue;
+      final num? index = item['index'] as num?;
+      final num? start = item['start'] as num?;
+      final num? end = item['end'] as num?;
+      if (index == null || start == null || end == null) continue;
+      timings.add(
+        PlayAudioTiming(
+          index: index.toInt(),
+          start: start.toDouble(),
+          end: end.toDouble(),
+        ),
+      );
+    }
+    return timings;
+  }
 }

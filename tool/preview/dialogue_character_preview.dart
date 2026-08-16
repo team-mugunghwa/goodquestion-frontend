@@ -33,6 +33,8 @@ class _SilentRecorder implements MissionVoiceRecorder {
 
 class _SilentPlayer implements StoryAudioPlayer {
   @override
+  Stream<Duration> get onPosition => const Stream<Duration>.empty();
+  @override
   Future<void> playUrl(String url) async {}
 
   @override
@@ -178,6 +180,26 @@ class _StubRepository implements PlayRepository {
     await Future<void>.delayed(const Duration(milliseconds: 400));
     return next.build();
   }
+
+  @override
+  Future<PlayPostActivityStart> startPostActivity(String sessionId) async =>
+      const PlayPostActivityStart(
+        cards: <PlayPostActivityCard>[],
+        attemptCount: 0,
+      );
+
+  @override
+  Future<PlayCardOrderResult> submitCardOrder(
+    String sessionId, {
+    required List<String> submittedOrder,
+  }) async => const PlayCardOrderResult(correct: true);
+
+  @override
+  Future<PlayRetellingResult> submitRetelling(
+    String sessionId, {
+    required String text,
+    String? sttRawText,
+  }) async => const PlayRetellingResult(sessionStatus: 'COMPLETED');
 
   @override
   Future<void> stop(String sessionId) async {}

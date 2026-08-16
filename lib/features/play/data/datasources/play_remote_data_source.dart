@@ -46,6 +46,9 @@ class PlayRemoteDataSource {
                 return PlayOpeningMessage(
                   text: text.trim(),
                   audioUrl: messageValue['audioUrl'] as String?,
+                  audioTimings: PlaySessionDto.audioTimings(
+                    messageValue['audioTimings'],
+                  ),
                   alreadyOpened: data['alreadyOpened'] as bool? ?? false,
                 );
               }
@@ -91,6 +94,7 @@ class PlayRemoteDataSource {
             if (text != null && text.trim().isNotEmpty) {
               return PlayTranscription(
                 text: text.trim(),
+                rawText: (data['rawText'] as String?)?.trim(),
                 confidence: (data['confidence'] as num?)?.toDouble(),
                 lowConfidence: data['lowConfidence'] as bool? ?? false,
               );
@@ -143,6 +147,37 @@ class PlayRemoteDataSource {
       }
       throw const ParseException('대화 응답 형식이 올바르지 않습니다.');
     },
+  );
+
+  // ── 말하기 후 활동 → `docs/이야기_전개_가이드.md` 3.7 ──
+
+  /// 순서 맞추기 시작. 카드는 **서버가 섞어서** 줍니다 - 같은 세션이면
+  /// 몇 번을 불러도 같은 순서입니다(시드 고정). 정답 순서는 응답에 없습니다.
+  Future<PlayPostActivityStart> startPostActivity(String sessionId) =>
+      _client.post<PlayPostActivityStart>(
+        '/sessions/$sessionId/post-activity/start',
+        parse: PlaySessionDto.postActivityStart,
+      );
+
+  /// 순서 제출. 채점은 서버가 합니다.
+  Future<PlayCardOrderResult> submitCardOrder(
+    String sessionId, {
+    required List<String> submittedOrder,
+  }) => _client.post<PlayCardOrderResult>(
+    '/sessions/$sessionId/post-activity/order',
+    body: <String, Object?>{'submittedOrder': submittedOrder},
+    parse: PlaySessionDto.cardOrderResult,
+  );
+
+  /// 다시 이야기하기 제출 = **세션 완료 + 별가루 지급 + 아이템 해금**.
+  Future<PlayRetellingResult> submitRetelling(
+    String sessionId, {
+    required String text,
+    String? sttRawText,
+  }) => _client.post<PlayRetellingResult>(
+    '/sessions/$sessionId/post-activity/retelling',
+    body: <String, Object?>{'text': text, 'sttRawText': sttRawText},
+    parse: PlaySessionDto.retellingResult,
   );
 
   /// 본문 없이 200 만 옵니다. → `docs/이야기_전개_가이드.md` 3.8
