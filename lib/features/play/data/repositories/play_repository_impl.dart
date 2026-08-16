@@ -67,6 +67,28 @@ class PlayRepositoryImpl implements PlayRepository {
   );
 
   @override
+  Future<PlayPostActivityStart> startPostActivity(String sessionId) =>
+      _guard(() => _remote.startPostActivity(sessionId));
+
+  @override
+  Future<PlayCardOrderResult> submitCardOrder(
+    String sessionId, {
+    required List<String> submittedOrder,
+  }) => _guard(
+    () => _remote.submitCardOrder(sessionId, submittedOrder: submittedOrder),
+  );
+
+  @override
+  Future<PlayRetellingResult> submitRetelling(
+    String sessionId, {
+    required String text,
+    String? sttRawText,
+  }) => _guard(
+    () =>
+        _remote.submitRetelling(sessionId, text: text, sttRawText: sttRawText),
+  );
+
+  @override
   Future<void> stop(String sessionId) => _guard(() => _remote.stop(sessionId));
 
   Future<T> _guard<T>(Future<T> Function() action) async {

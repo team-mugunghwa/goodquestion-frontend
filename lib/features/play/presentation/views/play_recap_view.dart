@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_icons.dart';
 import '../../../../core/constants/app_strings.dart';
+import '../../../../core/error/failure.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_shadows.dart';
@@ -18,6 +20,9 @@ import '../../../../core/widgets/kid_speech_bubble.dart';
 import '../../../../core/widgets/press_scale.dart';
 import '../../../../core/widgets/screen_metrics.dart';
 import '../../../../core/widgets/story_cover.dart';
+import '../../domain/entities/play_session.dart';
+import '../../domain/repositories/play_repository.dart';
+import '../voice/mission_voice_recorder.dart';
 
 /// 말하기 후 활동에서 사용하는 장면 카드 데이터입니다.
 ///
@@ -69,6 +74,8 @@ class PlayRecapPage extends StatefulWidget {
   const PlayRecapPage({
     required this.sessionId,
     this.storyTitle = '오늘의 이야기',
+    this.repository,
+    this.voiceRecorder,
     this.sceneCards = _defaultCards,
     this.keywords = _defaultKeywords,
     super.key,
@@ -77,14 +84,30 @@ class PlayRecapPage extends StatefulWidget {
   final String sessionId;
   final String storyTitle;
 
-  /// **이야기 순서(정답 순서)대로** 넣어 주세요. 화면에서는 섞어서 보여 줍니다.
+  /// 서버와 이어 주는 통로. **null 이면 데모 모드**입니다 - 아래 고정값으로
+  /// 화면만 돌려 봅니다(`lib/main_recap_preview.dart` · 위젯 테스트).
+  /// 앱에서는 라우터가 늘 넣어 줍니다.
+  final PlayRepository? repository;
+
+  /// null 이면 [DeviceMissionVoiceRecorder] 를 씁니다.
+  final MissionVoiceRecorder? voiceRecorder;
+
+  /// **데모 모드 전용 고정 카드.** [repository] 가 있으면 서버가 준 카드가
+  /// 대신 들어오고 이 값은 쓰이지 않습니다.
+  ///
+  /// 데모에서는 **이야기 순서(정답 순서)대로** 넣어 주세요. 화면에서는 섞어서
+  /// 보여 주고, 정답도 이 순서로 판정합니다. 서버 모드에서는 프런트가 정답
+  /// 순서를 아예 알지 못합니다.
   final List<RecapSceneCard> sceneCards;
 
-  /// 장면과 **1:1로 짝지어지는** 낱말. `keywords[i]` 가 [sceneCards]`[i]` 의
+  /// **데모 모드 전용 고정 낱말.** 서버 모드에서는 순서를 맞힌 뒤 `order`
+  /// 응답의 `retellingKeywords` 가 들어옵니다.
+  ///
+  /// 장면과 **1:1로 짝지어집니다**. `keywords[i]` 가 [sceneCards]`[i]` 의
   /// 낱말이고, 2단계에서 그 장면 카드 안에 붙어서 보입니다.
   ///
-  /// 개수가 [sceneCards] 와 달라도 화면은 깨지지 않습니다(모자라면 낱말 없는
-  /// 장면, 남으면 마지막 장면에 몰아 붙임). 다만 그건 콘텐츠 오류입니다.
+  /// 개수가 장면과 달라도 화면은 깨지지 않습니다(모자라면 낱말 없는 장면,
+  /// 남으면 마지막 장면에 몰아 붙임). 다만 그건 콘텐츠 오류입니다.
   ///
   /// **1단계에서는 쓰지 않습니다** — 낱말이 곧 장면의 정답 단서라 순서가
   /// 새어 나갑니다. (`docs/BACKEND_REQUESTS_POST_ACTIVITY.md` 3장)
@@ -139,26 +162,59 @@ class _RecapDragData {
 class _PlayRecapPageState extends State<PlayRecapPage> {
   /// 트레이에 놓이는 순서. 한 번 정하면 바뀌지 않아서, 자리에 놓았다가
   /// 되돌린 카드가 늘 같은 위치로 돌아옵니다.
-  late List<RecapSceneCard> _shuffled;
+  ///
+  /// 서버 모드에서는 **서버가 준 순서 그대로**입니다 - 여기서 또 섞으면
+  /// 재진입할 때마다 배치가 달라집니다(서버는 세션마다 시드를 고정합니다).
+  List<RecapSceneCard> _shuffled = const <RecapSceneCard>[];
 
   /// 순서 자리. 비어 있으면 null입니다.
-  late List<RecapSceneCard?> _slots;
+  List<RecapSceneCard?> _slots = const <RecapSceneCard?>[];
+
+  /// 2단계에 보여 줄 낱말. 서버 모드에서는 **순서를 맞힌 뒤에야** 채워집니다 -
+  /// 낱말이 곧 순서의 단서라 그전에는 화면에 있으면 안 됩니다.
+  List<String> _keywords = const <String>[];
 
   _RecapStep _step = _RecapStep.arrange;
   String? _selectedCardId;
   bool _showRetryHint = false;
   bool _isListening = false;
 
-  /// **말하기를 한 번이라도 시작했는가.**
-  ///
-  /// 받아쓰기 띠와 완료 버튼의 조건을 `transcript == null` 이나 녹음 시간에서
-  /// 파생시키면, 0초에 멈춘 아이의 화면에서 띠가 접히고 완료 버튼이 죽습니다.
-  /// 상태를 이름으로 분리해 두면 실제 STT 를 붙일 때도 그대로 살아남습니다.
-  bool _hasSpoken = false;
+  /// 카드를 받아 오는 중.
+  bool _loading = false;
+  String? _loadError;
+
+  /// 순서 채점(서버 왕복) 중. 같은 순서를 두 번 보내지 않게 막습니다.
+  bool _checking = false;
+
+  bool _recording = false;
+  bool _transcribing = false;
   bool _isSaving = false;
 
-  /// 저장 시뮬레이션. `Future.delayed` 대신 [Timer] 를 쓰고 [dispose] 에서 끕니다
-  /// — 화면을 나간 뒤 `setState` 가 불리면 위젯 테스트가 죽습니다.
+  /// 아이가 말한 내용. **null 이면 아직 말하기 전**입니다. 데모 모드에서는
+  /// 마이크를 누르는 순간 고정 문장이 들어옵니다.
+  String? _transcript;
+
+  /// STT 원문(서버가 교정하기 전). 완료 제출의 `sttRawText` 로 되올립니다.
+  String? _sttRawText;
+
+  /// 말풍선에 띄우는 한 줄 안내. 재녹음·재시도처럼 **아이가 그 자리에서
+  /// 풀 수 있는** 상황을 화면 전체 에러로 바꾸지 않기 위한 자리입니다.
+  String? _hint;
+
+  /// 완료 응답. 별가루·해금 아이템을 완료 화면에 그리는 데 씁니다.
+  PlayRetellingResult? _result;
+
+  /// 실제로 녹음할 때(서버 모드) 처음 만듭니다 - 데모 모드에서는 마이크
+  /// 플러그인을 아예 건드리지 않습니다.
+  MissionVoiceRecorder? _recorderOrNull;
+  MissionVoiceRecorder get _recorder =>
+      _recorderOrNull ??= widget.voiceRecorder ?? DeviceMissionVoiceRecorder();
+
+  /// 녹음 상한. 서버 업로드 한도에 닿기 전에 스스로 끊습니다.
+  Timer? _recordLimit;
+
+  /// 데모 모드의 저장 시늉. `Future.delayed` 대신 [Timer] 를 쓰고 [dispose] 에서
+  /// 끕니다 — 화면을 나간 뒤 `setState` 가 불리면 위젯 테스트가 죽습니다.
   Timer? _saveTimer;
 
   static const String _demoTranscript =
@@ -168,18 +224,67 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
   @override
   void initState() {
     super.initState();
-    // 카드 개수는 이야기마다 다를 수 있어(기획: 4~5장) 항상 sceneCards 길이에서 파생시킵니다.
-    _shuffled = _trayOrder(widget.sceneCards);
-    _slots = List<RecapSceneCard?>.filled(
-      widget.sceneCards.length,
-      null,
-      growable: false,
-    );
+    if (widget.repository == null) {
+      // 데모 모드 - 고정 카드를 프런트가 섞어서 씁니다.
+      // 카드 개수는 이야기마다 다를 수 있어(기획: 4~5장) 항상 길이에서 파생시킵니다.
+      _shuffled = _trayOrder(widget.sceneCards);
+      _slots = List<RecapSceneCard?>.filled(
+        widget.sceneCards.length,
+        null,
+        growable: false,
+      );
+      return;
+    }
+    unawaited(_start());
   }
+
+  /// 카드 받아 오기. 실패해도 다시 시도할 수 있어야 합니다 - 여기서 막히면
+  /// 아이는 활동 자체를 시작하지 못합니다.
+  Future<void> _start() async {
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
+    try {
+      final PlayPostActivityStart start = await widget.repository!
+          .startPostActivity(widget.sessionId);
+      if (!mounted) return;
+      final List<RecapSceneCard> cards = <RecapSceneCard>[
+        for (final PlayPostActivityCard card in start.cards)
+          RecapSceneCard(
+            id: card.cardId,
+            title: card.text,
+            image: _imageFor(card.cardId),
+          ),
+      ];
+      setState(() {
+        _loading = false;
+        _shuffled = cards;
+        _slots = List<RecapSceneCard?>.filled(
+          cards.length,
+          null,
+          growable: false,
+        );
+      });
+    } on Failure catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = error.message;
+      });
+    }
+  }
+
+  /// 카드 그림은 **서버가 주지 않습니다.** `card_1` ~ `card_4` 의 번호로
+  /// 프런트 에셋을 찾습니다(백엔드 시드가 이 그림 4장에 맞춰져 있습니다).
+  static String _imageFor(String cardId) =>
+      'assets/images/recap/banggui/scene_${cardId.split('_').last}.webp';
 
   /// 정답 순서를 섞습니다. 홀수 자리 → 짝수 자리 역순으로 엮으면 카드 개수가
   /// 몇 장이든 **어떤 카드도 제자리에 남지 않아서**, 우연히 정답이 되지 않습니다.
   /// (`Random` 을 쓰지 않는 이유: 미리보기와 테스트에서 같은 배치를 보려고)
+  ///
+  /// **데모 모드에서만 씁니다.** 서버 모드에서는 서버가 섞어 줍니다.
   static List<RecapSceneCard> _trayOrder(List<RecapSceneCard> cards) {
     final List<RecapSceneCard> odd = <RecapSceneCard>[];
     final List<RecapSceneCard> even = <RecapSceneCard>[];
@@ -192,6 +297,8 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
   @override
   void dispose() {
     _saveTimer?.cancel();
+    _recordLimit?.cancel();
+    unawaited(_recorderOrNull?.dispose());
     super.dispose();
   }
 
@@ -203,9 +310,10 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
       )
       .toList(growable: false);
 
-  bool get _isReady => !_slots.contains(null);
+  bool get _isReady => _slots.isNotEmpty && !_slots.contains(null);
 
-  bool get _isCorrect {
+  /// **데모 모드 전용 판정.** 서버 모드에서는 프런트가 정답 순서를 모릅니다.
+  bool get _isDemoCorrect {
     for (int i = 0; i < _slots.length; i++) {
       if (_slots[i]?.id != widget.sceneCards[i].id) return false;
     }
@@ -226,6 +334,7 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
       _slots[slotIndex] = data.card;
       _selectedCardId = null;
       _showRetryHint = false;
+      _hint = null;
     });
   }
 
@@ -234,6 +343,7 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
       _slots[slotIndex] = null;
       _selectedCardId = null;
       _showRetryHint = false;
+      _hint = null;
     });
   }
 
@@ -259,40 +369,222 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
     });
   }
 
-  void _checkOrder() {
-    if (!_isCorrect) {
-      setState(() => _showRetryHint = true);
+  /// 순서 채점. **서버가 판정합니다** - 프런트는 정답 순서를 모릅니다.
+  Future<void> _checkOrder() async {
+    if (_checking || !_isReady) return;
+    final PlayRepository? repository = widget.repository;
+    if (repository == null) {
+      if (!_isDemoCorrect) {
+        setState(() => _showRetryHint = true);
+        return;
+      }
+      _enterRetell(widget.keywords);
       return;
     }
+
     setState(() {
+      _checking = true;
+      _hint = null;
+    });
+    try {
+      final PlayCardOrderResult result = await repository.submitCardOrder(
+        widget.sessionId,
+        submittedOrder: <String>[
+          for (final RecapSceneCard? card in _slots) card!.id,
+        ],
+      );
+      if (!mounted) return;
+      setState(() => _checking = false);
+      if (!result.correct) {
+        // 재시도 횟수 제한이 없습니다. 지금처럼 부드럽게 다시 권하기만 합니다.
+        setState(() => _showRetryHint = true);
+        return;
+      }
+      _enterRetell(result.retellingKeywords);
+    } on Failure catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _checking = false;
+        _hint = error.message;
+      });
+    }
+  }
+
+  void _enterRetell(List<String> keywords) {
+    setState(() {
+      _keywords = keywords;
       _step = _RecapStep.retell;
       _selectedCardId = null;
       _showRetryHint = false;
+      _hint = null;
     });
     // 마이크를 대신 눌러 주지 않습니다. 아이가 직접 누르는 게 "내 차례"의
     // 신호이고, 자동으로 켜면 "말하기 전" 상태가 한순간만 존재합니다. (PRD F-04)
   }
 
-  void _toggleListening() {
+  /// 마이크. 누르면 녹음을 시작하고, 다시 누르면 끝내고 STT 로 글자를 받습니다.
+  /// (`play_view.dart` 의 발화 흐름과 같은 구조입니다)
+  Future<void> _toggleListening() async {
+    if (_transcribing || _isSaving) return;
+    final PlayRepository? repository = widget.repository;
+    if (repository == null) {
+      // 데모 모드 - 녹음도 STT 도 없이 고정 문장을 보여 줍니다.
+      setState(() {
+        _isListening = !_isListening;
+        _transcript ??= _demoTranscript;
+      });
+      return;
+    }
+
+    if (!_recording) {
+      try {
+        final bool allowed = await _recorder.start();
+        if (!mounted) return;
+        if (!allowed) {
+          setState(() => _hint = RecapStrings.micDenied);
+          return;
+        }
+        setState(() {
+          _recording = true;
+          _isListening = true;
+          _hint = null;
+        });
+        // 업로드 한도(10MB)에 닿기 전에 스스로 끊습니다.
+        _recordLimit?.cancel();
+        _recordLimit = Timer(
+          const Duration(seconds: maxRecordingSeconds),
+          () => unawaited(_toggleListening()),
+        );
+      } on Object {
+        if (mounted) setState(() => _hint = RecapStrings.micFailed);
+      }
+      return;
+    }
+
+    _recordLimit?.cancel();
     setState(() {
-      _isListening = !_isListening;
-      if (_isListening) _hasSpoken = true;
+      _recording = false;
+      _isListening = false;
+      _transcribing = true;
     });
+    try {
+      final Uint8List? audio = await _recorder.stop();
+      if (audio == null || audio.isEmpty) throw StateError('empty audio');
+      final PlayTranscription transcription = await repository.transcribeAudio(
+        audio,
+      );
+      if (!mounted) return;
+      setState(() {
+        _transcribing = false;
+        _transcript = transcription.text;
+        _sttRawText = transcription.rawText;
+        _hint = null;
+      });
+    } on Failure catch (error) {
+      if (!mounted) return;
+      // 무음·인식 실패는 흔한 상황이라 화면을 통째로 에러로 바꾸지 않고
+      // 말풍선으로만 안내한 뒤 그 자리에서 다시 녹음하게 둡니다.
+      setState(() {
+        _transcribing = false;
+        _hint = _voiceRetryHint(error) ?? error.message;
+      });
+    } on Object {
+      if (!mounted) return;
+      setState(() {
+        _transcribing = false;
+        _hint = RecapStrings.micFailed;
+      });
+    }
   }
 
-  void _completeActivity() {
+  /// 마이크 옆 안내로 처리할 실패인지. (`play_view.dart` 와 같은 표)
+  String? _voiceRetryHint(Failure error) {
+    if (error is! ServerFailure) return null;
+    return switch (error.code) {
+      'STT_EMPTY_TEXT' => RecapStrings.sttEmpty,
+      'AUDIO_TOO_LARGE' => RecapStrings.sttTooLong,
+      'AI_RATE_LIMITED' ||
+      'AI_UPSTREAM_ERROR' ||
+      'AI_UNAVAILABLE' => RecapStrings.sttUnavailable,
+      _ => null,
+    };
+  }
+
+  /// 완료. **이 한 번의 호출로 세션 완료·별가루·아이템 해금이 끝납니다.**
+  Future<void> _completeActivity() async {
     if (_isSaving) return;
+    final PlayRepository? repository = widget.repository;
+    if (repository == null) {
+      setState(() {
+        _isListening = false;
+        _isSaving = true;
+      });
+      _saveTimer?.cancel();
+      _saveTimer = Timer(AppDurations.turn, () {
+        if (!mounted) return;
+        setState(() {
+          _isSaving = false;
+          _step = _RecapStep.completed;
+        });
+      });
+      return;
+    }
+
+    final String text = _transcript?.trim() ?? '';
+    // 빈 텍스트는 서버가 400 으로 막습니다. 그 전에 아이에게 말을 겁니다.
+    if (text.isEmpty) {
+      setState(() => _hint = RecapStrings.sttEmpty);
+      return;
+    }
     setState(() {
       _isListening = false;
       _isSaving = true;
+      _hint = null;
     });
-    _saveTimer?.cancel();
-    _saveTimer = Timer(AppDurations.turn, () {
+    try {
+      final PlayRetellingResult result = await repository.submitRetelling(
+        widget.sessionId,
+        text: text,
+        sttRawText: _sttRawText,
+      );
       if (!mounted) return;
       setState(() {
         _isSaving = false;
+        _result = result;
         _step = _RecapStep.completed;
       });
+    } on ServerFailure catch (error) {
+      if (!mounted) return;
+      switch (error.code) {
+        // 순서를 맞히기 전이라고 서버가 돌려세웠습니다 - 1단계로 되돌립니다.
+        case 'RETELLING_BEFORE_ORDER':
+          setState(() {
+            _isSaving = false;
+            _step = _RecapStep.arrange;
+            _showRetryHint = true;
+            _keywords = const <String>[];
+          });
+        // 이미 끝난 세션입니다. 다시 제출하게 두면 계속 같은 벽에 부딪힙니다.
+        case 'SESSION_NOT_IN_PROGRESS':
+          setState(() {
+            _isSaving = false;
+            _step = _RecapStep.completed;
+          });
+        default:
+          _failSaving(error.message);
+      }
+    } on Failure catch (error) {
+      if (!mounted) return;
+      _failSaving(error.message);
+    }
+  }
+
+  /// 저장 실패. **활동을 처음부터 다시 하게 만들지 않습니다** - 말한 내용을
+  /// 그대로 들고 완료 버튼만 다시 누를 수 있게 둡니다.
+  void _failSaving(String message) {
+    setState(() {
+      _isSaving = false;
+      _hint = RecapStrings.saveFailed(message);
     });
   }
 
@@ -344,6 +636,21 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
   }
 
   Widget _buildStep(ScreenMetrics metrics) {
+    // 카드를 받기 전에는 고정 카드를 대신 깔지 않습니다. 만질 수 있는 카드가
+    // 먼저 떠 있으면 아이가 놓기 시작한 순간 서버 카드로 갈아치워지고,
+    // 그 카드들은 이 세션의 정답과 아무 관계가 없습니다.
+    if (_loading) {
+      return const AppLoadingView(key: ValueKey<String>('loading'));
+    }
+    final String? loadError = _loadError;
+    if (loadError != null) {
+      return AppKidErrorView(
+        key: const ValueKey<String>('load-error'),
+        message: loadError,
+        messageStyle: metrics.text(AppTypography.kidBody),
+        onRetry: () => unawaited(_start()),
+      );
+    }
     return switch (_step) {
       _RecapStep.arrange => _ArrangeStep(
         key: const ValueKey<String>('arrange'),
@@ -352,34 +659,59 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
         tray: _trayCards,
         selectedCardId: _selectedCardId,
         showRetryHint: _showRetryHint,
-        isReady: _isReady,
+        hint: _hint,
+        isReady: _isReady && !_checking,
         onSlotTap: _handleSlotTap,
         onTrayCardTap: _handleTrayCardTap,
         onDropOnSlot: _drop,
         onReturnToTray: _returnToTray,
-        onCheck: _checkOrder,
+        onCheck: () => unawaited(_checkOrder()),
       ),
       _RecapStep.retell => _RetellStep(
         key: const ValueKey<String>('retell'),
         metrics: metrics,
-        cards: widget.sceneCards,
-        keywords: widget.keywords,
+        cards: _orderedCards,
+        keywords: _keywords,
         isListening: _isListening,
-        hasSpoken: _hasSpoken,
+        isTranscribing: _transcribing,
         isSaving: _isSaving,
-        transcript: _demoTranscript,
-        onMic: _toggleListening,
-        onComplete: _completeActivity,
+        hint: _hint,
+        transcript: _transcript,
+        onMic: () => unawaited(_toggleListening()),
+        onComplete: () => unawaited(_completeActivity()),
       ),
       _RecapStep.completed => AppKidMessageView(
         key: const ValueKey<String>('completed'),
-        message: RecapStrings.completed,
+        message: _completedMessage,
         messageStyle: metrics.text(AppTypography.kidTitle),
         actionIcon: AppIcons.home,
         actionLabel: RecapStrings.completedAction,
         onAction: () => Navigator.of(context).maybePop(),
       ),
     };
+  }
+
+  /// 2단계에 보여 줄 **정답 순서** 카드. 순서를 맞히고 나서야 그리는 화면이라
+  /// 아이가 놓은 자리가 곧 정답 순서입니다 - 서버가 정답 순서를 따로 주지
+  /// 않아도 됩니다. (데모 모드는 고정 정답 순서를 그대로 씁니다)
+  List<RecapSceneCard> get _orderedCards => widget.repository == null
+      ? widget.sceneCards
+      : <RecapSceneCard>[
+          for (final RecapSceneCard? card in _slots)
+            if (card != null) card,
+        ];
+
+  /// 완료 화면 문구. 별가루와 해금 아이템은 **서버 응답에서** 옵니다.
+  String get _completedMessage {
+    final PlayRetellingResult? result = _result;
+    final PlayStardust? stardust = result?.stardust;
+    return <String>[
+      RecapStrings.completed,
+      if (stardust != null && stardust.earned > 0)
+        RecapStrings.completedStardust(stardust.earned),
+      if (result != null && result.unlockedItems.isNotEmpty)
+        RecapStrings.completedUnlocked(result.unlockedItems.length),
+    ].join('\n');
   }
 }
 
@@ -589,6 +921,7 @@ class _ArrangeStep extends StatelessWidget {
     required this.tray,
     required this.selectedCardId,
     required this.showRetryHint,
+    required this.hint,
     required this.isReady,
     required this.onSlotTap,
     required this.onTrayCardTap,
@@ -603,6 +936,10 @@ class _ArrangeStep extends StatelessWidget {
   final List<RecapSceneCard> tray;
   final String? selectedCardId;
   final bool showRetryHint;
+
+  /// 서버 왕복이 실패했을 때의 한 줄 안내. 있으면 말풍선을 대신 차지합니다 -
+  /// 안내·힌트·상태는 늘 한 자리에 모읍니다.
+  final String? hint;
   final bool isReady;
   final ValueChanged<int> onSlotTap;
   final ValueChanged<RecapSceneCard> onTrayCardTap;
@@ -619,11 +956,13 @@ class _ArrangeStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String message = showRetryHint
-        ? RecapStrings.arrangeRetry
-        : isReady
-        ? RecapStrings.arrangeReady
-        : RecapStrings.arrangeGuide;
+    final String message =
+        hint ??
+        (showRetryHint
+            ? RecapStrings.arrangeRetry
+            : isReady
+            ? RecapStrings.arrangeReady
+            : RecapStrings.arrangeGuide);
 
     return Column(
       children: <Widget>[
@@ -685,7 +1024,7 @@ class _ArrangeStep extends StatelessWidget {
                       _GuideBubble(
                         metrics: metrics,
                         message: message,
-                        caution: showRetryHint,
+                        caution: showRetryHint || hint != null,
                       ),
                       const SizedBox(height: AppSpacing.md),
                       _buildBoard(cardWidth, perRow),
@@ -1190,8 +1529,9 @@ class _RetellStep extends StatelessWidget {
     required this.cards,
     required this.keywords,
     required this.isListening,
-    required this.hasSpoken,
+    required this.isTranscribing,
     required this.isSaving,
+    required this.hint,
     required this.transcript,
     required this.onMic,
     required this.onComplete,
@@ -1202,9 +1542,17 @@ class _RetellStep extends StatelessWidget {
   final List<RecapSceneCard> cards;
   final List<String> keywords;
   final bool isListening;
-  final bool hasSpoken;
+
+  /// 녹음을 끝내고 글자를 받아 오는 중. 이 사이에 마이크를 다시 누르면
+  /// 앞 녹음의 결과와 뒤 녹음이 엉킵니다.
+  final bool isTranscribing;
   final bool isSaving;
-  final String transcript;
+
+  /// 다시 녹음·다시 저장처럼 **아이가 그 자리에서 풀 수 있는** 안내.
+  final String? hint;
+
+  /// 아이가 말한 내용. `null` 이면 아직 말하기 전입니다.
+  final String? transcript;
   final VoidCallback onMic;
   final VoidCallback onComplete;
 
@@ -1233,11 +1581,19 @@ class _RetellStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String message = isListening
-        ? RecapStrings.retellListening
-        : hasSpoken
-        ? RecapStrings.retellSpoken
-        : RecapStrings.retellGuide;
+    // 말하기를 한 번이라도 마쳤는지는 **받아쓴 글자**로 판별합니다. 녹음
+    // 시간이나 마이크 상태에서 파생시키면, 0초에 멈춘 아이의 화면에서 띠가
+    // 접히고 완료 버튼이 죽습니다.
+    final bool hasSpoken = transcript != null;
+    final String message =
+        hint ??
+        (isListening
+            ? RecapStrings.retellListening
+            : isTranscribing
+            ? RecapStrings.retellTranscribing
+            : hasSpoken
+            ? RecapStrings.retellSpoken
+            : RecapStrings.retellGuide);
 
     return Column(
       children: <Widget>[
@@ -1298,7 +1654,11 @@ class _RetellStep extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
-                      _GuideBubble(metrics: metrics, message: message),
+                      _GuideBubble(
+                        metrics: metrics,
+                        message: message,
+                        caution: hint != null,
+                      ),
                       const SizedBox(height: AppSpacing.md),
                       _SceneStrip(
                         metrics: metrics,
@@ -1312,7 +1672,7 @@ class _RetellStep extends StatelessWidget {
                       const SizedBox(height: AppSpacing.md),
                       _TranscriptBubble(
                         metrics: metrics,
-                        text: hasSpoken ? transcript : null,
+                        text: transcript,
                         height: bubbleHeight,
                         padding: _bubblePadding,
                       ),
@@ -1330,11 +1690,11 @@ class _RetellStep extends StatelessWidget {
               final Widget mic = _MicButton(
                 metrics: metrics,
                 listening: isListening,
-                onTap: isSaving ? null : onMic,
+                onTap: isSaving || isTranscribing ? null : onMic,
               );
               // 말하기 전에는 완료 버튼을 내보내지 않습니다. 한 화면에서
               // 아이가 고를 것을 하나로 줄이면 다음 행동이 분명해집니다.
-              final Widget? finish = hasSpoken
+              final Widget? finish = transcript != null
                   ? KidPrimaryButton(
                       icon: AppIcons.done,
                       label: isSaving
