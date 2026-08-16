@@ -7,9 +7,19 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/config/app_config.dart';
 import '../../../../core/constants/app_icons.dart';
+import '../../../../core/constants/app_strings.dart';
 import '../../../../core/error/failure.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_motion.dart';
+import '../../../../core/theme/app_shadows.dart';
+import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/theme/app_typography.dart';
+import '../../../../core/widgets/app_canvas.dart';
 import '../../../../core/widgets/app_state_views.dart';
+import '../../../../core/widgets/kid_button.dart';
+import '../../../../core/widgets/kid_speech_bubble.dart';
+import '../../../../core/widgets/screen_metrics.dart';
 import '../../data/dialogue_word_capture.dart';
 import '../../data/stt_choice_catalog.dart';
 import '../../data/stt_choice_selector.dart';
@@ -196,6 +206,18 @@ class _PlayPageState extends State<PlayPage> {
   DialogueCharacterManifest? _characterManifest;
   DialogueCharacterStateMachine? _character;
 
+  /// 말하기가 끝나 "같이 정리해보자" 한마디를 띄우고 있는 중인지.
+  /// → [_beginRecapHandoff] · [_RecapHandoffScreen]
+  bool _handingOffToRecap = false;
+
+  /// 그 한마디를 보여 준 뒤 스스로 다음 화면으로 넘어가는 시계.
+  /// 아이가 화면을 눌러 먼저 넘어가면 [_goToRecap] 이 취소합니다.
+  Timer? _recapHandoffTimer;
+
+  /// 이미 후속 활동으로 보냈는지. 스냅샷이 두 번 들어오거나, 시계와 아이의
+  /// 탭이 같은 순간에 겹쳐도 `context.go` 는 **한 번만** 나갑니다.
+  bool _recapHandoffDone = false;
+
   /// 지금 보내고 있는 발화의 Idempotency-Key. 응답을 받으면(성공이든 최종
   /// 실패든) `null`로 되돌립니다 — 재시도 사이에는 같은 키를 유지하고,
   /// 다음 발화는 새 키를 받게 하기 위해서입니다. → `docs/이야기_전개_가이드.md` 3.4
@@ -288,6 +310,7 @@ class _PlayPageState extends State<PlayPage> {
     _storyTimer?.cancel();
     _wordNoticeTimer?.cancel();
     _confirmTimer?.cancel();
+    _recapHandoffTimer?.cancel();
     // 화면을 떠나면 기다리던 발화 루프들도 풀어 줍니다 - 안 풀면 취소된
     // 타이머·닫힌 문 앞에서 영영 매달린 채로 남습니다.
     _releaseSpeechWait();
@@ -375,6 +398,20 @@ class _PlayPageState extends State<PlayPage> {
 
   void _activateSnapshot(PlaySessionSnapshot snapshot) {
     _storyTimer?.cancel();
+    // 말하기가 끝났습니다. **여기서 곧바로 화면을 갈아 끼우지 않습니다** -
+    // 캐릭터와 이야기하다가 예고 없이 다른 화면으로 넘어가면, 아이에게는
+    // 대화하던 친구가 사라지고 다른 앱으로 튕긴 일이 됩니다. 대신 지금 화면
+    // 위에 한마디를 얹고([_beginRecapHandoff]) 그 뒤에 넘깁니다.
+    //
+    // 아래 "장면이 바뀌었다" 정리나 [_bindCharacterScene] 보다 **먼저** 빠져
+    // 나갑니다. 후속 활동 스냅샷에는 `currentScene` 이 없어서, 그대로 흘려
+    // 보내면 [_character] 가 지워집니다 - 전환 화면이 그 캐릭터를 그대로
+    // 이어 그리므로([_RecapHandoffScreen]), 여기서 내려보내면 말을 걸던
+    // 친구가 사라진 채 글자만 남습니다.
+    if (snapshot.phase == PlayPhase.postActivity) {
+      _beginRecapHandoff();
+      return;
+    }
     // 장면이 바뀌면 이전 장면에서 아이가 한 말은 지웁니다 - 새 캐릭터가
     // 말을 거는데 아직 하지도 않은 대답이 떠 있으면 안 됩니다. 같은 장면을
     // 다시 활성화하는 경우(이어하기 복원)에는 그대로 둡니다.
@@ -393,12 +430,6 @@ class _PlayPageState extends State<PlayPage> {
       });
     }
     _bindCharacterScene();
-    if (snapshot.phase == PlayPhase.postActivity) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) context.go(AppRoutes.playRecapOf(widget.sessionId));
-      });
-      return;
-    }
     if (snapshot.phase == PlayPhase.ended) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) context.go(AppRoutes.home);
@@ -426,6 +457,53 @@ class _PlayPageState extends State<PlayPage> {
     } else {
       unawaited(_loadOpeningMessage());
     }
+  }
+
+  /// 가만히 두었을 때 전환 화면이 머무는 시간.
+  ///
+  /// 읽을 것이 제목("말하기 후 활동")과 한마디 두 줄이고, 그 아래 `시작`
+  /// 버튼까지 눈에 들어와야 합니다. 초1~3이 두 줄을 따라 읽는 데만 3초쯤
+  /// 걸리므로, 말풍선 한 줄만 띄우던 시절의 2.5초로는 버튼을 보기도 전에
+  /// 화면이 바뀝니다. 반대로 더 늘리면 버튼을 누를 줄 아는 아이가 기다립니다.
+  static const Duration _recapHandoffDelay = Duration(milliseconds: 4500);
+
+  /// 말하기 후 활동으로 넘어가기 전, 전환 화면을 띄웁니다.
+  ///
+  /// 화면은 [_RecapHandoffScreen] 이 통째로 덮지만, 뒤에서 돌던 것들은 여기서
+  /// 모두 멈춰야 합니다 - 덮어 놓기만 하면 보이지 않는 곳에서 이전 장면의
+  /// 대사가 계속 흘러나오고 마이크가 저 혼자 켜집니다.
+  ///
+  /// 후속 활동 스냅샷이 두 번 들어와도([_loadSession] 재시도 등) 두 번째부터는
+  /// 아무 일도 하지 않습니다 - 시계가 두 개 걸리면 안 됩니다.
+  void _beginRecapHandoff() {
+    if (_handingOffToRecap || _recapHandoffDone) return;
+    // 하던 말·예약된 다음 문장·오디오를 모두 끊습니다.
+    _stopSpeaking();
+    _confirmTimer?.cancel();
+    _wordNoticeTimer?.cancel();
+    if (_recordingVoice) unawaited(_voiceRecorder.cancel());
+    setState(() {
+      _handingOffToRecap = true;
+      // 이제 말하는 쪽은 캐릭터입니다. 안 바꾸면 오버레이 뒤에서 마이크가
+      // "듣는 중" 모양으로 남아, 넘어가기 직전까지 아이 차례처럼 보입니다.
+      _phase = _DialoguePhase.characterSpeaking;
+      _recordingVoice = false;
+      _transcribingVoice = false;
+      _pendingTranscription = null;
+      _pendingWord = null;
+      _wordNotice = null;
+    });
+    _recapHandoffTimer = Timer(_recapHandoffDelay, _goToRecap);
+  }
+
+  /// 후속 활동으로 넘깁니다. 시계가 다 됐거나 아이가 `시작` 을 눌렀을 때.
+  ///
+  /// 둘 중 무엇이 먼저 오든 **한 번만** 나갑니다.
+  void _goToRecap() {
+    if (_recapHandoffDone || !mounted) return;
+    _recapHandoffDone = true;
+    _recapHandoffTimer?.cancel();
+    context.go(AppRoutes.playRecapOf(widget.sessionId));
   }
 
   Future<void> _loadOpeningMessage() async {
@@ -1947,6 +2025,18 @@ class _PlayPageState extends State<PlayPage> {
               ),
               if (_resultImageUrl != null)
                 _ResultSceneOverlay(imageUrl: _resultImageUrl!),
+              // 맨 위에 얹어 화면을 **불투명하게** 덮습니다. 이야기가 끝난
+              // 뒤에는 아래의 어떤 것도 더 누를 것이 없고, 아래에 남은 말들은
+              // (직전 대사·"질문이 끝나면 마이크가 켜져요") 전부 지난 이야기라
+              // 비쳐 보이면 지금 화면과 충돌합니다.
+              if (_handingOffToRecap)
+                _RecapHandoffScreen(
+                  character: _character,
+                  characterAsset: widget.characterAsset,
+                  characterName:
+                      dialogueScene?.characterName ?? widget.characterName,
+                  onStart: _goToRecap,
+                ),
             ],
           );
         },
@@ -3560,39 +3650,711 @@ class _PauseOverlay extends StatelessWidget {
     return ColoredBox(
       color: const Color(0xD10C1C2F),
       child: Center(
-        child: Container(
-          padding: const EdgeInsets.all(30),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(30),
+        // 카드 폭을 여기서 묶어 둡니다. 버튼 테마가
+        // `minimumSize: Size.fromHeight(...)` 라 폭을 무한대로 요구해서,
+        // 상자를 안 씌우면 카드가 화면 폭을 전부 차지합니다.
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 340),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  const Icon(
+                    Icons.pause_circle_rounded,
+                    color: Color(0xFF4B8EC2),
+                    size: 48,
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    '이야기를 잠시 멈췄어요',
+                    style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 18),
+                  FilledButton.icon(
+                    onPressed: onResume,
+                    icon: const Icon(Icons.play_arrow_rounded),
+                    label: const Text('계속 듣기'),
+                  ),
+                  const SizedBox(height: 4),
+                  TextButton(
+                    onPressed: onExit,
+                    child: const Text('이야기 나가기'),
+                  ),
+                ],
+              ),
+            ),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+        ),
+      ),
+    );
+  }
+}
+
+/// 말하기가 끝나고 "말하기 후 활동"으로 넘어가기 직전에 한 번 끼는 전환 화면.
+///
+/// **뒤가 비치지 않는 한 장의 화면입니다.** 대화 화면 위에 반투명 막을 덮던
+/// 예전 방식은 아래 셋이 그대로 읽혀서 못 씁니다.
+///
+/// 1. 직전 캐릭터 대사("이럴 때는 어떻게 하면 좋을까?")가 새 말풍선 바로 위에
+///    겹쳐 남아, 지금 누가 무슨 말을 하는지 헷갈립니다.
+/// 2. 하단 마이크 패널이 "질문이 끝나면 마이크가 켜져요"라고 말합니다 —
+///    이야기가 이미 끝난 시점이라 사실이 아닙니다.
+/// 3. 상단 컨트롤(닫기·되감기·소리·일시정지)이 밝게 살아 있는데 막이 탭을
+///    먹어서 눌러도 반응하지 않습니다.
+///
+/// 바탕은 [AppCanvas.day] 입니다 — 다음 화면(`play_recap_view.dart`)과 같은
+/// 바탕이라, 이 화면이 활동의 표지처럼 이어집니다.
+///
+/// ## 이 화면이 하지 않는 것
+///
+/// - **소리를 내지 않습니다.** 지금은 글자로만 보여 줍니다.
+/// - **숨은 탭 영역을 두지 않습니다.** 넘어가는 길은 `시작` 버튼과 시계
+///   둘뿐입니다. 화면 아무 데나 눌러 넘어가던 예전 방식은 누를 자리가 눈에
+///   보이지 않아 아이가 화면을 더듬게 만들었습니다.
+/// - **확인 관문을 세우지 않습니다.** 버튼을 안 눌러도 [_recapHandoffDelay]
+///   뒤에 저절로 넘어갑니다 — 글을 못 읽는 아이 앞에서 이야기가 멈추면 안 됩니다.
+/// - **다음 활동의 내용은 한 글자도 비추지 않습니다.** 바로 다음이 장면 그림을
+///   이야기 순서대로 놓는 활동이라, 장면 그림·제목·낱말이 여기 새어 나오면
+///   그게 곧 정답입니다. (`play_recap_view.dart` 의 `RecapSceneCard.title`)
+class _RecapHandoffScreen extends StatelessWidget {
+  const _RecapHandoffScreen({
+    required this.character,
+    required this.characterAsset,
+    required this.characterName,
+    required this.onStart,
+  });
+
+  /// 방금까지 말을 걸던 캐릭터. 표정 에셋이 있는 장면에서만 값이 있습니다.
+  /// 화면이 바뀌어도 같은 친구가 이어서 말한다는 걸 이 그림 하나가 지탱합니다.
+  final DialogueCharacterStateMachine? character;
+
+  /// [character] 가 없는 장면에서 쓰는 캐릭터 한 장.
+  final String? characterAsset;
+  final String characterName;
+
+  /// `시작` 버튼. 시계가 먼저 다 되면 화면 밖에서 같은 곳으로 갑니다.
+  final VoidCallback onStart;
+
+  /// 넓은 화면에서 캐릭터가 가져가는 가로 몫. 스케치의 "세로로 긴 자리"입니다.
+  ///
+  /// 남은 폭을 말풍선에 다 주지 않습니다 - 한 줄짜리 말풍선은 제 글만큼만
+  /// 넓어져서, 남는 폭이 전부 오른쪽 여백으로 몰리면 인물만 왼쪽 구석에
+  /// 붙어 보입니다. 대신 인물과 말을 한 덩어리로 묶어 가운데에 놓습니다.
+  ///
+  /// 태블릿(1280×720)에서 이 값이면 인물이 세로를 거의 다 씁니다. 더 키우면
+  /// 세로가 먼저 차서 그림이 가운데로 오그라들고, 그만큼 좌우 투명 여백이
+  /// 늘어나 [_characterArtInset] 이 도로 어긋납니다.
+  static const double _characterWidthFactor = .32;
+
+  /// 캐릭터 그림 좌우에 들어 있는 **투명 여백**의 몫.
+  ///
+  /// 대화 캐릭터 에셋은 1200×1600 프레임 한가운데에 인물을 세워 둔 그림이라
+  /// 좌우 20% 안팎이 빈 픽셀입니다. [BoxFit.contain] 은 그 빈 픽셀까지 그림으로
+  /// 치기 때문에, 캐릭터 자리의 폭을 그대로 두면 말풍선이 **보이지도 않는
+  /// 여백만큼** 밀려나 인물과 145px 가까이 벌어집니다 - 그러면 꼬리가 허공을
+  /// 가리켜서 누가 하는 말인지 읽히지 않습니다.
+  ///
+  /// 그래서 **자리 폭에서는 이 몫을 빼고, 그림은 원래 폭 그대로** 그립니다.
+  /// 넘치는 쪽은 어차피 투명이라 말풍선을 가리지 않습니다.
+  static const double _characterArtInset = .22;
+
+  /// 이 아래로는 "세로가 짧은 화면"입니다. 폰 가로(390 안팎)가 여기 들어옵니다.
+  ///
+  /// 짧으면 두 가지가 달라집니다.
+  /// - **캐릭터를 뺍니다.** 제목·말풍선·버튼 셋은 이 화면의 뜻 그 자체라
+  ///   무엇도 접을 수 없고, 넷을 다 욱여넣으면 잘립니다.
+  /// - **간격을 [AppSpacing.md] 로 좁힙니다.** [ScreenMetrics.sectionGap] 은
+  ///   태블릿 세로를 기준으로 한 값이라, 그대로 쓰면 `시작` 버튼이 화면 밖으로
+  ///   밀려납니다.
+  static const double _shortHeight = 460;
+
+  /// 등장 순서 — 제목 → 인물 → 말(+버튼). 한 번씩만 들어오고 그 뒤로는
+  /// 잔잔합니다. **4.5초 만에 사라지는 화면**이라 계속 움직이는 장식을 깔면
+  /// 아이가 볼 것을 고르지 못하고 피곤해집니다.
+  static const Duration _characterDelay = Duration(milliseconds: 140);
+  static const Duration _speechDelay = Duration(milliseconds: 280);
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: respect(context, AppDurations.normal),
+      curve: AppCurves.standard,
+      builder: (BuildContext context, double t, Widget? child) =>
+          Opacity(opacity: t, child: child),
+      // 이 화면은 대화 화면 **위에** 얹힙니다. 색만 칠하면 빈 자리를 누를 때
+      // 아래에 그대로 남아 있는 마이크·닫기 버튼이 눌립니다 - 보이지도 않는
+      // 버튼이 반응하지 않도록 여기서 포인터를 끊습니다.
+      child: Listener(
+        behavior: HitTestBehavior.opaque,
+        child: AppCanvas.day(
+          child: Stack(
             children: <Widget>[
-              const Icon(
-                Icons.pause_circle_rounded,
-                color: Color(0xFF4B8EC2),
-                size: 76,
+              // 낮 바탕에 깊이를 더하는 장식. 홈의 `HomeBackdrop` 과 같은
+              // 어휘(빛·말풍선 모티프·낮은 언덕)를 쓰되, 여기서는 인물과 말이
+              // 주인공이라 한 단계 더 옅게 깝니다.
+              const Positioned.fill(child: _HandoffBackdrop()),
+              SafeArea(
+                child: LayoutBuilder(
+                  builder: (BuildContext context, BoxConstraints constraints) {
+                    final ScreenMetrics metrics = ScreenMetrics.of(
+                      constraints.maxWidth,
+                    );
+                    final bool short = constraints.maxHeight < _shortHeight;
+                    final bool hasCharacter =
+                        (character != null || characterAsset != null) && !short;
+                    final double gap = short
+                        ? AppSpacing.md
+                        : metrics.sectionGap;
+                    return _body(
+                      context,
+                      metrics,
+                      gap,
+                      hasCharacter,
+                      constraints.maxWidth,
+                    );
+                  },
+                ),
               ),
-              const SizedBox(height: 12),
-              const Text(
-                '이야기를 잠시 멈췄어요',
-                style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 22),
-              FilledButton.icon(
-                onPressed: onResume,
-                icon: const Icon(Icons.play_arrow_rounded),
-                label: const Text('계속 듣기'),
-              ),
-              const SizedBox(height: 8),
-              TextButton(onPressed: onExit, child: const Text('이야기 나가기')),
             ],
           ),
         ),
       ),
     );
   }
+
+  /// 제목 → 본문. 폭에 따라 본문만 갈아 끼웁니다.
+  Widget _body(
+    BuildContext context,
+    ScreenMetrics metrics,
+    double gap,
+    bool hasCharacter,
+    double maxWidth,
+  ) {
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      // 제목과 한마디를 한 번에 읽어 줍니다. 아래에서 두 글을
+      // [ExcludeSemantics] 로 덮었으므로 두 번 읽히지 않습니다.
+      label: '${PlayStrings.toRecapTitle}. ${PlayStrings.toRecap}',
+      // `시작` 버튼은 제 노드를 그대로 갖습니다 — 이 화면에서 유일하게
+      // 누를 수 있는 것이라 라벨 안에 묻으면 안 됩니다.
+      explicitChildNodes: true,
+      child: Padding(
+        padding: EdgeInsets.all(metrics.screenPadding),
+        child: Column(
+          children: <Widget>[
+            // 제목은 맨 먼저, 위에서 살짝 내려앉습니다.
+            _Appear(
+              delay: Duration.zero,
+              rise: -AppSpacing.md,
+              child: ExcludeSemantics(
+                child: _HandoffTitleBadge(metrics: metrics),
+              ),
+            ),
+            SizedBox(height: gap),
+            Expanded(
+              child: metrics.isWide
+                  ? _wideBody(context, metrics, hasCharacter, maxWidth)
+                  : _narrowBody(context, metrics, hasCharacter),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 가로 화면 — 캐릭터는 왼쪽에 서고, 말풍선과 버튼은 오른쪽에 쌓입니다.
+  /// 대화 화면과 같은 구도라 아이가 화면이 바뀐 것을 "자리 이동"으로 읽습니다.
+  Widget _wideBody(
+    BuildContext context,
+    ScreenMetrics metrics,
+    bool hasCharacter,
+    double maxWidth,
+  ) {
+    final double characterWidth = maxWidth * _characterWidthFactor;
+    // 말풍선 자리에 남는 폭. 말풍선이 제 최대 폭까지 커져도 남을 만큼
+    // 넉넉할 때만 가로 제약을 풀어 줍니다 - 빠듯한 폭에서 풀면 말풍선이
+    // 줄바꿈을 못 하고 화면 밖으로 삐져나갑니다.
+    final double speechWidth =
+        maxWidth -
+        metrics.screenPadding * 2 -
+        (hasCharacter
+            ? characterWidth * (1 - _characterArtInset) + AppSpacing.sm
+            : 0);
+    return Row(
+      // 인물과 말이 한 덩어리로 가운데에 모여야 한 장면으로 읽힙니다.
+      mainAxisAlignment: MainAxisAlignment.center,
+      // 캐릭터는 바닥에 서야 하므로 세로를 다 씁니다. 말풍선 쪽은 자기 Column
+      // 안에서 가운데로 모입니다.
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        if (hasCharacter) ...<Widget>[
+          _Appear(
+            delay: _characterDelay,
+            child: SizedBox(
+              // 자리는 투명 여백을 뺀 폭만 차지하고([_characterArtInset]),
+              // 그림은 원래 폭으로 그립니다. 넘치는 오른쪽은 투명이라
+              // 말풍선을 가리지 않으면서 그만큼 말이 인물 쪽으로 붙습니다.
+              width: characterWidth * (1 - _characterArtInset),
+              child: OverflowBox(
+                alignment: Alignment.bottomLeft,
+                minWidth: characterWidth,
+                maxWidth: characterWidth,
+                child: _character(),
+              ),
+            ),
+          ),
+          // 인물 바로 옆에서 말이 시작되어야 꼬리가 인물을 가리킵니다.
+          const SizedBox(width: AppSpacing.sm),
+        ],
+        // 말풍선이 제 글만큼만 차지하도록 [Flexible] 입니다 - [Expanded] 로
+        // 남은 폭을 다 주면 그 폭이 오른쪽 여백이 되어 버립니다.
+        Flexible(
+          child: _speech(
+            context,
+            metrics,
+            shrinkWrap: speechWidth >= AppSizes.bubbleMaxWidth,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 폰 세로 — 좌우로 놓을 폭이 없으므로 위에서 아래로 쌓습니다.
+  /// 캐릭터 → 말풍선 → 버튼 순서는 "누가 말했나 → 무슨 말인가 → 뭘 하나"입니다.
+  Widget _narrowBody(
+    BuildContext context,
+    ScreenMetrics metrics,
+    bool hasCharacter,
+  ) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: <Widget>[
+        if (hasCharacter) ...<Widget>[
+          // 남은 세로만 가져갑니다 - 말풍선과 버튼이 먼저 자리를 잡습니다.
+          Flexible(
+            child: _Appear(delay: _characterDelay, child: _character()),
+          ),
+          // 인물과 말 사이는 [AppSpacing.md] 만 둡니다. 여기서 섹션 간격만큼
+          // 벌리면 말이 인물이 아니라 버튼에 붙어 보입니다.
+          const SizedBox(height: AppSpacing.md),
+        ],
+        // 좁은 화면의 말풍선은 폭을 꽉 채우고 줄바꿈으로 버팁니다.
+        _speech(context, metrics, shrinkWrap: false),
+      ],
+    );
+  }
+
+  /// 캐릭터 + 인물 뒤의 광 + 발밑 그림자.
+  ///
+  /// 그림 한 장만 놓으면 파스텔 바탕 위에 인물이 오려 붙인 것처럼 떠 보입니다.
+  /// 뒤에 옅은 광을 깔고 발밑에 그림자를 두면 같은 그림이 **바닥에 선** 것으로
+  /// 읽힙니다.
+  Widget _character() {
+    final DialogueCharacterStateMachine? machine = character;
+    final Widget art = machine != null
+        ? ExcludeSemantics(
+            child: DialogueCharacterStage(
+              scene: machine.scene,
+              state: machine.current,
+              // 방금 이 한마디를 한 참입니다. 말하는 모션을 그대로 이어 갑니다.
+              activity: DialogueActivity.speaking,
+            ),
+          )
+        : Semantics(
+            image: true,
+            label: '$characterName 캐릭터',
+            child: Image.asset(
+              characterAsset!,
+              fit: BoxFit.contain,
+              alignment: Alignment.bottomCenter,
+            ),
+          );
+    return CustomPaint(painter: const _CharacterStandPainter(), child: art);
+  }
+
+  /// 말풍선 + `시작` 버튼. 둘은 한 덩어리로 등장합니다 — 말을 먼저 띄우고
+  /// 버튼을 나중에 얹으면, 버튼이 뜨기 전에 누르려던 손이 허공을 짚습니다.
+  Widget _speech(
+    BuildContext context,
+    ScreenMetrics metrics, {
+    required bool shrinkWrap,
+  }) {
+    return _Appear(
+      delay: _speechDelay,
+      // 차례가 바뀌는 순간이라 [AppDurations.turn] 입니다. 아이가 "어, 뭔가
+      // 바뀌었네"를 알아채야 하는 변화는 일부러 느리게 둡니다.
+      duration: AppDurations.turn,
+      scaleFrom: .92,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: AppSizes.bubbleMaxWidth),
+        // 폭이 넉넉하면 **말풍선이 제 글만큼만** 넓어지게 두고, 그 폭을
+        // 덩어리 전체의 폭으로 삼습니다. 남은 폭까지 덩어리로 치면 버튼이
+        // 말풍선이 아니라 빈 여백까지 포함한 가운데에 서서 말과 따로 놉니다.
+        child: _maybeShrinkWrap(
+          shrinkWrap,
+          Column(
+            // 넓은 화면에서는 세로가 꽉 차게 들어오므로(캐릭터가 바닥에 서야
+            // 해서 행 전체가 늘어납니다) 가운데로 모읍니다. 좁은 화면에서는
+            // 제 높이만큼만 차지하고 이 정렬은 아무 일도 하지 않습니다.
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              ExcludeSemantics(
+                child: KidSpeechBubble(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: metrics.isWide ? AppSpacing.xl : AppSpacing.lg,
+                    vertical: metrics.isWide ? AppSpacing.lg : AppSpacing.md,
+                  ),
+                  child: Text(
+                    PlayStrings.toRecap,
+                    style: metrics.text(AppTypography.kidBody),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              KidPrimaryButton(
+                icon: AppIcons.play,
+                label: PlayStrings.toRecapStart,
+                labelStyle: metrics.text(AppTypography.kidButton),
+                onPressed: onStart,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// [shrink] 이면 가로 제약을 풀어 내용 폭에 맞춥니다.
+  ///
+  /// [IntrinsicWidth] 를 쓰지 않는 이유가 있습니다 — 웹(CanvasKit)에서 한글
+  /// 문장의 최대 고유 폭이 실제 한 줄 폭보다 작게 나와, 말풍선이 제풀에
+  /// 좁아지며 글이 석 줄로 접혔습니다.
+  Widget _maybeShrinkWrap(bool shrink, Widget child) => shrink
+      ? UnconstrainedBox(constrainedAxis: Axis.vertical, child: child)
+      : child;
+}
+
+/// 전환 화면의 제목 받침.
+///
+/// 맨 위에 글자만 덩그러니 놓으면 화면 위쪽 1/3이 통째로 빕니다. 다음 화면
+/// (`play_recap_view.dart`)의 단계 칩과 **같은 어휘**(흰 면 · [AppRadius.pill] ·
+/// [AppShadows] · [AppColors.brandBlueDeep] 아이콘)를 써서, 이 화면이 그 활동의
+/// 표지처럼 이어지게 합니다.
+///
+/// 글자는 새로 붙이지 않습니다 — 아이콘은 제목 옆의 그림일 뿐이고, 읽어야 할
+/// 것은 여전히 `말하기 후 활동` 하나입니다.
+class _HandoffTitleBadge extends StatelessWidget {
+  const _HandoffTitleBadge({required this.metrics});
+
+  final ScreenMetrics metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        boxShadow: AppShadows.lift,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          const Icon(
+            AppIcons.characterSpeaking,
+            size: AppSizes.iconChild,
+            color: AppColors.brandBlueDeep,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Flexible(
+            child: Text(
+              PlayStrings.toRecapTitle,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: metrics.text(AppTypography.kidTitle),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 등장 순서를 만드는 도우미. 뜰 때 한 번만 재생하고 그대로 멈춥니다.
+///
+/// **4.5초 만에 사라지는 화면**이라 무한 반복 애니메이션을 깔지 않습니다.
+/// 계속 움직이는 장식이 있으면 아이의 눈이 캐릭터가 아니라 장식을 따라갑니다.
+/// (`docs/DESIGN_SYSTEM.md` 1장 — "캐릭터가 아닌 곳에서의 과한 애니메이션")
+class _Appear extends StatelessWidget {
+  const _Appear({
+    required this.delay,
+    required this.child,
+    this.duration = AppDurations.normal,
+    this.rise = AppSpacing.md,
+    this.scaleFrom = 1,
+  });
+
+  /// 화면이 뜨고 이만큼 기다렸다 들어옵니다.
+  final Duration delay;
+
+  final Duration duration;
+
+  /// 들어오면서 밀려 올라오는 거리. 음수면 위에서 내려앉습니다.
+  final double rise;
+
+  /// 시작 크기. 1이면 크기 변화 없이 밀려 올라오기만 합니다.
+  final double scaleFrom;
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final Duration total = delay + duration;
+    // 지연을 곡선의 앞부분으로 표현합니다 - 화면이 4.5초 만에 사라지므로
+    // 타이머를 하나 더 들고 있을 이유가 없습니다.
+    final double start = delay.inMicroseconds / total.inMicroseconds;
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      // 모션 줄이기 설정에서는 0이 되어 그냥 제자리에 놓입니다.
+      duration: respect(context, total),
+      curve: Interval(start, 1, curve: AppCurves.playful),
+      builder: (BuildContext context, double t, Widget? child) {
+        return Opacity(
+          // playful(easeOutBack)은 1을 잠깐 넘겼다 돌아옵니다. 크기·이동은 그
+          // 튐이 살아야 장난감처럼 보이고, 투명도는 넘치면 안 됩니다.
+          opacity: t.clamp(0.0, 1.0),
+          child: Transform.translate(
+            offset: Offset(0, rise * (1 - t)),
+            child: Transform.scale(
+              scale: scaleFrom + (1 - scaleFrom) * t,
+              child: child,
+            ),
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+}
+
+/// 인물 뒤의 광과 발밑 그림자.
+///
+/// 노란빛(별가루)은 쓰지 않습니다 — 이 앱에서 따뜻한 색은 보상 전용입니다.
+/// 광은 [AppColors.brandMint], 그림자는 [AppColors.ink900] 을 옅게 깐 것으로
+/// [AppShadows] 와 같은 톤을 유지합니다.
+class _CharacterStandPainter extends CustomPainter {
+  const _CharacterStandPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // 인물의 상반신 뒤에 둡니다. 배 높이에 두면 불투명한 몸에 다 가려서
+    // 아무것도 보이지 않습니다.
+    final Offset center = Offset(size.width * .5, size.height * .38);
+    final double radius = size.width * .55;
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..shader = RadialGradient(
+          colors: <Color>[
+            AppColors.brandMint.withValues(alpha: .5),
+            AppColors.brandMint.withValues(alpha: 0),
+          ],
+          stops: const <double>[.18, 1],
+        ).createShader(Rect.fromCircle(center: center, radius: radius)),
+    );
+
+    // 발밑 그림자. 그림 아래쪽 3~4%는 투명 여백이라 바닥에서 살짝 띄웁니다.
+    // **인물보다 넓게** 깝니다 - 딱 맞게 그리면 치마에 다 가려서 안 보입니다.
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(size.width * .5, size.height * .955),
+        width: size.width * .78,
+        height: size.width * .13,
+      ),
+      Paint()
+        ..color = AppColors.ink900.withValues(alpha: .13)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_CharacterStandPainter oldDelegate) => false;
+}
+
+/// 전환 화면의 바탕 장식.
+///
+/// 홈의 `HomeBackdrop` 과 **같은 어휘**입니다 — 빛, 흰 구름, 이 앱의 서명인
+/// 말풍선 모티프, 바닥의 낮은 언덕. 다만 여기서는 두 가지가 다릅니다.
+///
+/// - **더 옅습니다.** 홈은 오래 머무는 화면이라 또렷해도 되지만, 여기서는
+///   4.5초 동안 인물과 한마디에 눈이 가야 합니다.
+/// - **다음 활동을 한 조각도 그리지 않습니다.** 장면 그림 비슷한 것을 깔면
+///   그게 곧 다음 활동(장면 순서 맞추기)의 정답입니다. 그래서 뜻이 없는
+///   순수 도형만 씁니다.
+///
+/// 순수 장식이라 [IgnorePointer] 로 터치를 통과시키고, [RepaintBoundary] 로
+/// 본문과 리페인트를 분리합니다. **정적입니다(모션 없음).**
+class _HandoffBackdrop extends StatelessWidget {
+  const _HandoffBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    return const IgnorePointer(
+      child: RepaintBoundary(
+        child: CustomPaint(
+          size: Size.infinite,
+          painter: _HandoffBackdropPainter(),
+        ),
+      ),
+    );
+  }
+}
+
+class _HandoffBackdropPainter extends CustomPainter {
+  const _HandoffBackdropPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double w = size.width;
+    final double h = size.height;
+    _paintLightGlow(canvas, w, h);
+    _paintClouds(canvas, w, h);
+    _paintBubbleMotifs(canvas, w, h);
+    _paintHills(canvas, w, h);
+  }
+
+  /// 좌상단 민트 햇살 + 우상단 옅은 파랑. 비어 보이던 화면 위쪽 1/3을
+  /// 색으로 채웁니다.
+  void _paintLightGlow(Canvas canvas, double w, double h) {
+    final Rect full = Rect.fromLTWH(0, 0, w, h);
+    canvas.drawRect(
+      full,
+      Paint()
+        ..shader =
+            RadialGradient(
+              colors: <Color>[
+                AppColors.brandMint.withValues(alpha: .38),
+                AppColors.brandMint.withValues(alpha: 0),
+              ],
+            ).createShader(
+              Rect.fromCircle(
+                center: Offset(w * .10, -h * .10),
+                radius: w * .58,
+              ),
+            ),
+    );
+    canvas.drawRect(
+      full,
+      Paint()
+        ..shader =
+            RadialGradient(
+              colors: <Color>[
+                AppColors.brandBlue.withValues(alpha: .24),
+                AppColors.brandBlue.withValues(alpha: 0),
+              ],
+            ).createShader(
+              Rect.fromCircle(center: Offset(w * 1.02, 0), radius: w * .46),
+            ),
+    );
+  }
+
+  /// 흰 구름 두 무리. 위쪽 좌우 구석에만 둡니다 - 가운데는 인물과 말의 자리입니다.
+  void _paintClouds(Canvas canvas, double w, double h) {
+    final Paint cloud = Paint()
+      ..color = AppColors.surface.withValues(alpha: .78)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20);
+    _cloud(canvas, cloud, Offset(w * .13, h * .17), w * .05);
+    _cloud(canvas, cloud, Offset(w * .85, h * .12), w * .042);
+  }
+
+  void _cloud(Canvas canvas, Paint paint, Offset c, double r) {
+    canvas.drawCircle(c, r, paint);
+    canvas.drawCircle(c.translate(r * 1.1, r * .25), r * .78, paint);
+    canvas.drawCircle(c.translate(-r * 1.05, r * .30), r * .70, paint);
+    canvas.drawCircle(c.translate(r * .1, r * .55), r * .90, paint);
+  }
+
+  /// 이 앱의 서명인 말풍선을 배경에 옅게 반복합니다. 채운 원 + 왼쪽 아래 꼬리로
+  /// 로고 Q 와 같은 형태를 암시합니다.
+  void _paintBubbleMotifs(Canvas canvas, double w, double h) {
+    _bubble(
+      canvas,
+      Offset(w * .82, h * .70),
+      w * .045,
+      AppColors.surface.withValues(alpha: .45),
+    );
+    _bubble(
+      canvas,
+      Offset(w * .08, h * .58),
+      w * .034,
+      AppColors.brandBlue.withValues(alpha: .18),
+    );
+    // 제목 배지 옆은 비워 둡니다 - 배지 바로 옆에 두면 배지에 딸린 표시처럼
+    // 보입니다.
+    _bubble(
+      canvas,
+      Offset(w * .92, h * .30),
+      w * .026,
+      AppColors.brandGreen.withValues(alpha: .22),
+    );
+  }
+
+  void _bubble(Canvas canvas, Offset c, double r, Color color) {
+    final Paint p = Paint()..color = color;
+    canvas.drawCircle(c, r, p);
+    final Path tail = Path()
+      ..moveTo(c.dx - r * .55, c.dy + r * .45)
+      ..lineTo(c.dx - r * .95, c.dy + r * 1.05)
+      ..lineTo(c.dx - r * .10, c.dy + r * .80)
+      ..close();
+    canvas.drawPath(tail, p);
+  }
+
+  /// 화면 바닥의 낮은 언덕 두 겹. 인물이 딛고 설 땅이 되어 주고, 비어 있던
+  /// 오른쪽 아래를 메웁니다.
+  void _paintHills(Canvas canvas, double w, double h) {
+    final Path back = Path()
+      ..moveTo(0, h)
+      ..lineTo(0, h * .88)
+      ..quadraticBezierTo(w * .30, h * .80, w * .58, h * .875)
+      ..quadraticBezierTo(w * .82, h * .94, w, h * .855)
+      ..lineTo(w, h)
+      ..close();
+    canvas.drawPath(
+      back,
+      Paint()..color = AppColors.brandMint.withValues(alpha: .26),
+    );
+
+    final Path front = Path()
+      ..moveTo(0, h)
+      ..lineTo(0, h * .945)
+      ..quadraticBezierTo(w * .34, h * .90, w * .64, h * .95)
+      ..quadraticBezierTo(w * .86, h * .99, w, h * .925)
+      ..lineTo(w, h)
+      ..close();
+    canvas.drawPath(
+      front,
+      Paint()..color = AppColors.brandGreen.withValues(alpha: .32),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_HandoffBackdropPainter oldDelegate) => false;
 }
 
 class _ResultSceneOverlay extends StatelessWidget {
