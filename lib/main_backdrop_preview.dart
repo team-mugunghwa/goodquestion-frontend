@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:provider/single_child_widget.dart';
 
 import 'core/router/app_routes.dart';
 import 'core/theme/app_theme.dart';
@@ -15,6 +16,7 @@ import 'features/mypage/domain/entities/my_page_summary.dart';
 import 'features/mypage/domain/repositories/my_page_repository.dart';
 import 'features/mypage/domain/usecases/my_page_use_cases.dart';
 import 'features/mypage/presentation/viewmodels/my_page_view_model.dart';
+import 'features/mypage/presentation/viewmodels/settings_view_model.dart';
 import 'features/mypage/presentation/views/my_page_view.dart';
 import 'features/story/data/datasources/story_local_data_source.dart';
 import 'features/story/data/repositories/story_repository_mock.dart';
@@ -105,13 +107,25 @@ final GoRouter _router = GoRouter(
           const MyPageLocalDataSource(),
         );
         const _PreviewChildren children = _PreviewChildren();
-        return ChangeNotifierProvider<MyPageViewModel>(
-          create: (_) => MyPageViewModel(
-            GetMyPageSummaryUseCase(repo),
-            const CreateMyPageChildUseCase(children),
-            const GetMyPageChildrenUseCase(children),
-            const SelectMyPageChildUseCase(children),
-          )..load(),
+        // 설정이 마이페이지 안으로 들어와서 ViewModel 두 개가 필요합니다.
+        return MultiProvider(
+          providers: <SingleChildWidget>[
+            ChangeNotifierProvider<MyPageViewModel>(
+              create: (_) => MyPageViewModel(
+                GetMyPageSummaryUseCase(repo),
+                const CreateMyPageChildUseCase(children),
+                const GetMyPageChildrenUseCase(children),
+                const SelectMyPageChildUseCase(children),
+              )..load(),
+            ),
+            ChangeNotifierProvider<SettingsViewModel>(
+              create: (_) => SettingsViewModel(
+                GetSettingsUseCase(repo),
+                SetReportNotificationUseCase(repo),
+                SetMarketingConsentUseCase(repo),
+              )..load(),
+            ),
+          ],
           child: const MyPageView(),
         );
       },
