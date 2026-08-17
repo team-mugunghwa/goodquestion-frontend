@@ -26,6 +26,8 @@ Future<String?> showChildSwitchSheet(
   return showModalBottomSheet<String>(
     context: context,
     showDragHandle: true,
+    // 기본 시트는 폭 640 에서 잘려 아이 카드가 한 줄에 두 명도 안 들어갑니다.
+    constraints: const BoxConstraints(maxWidth: AppSizes.sheetMaxWidth),
     builder: (BuildContext sheetContext) => _KidSheet(
       title: HomeStrings.switchChildTitle,
       metrics: metrics,
@@ -176,8 +178,13 @@ class _KidSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 태블릿 가로에서는 화면 높이가 낮아 시트가 세로로 넘칩니다.
+    // 스크롤을 허용하고, 일러스트도 남는 높이에 맞춰 줄입니다.
+    final double illustration = metrics.isWide
+        ? AppSizes.mic
+        : AppSizes.illustration;
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
           metrics.screenPadding,
           AppSpacing.md,
@@ -189,8 +196,8 @@ class _KidSheet extends StatelessWidget {
           children: <Widget>[
             Image.asset(
               AppAssets.logoMark,
-              width: AppSizes.illustration,
-              height: AppSizes.illustration,
+              width: illustration,
+              height: illustration,
               fit: BoxFit.contain,
               excludeFromSemantics: true,
             ),

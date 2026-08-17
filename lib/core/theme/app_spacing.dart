@@ -80,6 +80,10 @@ abstract final class AppSizes {
   /// 말풍선 최대 폭. 이보다 넓으면 한 줄이 길어져 아이가 눈으로 놓칩니다.
   static const double bubbleMaxWidth = 560;
 
+  /// 시트 최대 폭. Material 기본값(640)은 아이 화면의 큰 카드를 늘어놓기에
+  /// 좁아서, 태블릿에서 한 줄에 서너 명이 들어가도록 넓혔습니다.
+  static const double sheetMaxWidth = 880;
+
   /// 행성 조작 버튼(회전·확대·되돌리기)의 지름.
   static const double planetControl = 72;
 }
