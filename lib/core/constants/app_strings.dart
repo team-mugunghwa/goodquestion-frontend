@@ -42,6 +42,7 @@ abstract final class NavStrings {
   static const String home = '홈';
   static const String stories = '이야기';
   static const String words = '단어장';
+  static const String planet = '행성';
   static const String myPage = '마이';
 }
 
@@ -276,6 +277,7 @@ abstract final class WordStrings {
   static const String exampleInDaily = '평소에는 이렇게 써';
   static const String exampleAdvanced = '조금 어려운 문장에도 도전!';
   static const String like = '좋아요';
+  static const String unlike = '좋아요 해제';
   static const String practice = '따라 말하기';
   static const String close = '닫기';
 }

@@ -246,8 +246,9 @@ class _Grid extends StatelessWidget {
           metrics: metrics,
           // 목록은 그림책 세로 표지. 홈 카드(16:9)와 의도적으로 다릅니다.
           coverAspectRatio: StoryThumbnail.portrait,
-          // 목록 카드의 제목은 큰 글씨 한 줄. (PRD F-03)
-          titleMaxLines: 1,
+          // 제목이 잘려 "방귀 뀌는 ..." 이 되면 아이가 이야기를 못 알아봅니다.
+          // 두 줄까지 허용해 전체 제목을 보여 줍니다.
+          titleMaxLines: 2,
           // go 가 아니라 push — 목록을 스택에 남겨야 상세에서 돌아왔을 때
           // 고른 필터가 그대로입니다.
           onTap: () => context.push(AppRoutes.storyDetailOf(story.storyId)),
@@ -326,9 +327,11 @@ double _cellHeightOf(
   final double cellWidth = (width - AppSpacing.lg * (columns - 1)) / columns;
   // 세로 표지(2:3): 너비의 1.5배가 표지 높이.
   final double imageHeight = cellWidth * 3 / 2;
+  // 제목은 카드용 크기(kidButton) 두 줄 기준. 한 줄짜리 제목도 같은 셀
+  // 높이를 쓰므로 그리드 행이 들쭉날쭉하지 않습니다.
   final double textHeight =
       AppSpacing.md * 2 +
-      metrics.lineHeight(context, AppTypography.kidTitle) +
+      metrics.lineHeight(context, AppTypography.kidButton) * 2 +
       AppSpacing.sm +
       metrics.lineHeight(context, AppTypography.kidLabel) +
       AppSpacing.xs * 2;

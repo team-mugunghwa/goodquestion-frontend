@@ -75,6 +75,68 @@ class KidPrimaryButton extends StatelessWidget {
   }
 }
 
+/// 아이 화면의 보조 버튼. 높이 64, 옅은 파랑 면 + 진한 파랑 글자.
+///
+/// 주 행동([KidPrimaryButton])과 같은 화면에 놓일 때 위계를 만듭니다.
+/// 닫기·다시 듣기처럼 "안 눌러도 되는" 행동이 주 버튼과 같은 얼굴이면
+/// 아이는 뭘 눌러야 할지 모릅니다.
+class KidSecondaryButton extends StatelessWidget {
+  const KidSecondaryButton({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.labelStyle,
+    this.expand = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+  final TextStyle? labelStyle;
+  final bool expand;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool enabled = onPressed != null;
+    final Color foreground = enabled
+        ? AppColors.brandBlueDeep
+        : AppColors.ink300;
+    return PressScale(
+      onTap: onPressed,
+      borderRadius: AppRadius.pill,
+      semanticLabel: label,
+      child: Container(
+        height: AppSizes.tapChildSecondary,
+        width: expand ? double.infinity : null,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: AppColors.brandBlueSurface,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+          children: <Widget>[
+            Icon(icon, size: AppSizes.iconInline, color: foreground),
+            const SizedBox(width: AppSpacing.sm),
+            Flexible(
+              child: Text(
+                label,
+                style: (labelStyle ?? AppTypography.kidButton).copyWith(
+                  color: foreground,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// 아이 화면의 뒤로가기. 아이콘 + "뒤로" 한 단어, 터치 타겟 64.
 ///
 /// `AppBar` 의 기본 back 버튼(24dp 아이콘, 라벨 없음)을 쓰지 않습니다 —

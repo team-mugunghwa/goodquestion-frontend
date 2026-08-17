@@ -344,6 +344,7 @@ class _GroupList extends StatelessWidget {
                           word: word,
                           metrics: metrics,
                           onTap: () => _openDetail(context, word),
+                          onToggleLike: () => vm.toggleLike(word.wordId),
                         ),
                       ),
                   ],

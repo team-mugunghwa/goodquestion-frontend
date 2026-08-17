@@ -104,7 +104,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('해와 달이 된 오누이'), findsOneWidget);
-    expect(find.text(HomeStrings.planetTitle), findsOneWidget);
+    expect(find.text(NavStrings.planet), findsOneWidget);
     expect(find.byType(AppBottomNav), findsOneWidget);
   });
 

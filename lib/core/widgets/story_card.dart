@@ -74,7 +74,9 @@ class StoryCard extends StatelessWidget {
             title,
             maxLines: titleMaxLines,
             overflow: TextOverflow.ellipsis,
-            style: metrics.text(AppTypography.kidTitle),
+            // 화면 제목 크기(kidTitle 32)를 카드 안에 그대로 쓰면 좁은 셀에서
+            // 제목이 잘립니다. 카드 제목은 버튼 급(22) 굵은 글씨면 충분합니다.
+            style: metrics.text(AppTypography.kidButton),
           ),
           const SizedBox(height: AppSpacing.sm),
           Wrap(
