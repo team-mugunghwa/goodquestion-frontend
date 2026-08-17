@@ -433,22 +433,84 @@ class _StarFieldPainter extends CustomPainter {
       // "가로질렀다"가 읽힙니다.
       final Offset tail = head + direction * (120 + 40 * fade);
 
-      final Paint streak = Paint()
-        ..strokeWidth = 3
-        ..strokeCap = StrokeCap.round
-        ..shader = LinearGradient(
-          colors: <Color>[
-            palette.meteorColor.withValues(alpha: 0.75 * fade),
-            palette.meteorColor.withValues(alpha: 0.0),
-          ],
-        ).createShader(Rect.fromPoints(head, tail));
-      canvas.drawLine(head, tail, streak);
+      // 굵기가 일정한 선을 그으면 색연필로 그은 자국처럼 보입니다.
+      // 머리에서 꼬리로 **가늘어지는 바늘 모양**을 채웁니다.
+      //
+      // 흐림(MaskFilter)은 매 프레임 도는 이 레이어에서 비싸므로, 넓고
+      // 옅은 무리 위에 좁고 밝은 심을 겹쳐 번짐을 흉내 냅니다.
+      _paintStreak(canvas, head, tail, 5.0, 0.16 * fade);
+      _paintStreak(canvas, head, tail, 1.8, 0.9 * fade);
+
+      // 머리는 점이 아니라 **빛나는 점**입니다. 가장자리가 딱 떨어지는
+      // 원을 찍으면 그 하나 때문에 전체가 스티커처럼 보입니다.
+      final double glow = 5.0 + 2.0 * fade;
       canvas.drawCircle(
         head,
-        3.2,
-        Paint()..color = palette.meteorColor.withValues(alpha: 0.85 * fade),
+        glow,
+        Paint()
+          ..shader = RadialGradient(
+            colors: <Color>[
+              palette.meteorColor.withValues(alpha: 0.95 * fade),
+              palette.meteorColor.withValues(alpha: 0.35 * fade),
+              palette.meteorColor.withValues(alpha: 0.0),
+            ],
+            stops: const <double>[0.0, 0.35, 1.0],
+          ).createShader(Rect.fromCircle(center: head, radius: glow)),
       );
     }
+  }
+
+  /// 머리에서 꼬리로 가늘어지는 한 줄기.
+  ///
+  /// [halfWidth] 는 머리 쪽 절반 두께입니다. 옆선을 직선이 아니라 곡선으로
+  /// 좁혀서 삼각형이 아니라 바늘처럼 보이게 합니다.
+  void _paintStreak(
+    Canvas canvas,
+    Offset head,
+    Offset tail,
+    double halfWidth,
+    double alpha,
+  ) {
+    if (alpha <= 0) return;
+    final Offset along = tail - head;
+    final double length = along.distance;
+    if (length == 0) return;
+
+    // 진행 방향에 수직인 단위 벡터.
+    final Offset normal = Offset(-along.dy / length, along.dx / length);
+    final Offset a = head + normal * halfWidth;
+    final Offset b = head - normal * halfWidth;
+    // 옆선을 안쪽으로 당기는 조종점. 머리 근처에서만 두껍고 곧 좁아집니다.
+    final Offset mid = head + along * 0.3;
+
+    final Path path = Path()
+      ..moveTo(a.dx, a.dy)
+      ..quadraticBezierTo(
+        mid.dx + normal.dx * halfWidth * 0.55,
+        mid.dy + normal.dy * halfWidth * 0.55,
+        tail.dx,
+        tail.dy,
+      )
+      ..quadraticBezierTo(
+        mid.dx - normal.dx * halfWidth * 0.55,
+        mid.dy - normal.dy * halfWidth * 0.55,
+        b.dx,
+        b.dy,
+      )
+      ..close();
+
+    canvas.drawPath(
+      path,
+      Paint()
+        ..shader = LinearGradient(
+          colors: <Color>[
+            palette.meteorColor.withValues(alpha: alpha),
+            palette.meteorColor.withValues(alpha: alpha * 0.35),
+            palette.meteorColor.withValues(alpha: 0.0),
+          ],
+          stops: const <double>[0.0, 0.4, 1.0],
+        ).createShader(Rect.fromPoints(head, tail)),
+    );
   }
 
   @override
