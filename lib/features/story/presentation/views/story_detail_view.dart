@@ -516,17 +516,21 @@ class _IntroCard extends StatelessWidget {
           // 두면, 저학년은 "안 되는 이유"를 추론하지 못하고 계속 누르다가
           // 앱이 고장 났다고 결론 냅니다. 비활성 회색보다 없는 편이 낫습니다.
           // TTS 가 붙어 `introAudio` 가 채워지면 버튼은 저절로 돌아옵니다.
+          //
+          // 이 화면의 주 행동은 하단의 "시작하기" 하나뿐입니다. 들려줘를
+          // 진한 면 88 짜리로 가운데 두면 시작 버튼과 같은 무게가 되어
+          // 아이가 어느 쪽이 이야기를 여는 문인지 헷갈립니다. 도입문에
+          // 딸린 보조 버튼답게 왼쪽 아래에 작게(64, 옅은 면) 둡니다.
           if (audio != null) ...<Widget>[
-            if (hasText) const SizedBox(height: AppSpacing.lg),
+            if (hasText) const SizedBox(height: AppSpacing.md),
             Align(
-              alignment: Alignment.center,
+              alignment: Alignment.centerLeft,
               child: SpeakerButton(
                 audio: audio,
                 semanticLabel: StoryDetailStrings.listen,
                 label: StoryDetailStrings.listen,
-                labelStyle: metrics.text(AppTypography.kidButton),
-                size: AppSizes.tapChildPrimary,
-                filled: true,
+                labelStyle: metrics.text(AppTypography.kidLabel),
+                size: AppSizes.tapChildSecondary,
               ),
             ),
           ],
