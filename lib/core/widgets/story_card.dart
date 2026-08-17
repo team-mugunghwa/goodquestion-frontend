@@ -89,16 +89,16 @@ class StoryCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
           // 칩은 **한 줄**입니다. 줄바꿈을 허용하면 좁은 셀에서만 두 줄이
           // 되어 카드 높이가 제각각이 되고, 고정 높이 그리드에서는 넘칩니다.
-          // 자리가 모자라면 칩 안의 라벨이 줄어듭니다.
+          //
+          // 시간 칩에는 시계 아이콘을 달지 않습니다. 아이콘 하나가 24 를
+          // 먹는데, 카드 폭이 200 대라 그만큼이 주제 이름을 잘라 먹습니다.
+          // "분"이 이미 시간이라고 말하고 있어 아이콘 없이도 읽힙니다.
+          // (상세 화면처럼 넓은 자리에서는 아이콘을 그대로 씁니다)
           Row(
             children: <Widget>[
-              Flexible(
-                child: KidInfoChip(
-                  icon: AppIcons.duration,
-                  label: '$estimatedMinutes분',
-                  metrics: metrics,
-                ),
-              ),
+              // 시간은 짧고 길이가 뻔해서 줄이지 않습니다. 자리가 모자라면
+              // 주제 이름만 줄어듭니다.
+              KidInfoChip(label: '$estimatedMinutes분', metrics: metrics),
               const SizedBox(width: AppSpacing.sm),
               Flexible(
                 child: KidInfoChip(label: topicLabel, metrics: metrics),
