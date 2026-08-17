@@ -332,21 +332,40 @@ double _cellHeightOf(
   final double cellWidth = (width - AppSpacing.lg * (columns - 1)) / columns;
   // 세로 표지(2:3): 너비의 1.5배가 표지 높이.
   final double imageHeight = cellWidth * 3 / 2;
-  // 제목은 카드용 크기(kidButton) 두 줄 기준. 한 줄짜리 제목도 같은 셀
-  // 높이를 쓰므로 그리드 행이 들쭉날쭉하지 않습니다.
-  //
+
+  // 글자 높이는 **재서** 씁니다. `fontSize * height` 로 어림하면 폰트의
+  // 실제 상·하단 여백만큼 몇 px 모자라, 제목이 두 줄인 카드에서만 넘칩니다.
+  final double titleHeight = _measuredHeight(
+    context,
+    metrics.text(AppTypography.kidButton),
+    lines: 2,
+  );
   // 칩 높이는 글자만이 아니라 **아이콘까지** 봐야 합니다. 인라인 아이콘(24)이
-  // kidLabel 한 줄보다 커서, 글자 높이만 더하면 몇 픽셀이 모자라 넘칩니다.
+  // kidLabel 한 줄보다 커서, 글자 높이만 더하면 몇 픽셀이 모자랍니다.
   final double chipHeight =
       AppSpacing.xs * 2 +
       math.max(
-        metrics.lineHeight(context, AppTypography.kidLabel),
+        _measuredHeight(context, metrics.text(AppTypography.kidLabel)),
         AppSizes.iconInline,
       );
   final double textHeight =
-      AppSpacing.md * 2 +
-      metrics.lineHeight(context, AppTypography.kidButton) * 2 +
-      AppSpacing.sm +
-      chipHeight;
+      AppSpacing.md * 2 + titleHeight + AppSpacing.sm + chipHeight;
   return imageHeight + textHeight;
+}
+
+/// 이 스타일로 [lines] 줄을 그렸을 때의 실제 높이.
+double _measuredHeight(BuildContext context, TextStyle style, {int lines = 1}) {
+  final TextPainter painter = TextPainter(
+    // 한글 한 글자를 줄 수만큼. 어떤 글자든 줄 높이는 같습니다.
+    text: TextSpan(
+      text: List<String>.filled(lines, '가').join('\n'),
+      style: style,
+    ),
+    maxLines: lines,
+    textDirection: TextDirection.ltr,
+    textScaler: MediaQuery.textScalerOf(context),
+  )..layout();
+  final double height = painter.height;
+  painter.dispose();
+  return height;
 }
