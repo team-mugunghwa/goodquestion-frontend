@@ -19,7 +19,11 @@ import 'features/mypage/presentation/views/my_page_view.dart';
 import 'features/story/data/datasources/story_local_data_source.dart';
 import 'features/story/data/repositories/story_repository_mock.dart';
 import 'features/story/domain/usecases/get_story_catalog_use_case.dart';
+import 'features/story/domain/usecases/get_story_detail_use_case.dart';
+import 'features/story/domain/usecases/start_story_session_use_case.dart';
+import 'features/story/presentation/viewmodels/story_detail_view_model.dart';
 import 'features/story/presentation/viewmodels/story_list_view_model.dart';
+import 'features/story/presentation/views/story_detail_view.dart';
 import 'features/story/presentation/views/story_list_view.dart';
 import 'features/word/data/datasources/word_local_data_source.dart';
 import 'features/word/data/repositories/word_repository_mock.dart';
@@ -67,6 +71,21 @@ final GoRouter _router = GoRouter(
       ),
     ),
     GoRoute(
+      path: AppRoutes.storyDetailPath,
+      builder: (_, GoRouterState state) =>
+          ChangeNotifierProvider<StoryDetailViewModel>(
+            create: (_) => StoryDetailViewModel(
+              const GetStoryDetailUseCase(_storyRepository),
+              const StartStorySessionUseCase(
+                _storyRepository,
+                HomeRepositoryMock(HomeLocalDataSource()),
+              ),
+              storyId: state.pathParameters['storyId'] ?? '',
+            )..load(),
+            child: const StoryDetailView(),
+          ),
+    ),
+    GoRoute(
       path: AppRoutes.home,
       builder: (_, _) => ChangeNotifierProvider<HomeViewModel>(
         create: (_) => HomeViewModel(
@@ -96,10 +115,6 @@ final GoRouter _router = GoRouter(
       },
     ),
     // 프리뷰 범위 밖의 목적지들. 하단 내비·카드 탭이 죽지 않게만 받아 줍니다.
-    GoRoute(
-      path: AppRoutes.storyDetailPath,
-      builder: (_, _) => const _OutOfScope(),
-    ),
     GoRoute(
       path: AppRoutes.wordPracticePath,
       builder: (_, _) => const _OutOfScope(),

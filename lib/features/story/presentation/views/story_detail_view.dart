@@ -15,6 +15,7 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/app_canvas.dart';
 import '../../../../core/widgets/app_state_views.dart';
+import '../../../../core/widgets/cosmic_backdrop.dart';
 import '../../../../core/widgets/kid_button.dart';
 import '../../../../core/widgets/kid_chips.dart';
 import '../../../../core/widgets/screen_metrics.dart';
@@ -100,29 +101,38 @@ class StoryDetailView extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: AppCanvas.day(
-        child: SafeArea(
-          child: LayoutBuilder(
-            builder: (BuildContext context, BoxConstraints constraints) {
-              final ScreenMetrics metrics = ScreenMetrics.of(
-                constraints.maxWidth,
-              );
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  _TopBar(title: vm.story?.title ?? '', metrics: metrics),
-                  Expanded(child: _body(context, vm, metrics)),
-                  // 섹션6 — 스크롤과 무관하게 항상 보이는 단일 CTA.
-                  if (vm.story != null)
-                    _StartBar(
-                      metrics: metrics,
-                      // 처리 중에는 null 을 넘겨 버튼을 잠급니다 —
-                      // 두 번 누르면 세션이 두 개 생깁니다.
-                      onStart: vm.isStarting ? null : () => _start(context, vm),
-                    ),
-                ],
-              );
-            },
-          ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            // 목록에서 이어져 들어오는 화면 — 같은 하늘을 잇습니다.
+            const CosmicBackdrop(seed: 23, planetCenterX: 0.5),
+            SafeArea(
+              child: LayoutBuilder(
+                builder: (BuildContext context, BoxConstraints constraints) {
+                  final ScreenMetrics metrics = ScreenMetrics.of(
+                    constraints.maxWidth,
+                  );
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      _TopBar(title: vm.story?.title ?? '', metrics: metrics),
+                      Expanded(child: _body(context, vm, metrics)),
+                      // 섹션6 — 스크롤과 무관하게 항상 보이는 단일 CTA.
+                      if (vm.story != null)
+                        _StartBar(
+                          metrics: metrics,
+                          // 처리 중에는 null 을 넘겨 버튼을 잠급니다 —
+                          // 두 번 누르면 세션이 두 개 생깁니다.
+                          onStart: vm.isStarting
+                              ? null
+                              : () => _start(context, vm),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -535,13 +545,20 @@ class _StartBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        boxShadow: AppShadows.lift,
+    // 흰 판을 깔지 않습니다 — 배경 위에 버튼만 떠 있어야 화면이 한 장으로
+    // 이어집니다. 버튼 자체의 그림자가 스크롤되는 본문과 층을 나눕니다.
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        metrics.screenPadding,
+        AppSpacing.sm,
+        metrics.screenPadding,
+        metrics.screenPadding,
       ),
-      child: Padding(
-        padding: EdgeInsets.all(metrics.screenPadding),
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          borderRadius: BorderRadius.all(Radius.circular(AppRadius.pill)),
+          boxShadow: AppShadows.lift,
+        ),
         child: KidPrimaryButton(
           icon: AppIcons.play,
           label: StoryDetailStrings.start,
