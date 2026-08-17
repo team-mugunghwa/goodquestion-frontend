@@ -70,23 +70,47 @@ class StoryCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Text(
-            title,
-            maxLines: titleMaxLines,
-            overflow: TextOverflow.ellipsis,
-            style: metrics.text(AppTypography.kidTitle),
+          // 제목은 남는 높이 안에서 접힙니다. 셀 높이를 아무리 정확히
+          // 계산해도 폰트·글자 확대 설정에 따라 몇 px 씩 어긋나는데,
+          // Flexible 이면 그 몇 px 때문에 넘치는 대신 줄 수가 줄어듭니다.
+          Flexible(
+            child: Text(
+              title,
+              maxLines: titleMaxLines,
+              overflow: TextOverflow.ellipsis,
+              // 화면 제목 크기(kidTitle 32)를 카드 안에 그대로 쓰면 좁은 셀에서
+              // 제목이 잘립니다. 카드 제목은 버튼 급(22) 굵은 글씨면 충분합니다.
+              // kidButton 은 흰 글자라 카드에서는 잉크색으로 바꿉니다.
+              style: metrics
+                  .text(AppTypography.kidButton)
+                  .copyWith(color: AppColors.ink900),
+            ),
           ),
           const SizedBox(height: AppSpacing.sm),
-          Wrap(
-            spacing: AppSpacing.sm,
-            runSpacing: AppSpacing.sm,
+          // 칩은 **한 줄**입니다. 줄바꿈을 허용하면 좁은 셀에서만 두 줄이
+          // 되어 카드 높이가 제각각이 되고, 고정 높이 그리드에서는 넘칩니다.
+          //
+          // 카드 폭이 200 대라 기본 칩(글자 18 · 아이콘 24)으로는 둘이
+          // 한 줄에 안 들어갑니다. compact 로 한 단계 줄이면 시계 아이콘을
+          // 달고도 주제 이름이 잘리지 않습니다.
+          Row(
             children: <Widget>[
+              // 시간은 짧고 길이가 뻔해서 줄이지 않습니다. 자리가 모자라면
+              // 주제 이름만 줄어듭니다.
               KidInfoChip(
                 icon: AppIcons.duration,
                 label: '$estimatedMinutes분',
                 metrics: metrics,
+                compact: true,
               ),
-              KidInfoChip(label: topicLabel, metrics: metrics),
+              const SizedBox(width: AppSpacing.sm),
+              Flexible(
+                child: KidInfoChip(
+                  label: topicLabel,
+                  metrics: metrics,
+                  compact: true,
+                ),
+              ),
             ],
           ),
         ],
@@ -115,10 +139,13 @@ class StoryCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  // 그리드 안에서는 카드 높이가 셀에 맞춰 고정되므로, 이미지가
-                  // 남는 높이를 먹고 글자 블록이 잘리지 않게 합니다.
-                  Flexible(child: thumbnail),
-                  body,
+                  // 표지는 **비율로만** 높이가 정해집니다. 예전처럼 남는
+                  // 높이를 먹게 두면 제목이 한 줄인 카드의 표지만 길어져서,
+                  // 한 줄에 늘어놓은 카드들의 그림 높이가 제각각이 됩니다.
+                  thumbnail,
+                  // 대신 글자 블록이 남는 높이를 가져갑니다. 제목이 짧으면
+                  // 아래가 비고, 길어도 셀 밖으로 넘치지 않습니다.
+                  Flexible(child: body),
                 ],
               ),
       ),

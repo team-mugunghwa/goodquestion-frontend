@@ -31,24 +31,35 @@ class StardustChip extends StatelessWidget {
       // "✦ 7" 만으로는 무엇의 7 인지 알 수 없습니다.
       label: '${HomeStrings.stardust} $count개',
       excludeSemantics: true,
+      // 테두리를 두르지 않습니다. 노란 선으로 가둔 알약은 스티커처럼
+      // 보였습니다. 낮에는 옅은 금빛 면 + 아주 옅은 발광으로, 밤에는
+      // 반투명한 금빛 면으로 "빛나는 것"처럼 둡니다.
       child: Container(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
           vertical: AppSpacing.sm,
         ),
         decoration: BoxDecoration(
-          color: _isNight ? Colors.transparent : AppColors.stardustGlow,
+          color: _isNight
+              ? AppColors.stardust.withValues(alpha: 0.16)
+              : AppColors.stardustGlow,
           borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: _isNight
-              ? Border.all(color: AppColors.stardust)
-              : Border.all(color: AppColors.stardustDeep),
+          boxShadow: _isNight
+              ? null
+              : <BoxShadow>[
+                  BoxShadow(
+                    color: AppColors.stardust.withValues(alpha: 0.35),
+                    blurRadius: 12,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Icon(
               AppIcons.stardust,
-              size: AppSizes.iconInline,
+              size: AppSizes.iconCaption,
               color: _isNight ? AppColors.stardust : AppColors.stardustDeep,
             ),
             const SizedBox(width: AppSpacing.xs),

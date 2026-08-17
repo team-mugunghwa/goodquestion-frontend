@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../constants/app_icons.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_shadows.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import 'press_scale.dart';
@@ -20,18 +21,25 @@ class KidInfoChip extends StatelessWidget {
     required this.label,
     required this.metrics,
     this.icon,
+    this.compact = false,
   });
 
   final String label;
   final ScreenMetrics metrics;
   final IconData? icon;
 
+  /// 카드 안처럼 자리가 좁을 때. 글자(15)와 아이콘(18)을 한 단계 줄입니다.
+  /// 읽는 정보라 작아도 되고, 그래야 아이콘을 달고도 이름이 안 잘립니다.
+  final bool compact;
+
   @override
   Widget build(BuildContext context) {
     final IconData? glyph = icon;
     return Container(
+      // 좌우 여백이 md(16)면 좁은 카드 안에서 아이콘·글자를 밀어내 넘칩니다.
+      // 정보 칩은 읽는 것이지 누르는 것이 아니라 여백이 작아도 됩니다.
       padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
+        horizontal: AppSpacing.sm,
         vertical: AppSpacing.xs,
       ),
       decoration: BoxDecoration(
@@ -42,10 +50,24 @@ class KidInfoChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           if (glyph != null) ...<Widget>[
-            Icon(glyph, size: AppSizes.iconInline, color: AppColors.ink700),
+            Icon(
+              glyph,
+              size: compact ? AppSizes.iconCaption : AppSizes.iconInline,
+              color: AppColors.ink700,
+            ),
             const SizedBox(width: AppSpacing.xs),
           ],
-          Text(label, style: metrics.text(AppTypography.kidLabel)),
+          // 좁은 카드 안에서도 칩이 넘치지 않게 라벨을 줄입니다.
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: metrics.text(
+                compact ? AppTypography.kidCaption : AppTypography.kidLabel,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -96,7 +118,11 @@ class KidFilterChips extends StatelessWidget {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: EdgeInsets.symmetric(horizontal: metrics.screenPadding),
+      // 세로 여백은 그림자가 잘리지 않게 하는 최소한입니다.
+      padding: EdgeInsets.symmetric(
+        horizontal: metrics.screenPadding,
+        vertical: AppSpacing.sm,
+      ),
       child: Row(
         children: <Widget>[
           for (int i = 0; i < items.length; i++) ...<Widget>[
@@ -145,12 +171,12 @@ class _Chip extends StatelessWidget {
           padding: EdgeInsets.symmetric(
             horizontal: image == null ? AppSpacing.lg : AppSpacing.sm,
           ),
+          // 테두리 대신 옅은 그림자로 띄웁니다. 1px 테두리 알약은 화면을
+          // 선으로 채워 답답해 보입니다.
           decoration: BoxDecoration(
             color: selected ? AppColors.brandBlueDeep : AppColors.surface,
             borderRadius: BorderRadius.circular(AppRadius.pill),
-            border: Border.all(
-              color: selected ? AppColors.brandBlueDeep : AppColors.ink300,
-            ),
+            boxShadow: AppShadows.soft,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

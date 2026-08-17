@@ -167,7 +167,9 @@ class _WordDetailSheetState extends State<_WordDetailSheet> {
                 ),
                 const SizedBox(height: AppSpacing.md),
               ],
-              KidPrimaryButton(
+              // 닫기는 보조 행동 — 따라 말하기(주 버튼)와 얼굴을 다르게 해
+              // 아이의 다음 행동이 한눈에 정해지게 합니다.
+              KidSecondaryButton(
                 icon: AppIcons.close,
                 label: WordStrings.close,
                 labelStyle: metrics.text(AppTypography.kidButton),

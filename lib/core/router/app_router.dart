@@ -17,7 +17,6 @@ import '../../features/mypage/domain/guardian_gate.dart';
 import '../../features/mypage/presentation/views/my_page_view.dart';
 import '../../features/mypage/presentation/views/report_detail_view.dart';
 import '../../features/mypage/presentation/views/report_list_view.dart';
-import '../../features/mypage/presentation/views/settings_view.dart';
 import '../../features/planet/presentation/views/planet_view.dart';
 import '../../features/play/data/dialogue_word_capture.dart';
 import '../../features/play/domain/repositories/play_repository.dart';
@@ -168,10 +167,12 @@ GoRouter createAppRouter({
           ),
         ],
       ),
+      // 설정은 마이페이지 안으로 들어갔습니다. 이 경로로 들어오는 기존
+      // 링크(푸시 알림 등)가 깨지지 않게 마이페이지로 넘깁니다.
       GoRoute(
         path: AppRoutes.settings,
-        builder: (BuildContext context, GoRouterState state) =>
-            const SettingsPage(),
+        redirect: (BuildContext context, GoRouterState state) =>
+            AppRoutes.myPage,
       ),
       GoRoute(
         path: AppRoutes.notices,

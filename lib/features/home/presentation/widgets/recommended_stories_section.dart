@@ -8,6 +8,7 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/press_scale.dart';
 import '../../../../core/widgets/screen_metrics.dart';
 import '../../../../core/widgets/story_card.dart';
+import '../../../../core/widgets/story_thumbnail.dart';
 import '../../domain/entities/recommended_story.dart';
 
 /// 섹션3 — 추천 이야기. 고정 큐레이션 2~3개.
@@ -54,12 +55,15 @@ class RecommendedStoriesSection extends StatelessWidget {
             style: metrics.text(AppTypography.kidBody),
           )
         else if (metrics.isWide)
+          // 태블릿에서도 **가로 카드**입니다. 세로 카드를 3장 늘어놓으면
+          // 표지 하나가 화면 높이의 절반을 먹어서 추천이 접히는 곳 아래로
+          // 내려갑니다. 여기는 목록이 아니라 "다음에 뭐 할래?" 한 줄입니다.
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               for (int i = 0; i < stories.length; i++) ...<Widget>[
                 if (i > 0) const SizedBox(width: AppSpacing.lg),
-                Expanded(child: _card(stories[i], horizontal: false)),
+                Expanded(child: _card(stories[i], horizontal: true)),
               ],
             ],
           )
@@ -85,14 +89,18 @@ class RecommendedStoriesSection extends StatelessWidget {
     topicLabel: story.topicTag,
     metrics: metrics,
     horizontal: horizontal,
+    // 표지 원본이 그림책 세로 판형(2:3)입니다. 16:9 나 정사각으로 깔면
+    // 그림이 잘려 인물 얼굴이 날아갑니다. 원본 비율 그대로 둡니다.
+    coverAspectRatio: StoryThumbnail.portrait,
     onTap: () => onStoryTap(story),
   );
 }
 
-/// 섹션 제목. 레퍼런스처럼 **마지막 단어(키워드)만 브랜드 색**으로 강조합니다.
+/// 섹션 제목.
 ///
-/// 파스텔은 글자로 못 쓰므로 강조는 대비가 나오는 `brandBlueDeep` 로.
-/// (노랑은 별가루 전용이라 강조에 쓰지 않습니다 — `docs/DESIGN_SYSTEM.md` 3장)
+/// 예전에는 마지막 단어만 브랜드 색으로 강조했는데, 한 제목 안에서 글자
+/// 색이 갈리면 두 문장처럼 읽히고 다른 화면 제목과도 어긋납니다.
+/// 제목은 어디서나 한 가지 잉크색입니다. (`docs/DESIGN_SYSTEM.md` 3장)
 class _SectionHeading extends StatelessWidget {
   const _SectionHeading({required this.text, required this.metrics});
 
@@ -101,22 +109,7 @@ class _SectionHeading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final TextStyle base = metrics.text(AppTypography.kidTitle);
-    final int split = text.lastIndexOf(' ');
-    final String lead = split < 0 ? '' : text.substring(0, split + 1);
-    final String keyword = split < 0 ? text : text.substring(split + 1);
-    return RichText(
-      text: TextSpan(
-        style: base,
-        children: <TextSpan>[
-          if (lead.isNotEmpty) TextSpan(text: lead),
-          TextSpan(
-            text: keyword,
-            style: base.copyWith(color: AppColors.brandBlueDeep),
-          ),
-        ],
-      ),
-    );
+    return Text(text, style: metrics.text(AppTypography.kidTitle));
   }
 }
 

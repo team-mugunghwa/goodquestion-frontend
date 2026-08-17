@@ -169,11 +169,11 @@ void main() {
     expect(find.text(WordStrings.meaningMissing), findsOneWidget);
   });
 
-  testWidgets('목록에는 뜻과 예문이 나오지 않는다', (WidgetTester tester) async {
+  testWidgets('목록에는 뜻 한 줄이 보이고 예문은 나오지 않는다', (WidgetTester tester) async {
     await pump(tester, _StubRepository(book: _book));
 
-    // 목록은 밀도가 낮아야 합니다 — 뜻은 모달의 몫입니다. (PRD F-10)
-    expect(find.text('아들과 결혼한 사람이에요.'), findsNothing);
+    // 뜻은 한 줄 요약으로 목록에 보여 주고, 예문은 모달의 몫입니다.
+    expect(find.text('아들과 결혼한 사람이에요.'), findsOneWidget);
     expect(find.text('며느리가 살았어요.'), findsNothing);
   });
 
@@ -184,7 +184,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text(WordStrings.meaning), findsOneWidget);
-    expect(find.text('아들과 결혼한 사람이에요.'), findsOneWidget);
+    // 목록 카드에 한 번, 모달에 한 번.
+    expect(find.text('아들과 결혼한 사람이에요.'), findsNWidgets(2));
     expect(find.text('며느리가 살았어요.'), findsOneWidget);
   });
 
@@ -193,7 +194,7 @@ void main() {
     await tester.tap(find.text('며느리').last);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.bySemanticsLabel(WordStrings.like));
+    await tester.tap(find.bySemanticsLabel(WordStrings.like).last);
     await tester.pumpAndSettle();
     await tester.tap(find.text(WordStrings.close));
     await tester.pumpAndSettle();
@@ -209,6 +210,23 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(WordCard), findsNWidgets(1));
+  });
+
+  testWidgets('좋아요 필터를 켜면 좋아요한 단어만 남는다', (WidgetTester tester) async {
+    await pump(tester, _StubRepository(book: _book));
+
+    const Key filter = Key('words-liked-filter');
+    // 더미 3개 중 좋아요한 단어는 하나뿐입니다.
+    await tester.tap(find.byKey(filter));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(WordCard), findsNWidgets(1));
+
+    // 다시 누르면 전체로 돌아옵니다.
+    await tester.tap(find.byKey(filter));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(WordCard), findsNWidgets(3));
   });
 
   testWidgets('담은 단어가 없으면 이야기로 보낸다', (WidgetTester tester) async {

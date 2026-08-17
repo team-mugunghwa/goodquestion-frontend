@@ -15,6 +15,7 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/app_canvas.dart';
 import '../../../../core/widgets/app_state_views.dart';
+import '../../../../core/widgets/cosmic_backdrop.dart';
 import '../../../../core/widgets/kid_button.dart';
 import '../../../../core/widgets/kid_chips.dart';
 import '../../../../core/widgets/kid_speech_bubble.dart';
@@ -164,39 +165,46 @@ class _SentencePracticeViewState extends State<SentencePracticeView> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: AppCanvas.day(
-        child: SafeArea(
-          child: LayoutBuilder(
-            builder: (BuildContext context, BoxConstraints constraints) {
-              final ScreenMetrics metrics = ScreenMetrics.of(
-                constraints.maxWidth,
-              );
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  _Header(vm: vm, metrics: metrics, onBack: () => _onBack(vm)),
-                  Expanded(
-                    child: AnimatedSwitcher(
-                      duration: respect(context, AppDurations.normal),
-                      switchInCurve: AppCurves.standard,
-                      switchOutCurve: AppCurves.exit,
-                      layoutBuilder: (Widget? current, List<Widget> previous) =>
-                          Stack(
-                            fit: StackFit.expand,
-                            alignment: Alignment.topCenter,
-                            children: <Widget>[
-                              ...previous,
-                              if (current != null) current,
-                            ],
-                          ),
-                      child: _body(context, vm, metrics),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            // 단어장에서 이어져 들어오는 화면 — 배경도 같은 세계관을 잇습니다.
+            const CosmicBackdrop(seed: 11, planetCenterX: 0.5),
+            SafeArea(child: _layout(context, vm)),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _layout(BuildContext context, SentencePracticeViewModel vm) {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final ScreenMetrics metrics = ScreenMetrics.of(constraints.maxWidth);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            _Header(vm: vm, metrics: metrics, onBack: () => _onBack(vm)),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: respect(context, AppDurations.normal),
+                switchInCurve: AppCurves.standard,
+                switchOutCurve: AppCurves.exit,
+                layoutBuilder: (Widget? current, List<Widget> previous) =>
+                    Stack(
+                      fit: StackFit.expand,
+                      alignment: Alignment.topCenter,
+                      children: <Widget>[
+                        ...previous,
+                        if (current != null) current,
+                      ],
+                    ),
+                child: _body(context, vm, metrics),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -775,7 +783,9 @@ class _ResultActions extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.md),
         ],
-        KidPrimaryButton(
+        // 단어장으로 돌아가기는 보조 행동 — 주 버튼(다른 예문)과 얼굴을
+        // 다르게 해 다음 행동이 한눈에 정해지게 합니다.
+        KidSecondaryButton(
           icon: AppIcons.words,
           label: SentencePracticeStrings.backToWords,
           labelStyle: metrics.text(AppTypography.kidButton),

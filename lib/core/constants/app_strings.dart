@@ -42,12 +42,17 @@ abstract final class NavStrings {
   static const String home = '홈';
   static const String stories = '이야기';
   static const String words = '단어장';
+  static const String planet = '행성';
   static const String myPage = '마이';
 }
 
 /// 홈(`/`) 전용 문구.
 abstract final class HomeStrings {
   // ── 섹션1 상단 바 ──
+  /// 인사말 헤더. 이름이 없으면 [greetingNoName] 을 씁니다.
+  static String greeting(String name) => '안녕, $name!';
+  static const String greetingNoName = '안녕!';
+  static const String greetingSub = '오늘은 어떤 이야기를 해볼까?';
   static const String profileSemantics = '아이 바꾸기';
   static const String stardust = '별가루';
 
@@ -95,6 +100,9 @@ abstract final class HomeStrings {
 /// 이야기 목록(`/stories`) 전용 문구.
 abstract final class StoryListStrings {
   static const String title = '어떤 이야기를 해볼까?';
+
+  /// 제목 아래 한 줄. 화면의 일을 아이 말로 알려 줍니다.
+  static const String subtitle = '마음에 드는 그림을 골라 봐';
 
   /// 고른 주제에 이야기가 없을 때. 아이 탓이 아니라는 톤.
   static const String emptyTopic = '이 주제는 아직 이야기가 없어.\n다른 것도 볼까?';
@@ -245,6 +253,9 @@ abstract final class RecapStrings {
 abstract final class WordStrings {
   static const String title = '내 단어장';
 
+  /// 제목 아래 한 줄. 담은 개수를 자연스러운 문장으로 녹입니다.
+  static String subtitle(int count) => '이야기에서 만난 단어 $count개를 다시 만나요';
+
   /// 총 담은 단어 수. 스크린리더용 풀 문장.
   static String savedCount(int count) => '담은 단어 $count개';
 
@@ -266,6 +277,17 @@ abstract final class WordStrings {
   static const String exampleInDaily = '평소에는 이렇게 써';
   static const String exampleAdvanced = '조금 어려운 문장에도 도전!';
   static const String like = '좋아요';
+  static const String unlike = '좋아요 해제';
+
+  /// 헤더의 좋아요 필터 버튼.
+  static const String likedOnly = '좋아요한 단어만 보기';
+
+  /// 이야기 묶음 옆의 단어 수. 문장이 아니라 꼬리표라 짧게 씁니다.
+  static String groupCount(int count) => '$count개';
+
+  /// 좋아요 필터를 켰는데 이 이야기에는 좋아요한 단어가 없을 때.
+  static const String emptyLiked = '여기엔 좋아요한 단어가 없어.\n마음에 드는 단어에 하트를 눌러 봐!';
+  static const String showAllWords = '전체 보기';
   static const String practice = '따라 말하기';
   static const String close = '닫기';
 }

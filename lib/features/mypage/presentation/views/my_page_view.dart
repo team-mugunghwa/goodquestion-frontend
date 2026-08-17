@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:provider/single_child_widget.dart';
 
 import '../../../../core/constants/app_icons.dart';
 import '../../../../core/constants/app_strings.dart';
@@ -11,6 +12,7 @@ import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/app_state_views.dart';
+import '../../../../core/widgets/child_avatar.dart';
 import '../../../../core/widgets/guardian_list.dart';
 import '../../../../core/widgets/guardian_scaffold.dart';
 import '../../../../core/widgets/skeleton_box.dart';
@@ -18,8 +20,10 @@ import '../../domain/entities/my_page_summary.dart';
 import '../../domain/guardian_gate.dart';
 import '../../domain/usecases/my_page_use_cases.dart';
 import '../viewmodels/my_page_view_model.dart';
+import '../viewmodels/settings_view_model.dart';
 import '../widgets/child_profile_card.dart';
 import '../widgets/guardian_gate_dialog.dart';
+import '../widgets/settings_sections.dart';
 
 /// 마이페이지 — 계정·관리 허브.
 ///
@@ -34,23 +38,45 @@ import '../widgets/guardian_gate_dialog.dart';
 /// | 1 | 헤더 — "마이페이지" (탭 루트라 뒤로가기 없음) |
 /// | 2 | 현재 아이 프로필 카드 + 활동 요약 |
 /// | 3 | 보호자 메뉴 — 리포트 (자물쇠 + 새 리포트 배지) |
-/// | 4 | 관리 — 아이 추가 · 설정 |
-/// | 5 | 하단 내비 (마이 활성) |
+/// | 4 | 관리 — 아이 추가 |
+/// | 5 | 알림 · 안내 · 약관 · 계정 (예전 설정 화면) |
+/// | 6 | 하단 내비 (마이 활성) |
 ///
-/// 이 화면은 허브이지 콘텐츠 화면이 아닙니다. 리포트 내용·프로필 편집 폼을
-/// 여기서 펼치지 않고 모달·하위 라우트로 넘깁니다.
+/// ## 설정을 별도 화면으로 두지 않습니다
+///
+/// 예전에는 `/settings` 가 따로 있었고, 알림 토글 하나 바꾸거나 로그아웃
+/// 한 번 하려고 마이페이지에서 한 뎁스를 더 들어갔다 나와야 했습니다.
+/// 보호자가 오래 머무는 화면이 아니라서 그 왕복이 그대로 마찰이었습니다.
+/// → [SettingsSections]
+///
+/// 리포트 내용과 프로필 편집 폼은 여전히 모달·하위 라우트로 넘깁니다 —
+/// 그건 "읽고 쓰는 콘텐츠"라 허브에 펼칠 것이 아닙니다.
 class MyPage extends StatelessWidget {
   const MyPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<MyPageViewModel>(
-      create: (_) => MyPageViewModel(
-        getIt<GetMyPageSummaryUseCase>(),
-        getIt<CreateMyPageChildUseCase>(),
-        getIt<GetMyPageChildrenUseCase>(),
-        getIt<SelectMyPageChildUseCase>(),
-      )..load(),
+    // 설정을 이 화면에 펼치므로 설정 ViewModel 도 여기서 답니다.
+    // 두 ViewModel 을 한 화면이 나눠 쓰는 건, 원래 두 화면이었던 것을
+    // 합친 결과입니다 — 데이터 출처가 서로 다르기 때문입니다.
+    return MultiProvider(
+      providers: <SingleChildWidget>[
+        ChangeNotifierProvider<MyPageViewModel>(
+          create: (_) => MyPageViewModel(
+            getIt<GetMyPageSummaryUseCase>(),
+            getIt<CreateMyPageChildUseCase>(),
+            getIt<GetMyPageChildrenUseCase>(),
+            getIt<SelectMyPageChildUseCase>(),
+          )..load(),
+        ),
+        ChangeNotifierProvider<SettingsViewModel>(
+          create: (_) => SettingsViewModel(
+            getIt<GetSettingsUseCase>(),
+            getIt<SetReportNotificationUseCase>(),
+            getIt<SetMarketingConsentUseCase>(),
+          )..load(),
+        ),
+      ],
       child: const MyPageView(),
     );
   }
@@ -63,6 +89,24 @@ class MyPageView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final MyPageViewModel vm = context.watch<MyPageViewModel>();
+    final SettingsViewModel settingsVm = context.watch<SettingsViewModel>();
+
+    // 마케팅 동의는 법적 의미가 있어서 바뀐 걸 알립니다.
+    final bool? toast = settingsVm.takeMarketingToast();
+    if (toast != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              toast
+                  ? SettingsStrings.marketingOn
+                  : SettingsStrings.marketingOff,
+            ),
+          ),
+        );
+      });
+    }
 
     return GuardianScaffold(
       title: MyPageStrings.title,
@@ -100,13 +144,13 @@ class MyPageView extends StatelessWidget {
                 label: MyPageStrings.addChild,
                 onTap: () => _openChildForm(context),
               ),
-              GuardianTile(
-                icon: AppIcons.settings,
-                label: MyPageStrings.settings,
-                onTap: () => context.go(AppRoutes.settings),
-              ),
             ],
           ),
+          const SizedBox(height: AppSpacing.xl),
+          // 예전에는 여기 "설정" 한 줄이 있었고, 알림 토글 하나 바꾸려 해도
+          // 한 뎁스를 더 들어갔다 나와야 했습니다. 보호자가 오래 머무는
+          // 화면이 아니라서 그 왕복이 그대로 마찰이었습니다. 펼칩니다.
+          SettingsSections(vm: settingsVm),
         ],
       ),
     );
@@ -206,10 +250,10 @@ class MyPageView extends StatelessWidget {
                         horizontal: AppSpacing.sm,
                         vertical: AppSpacing.xs,
                       ),
-                      leading: CircleAvatar(
-                        child: Text(
-                          child.name.isEmpty ? '?' : child.name.substring(0, 1),
-                        ),
+                      leading: ChildAvatar(
+                        name: child.name,
+                        image: child.avatar,
+                        diameter: AppSizes.tapGuardian,
                       ),
                       title: Text(child.name),
                       subtitle: Text('${child.age}살'),
