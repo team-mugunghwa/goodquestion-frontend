@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:goodquestion/core/di/injector.dart';
 import 'package:goodquestion/core/router/app_router.dart';
 import 'package:goodquestion/core/router/app_routes.dart';
+import 'package:goodquestion/features/mypage/domain/entities/app_settings.dart';
 import 'package:goodquestion/features/mypage/domain/entities/my_page_summary.dart';
 import 'package:goodquestion/features/mypage/domain/entities/report_detail.dart';
 import 'package:goodquestion/features/mypage/domain/entities/report_summary.dart';
@@ -33,7 +34,10 @@ void main() {
       ..unregister<ChildProfileRepository>()
       ..registerLazySingleton<ChildProfileRepository>(
         () => getIt<MyPageRepository>() as _SilentMyPage,
-      );
+      )
+      // 마이페이지가 설정까지 펼치면서 설정도 서버를 부릅니다.
+      ..unregister<SettingsRepository>()
+      ..registerLazySingleton<SettingsRepository>(_SilentSettings.new);
   });
   tearDownAll(getIt.reset);
 
@@ -167,6 +171,28 @@ class _SilentReports implements ReportRepository {
 
 /// 마이페이지도 같은 이유로 조용히 만듭니다 - `/mypage/report` 는 `/mypage`
 /// 아래라 마이페이지 화면도 함께 세워집니다.
+class _SilentSettings implements SettingsRepository {
+  static const AppSettings _value = AppSettings(
+    reportNotification: true,
+    marketingConsent: false,
+    accountType: 'email',
+    accountLabel: 'test@example.com',
+    hasNewNotice: false,
+    appVersion: '0.1.0',
+  );
+
+  @override
+  Future<AppSettings> getSettings() async => _value;
+
+  @override
+  Future<AppSettings> setReportNotification({required bool enabled}) async =>
+      _value;
+
+  @override
+  Future<AppSettings> setMarketingConsent({required bool enabled}) async =>
+      _value;
+}
+
 class _SilentMyPage implements MyPageRepository, ChildProfileRepository {
   @override
   String? selectedChildId;

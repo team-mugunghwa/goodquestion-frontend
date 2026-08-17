@@ -22,8 +22,9 @@ import 'package:goodquestion/features/mypage/presentation/viewmodels/settings_vi
 import 'package:goodquestion/features/mypage/presentation/views/my_page_view.dart';
 import 'package:goodquestion/features/mypage/presentation/views/report_detail_view.dart';
 import 'package:goodquestion/features/mypage/presentation/views/report_list_view.dart';
-import 'package:goodquestion/features/mypage/presentation/views/settings_view.dart';
+import 'package:goodquestion/features/mypage/presentation/widgets/settings_sections.dart';
 import 'package:provider/provider.dart';
+import 'package:provider/single_child_widget.dart';
 
 /// 게이트가 부르는 보호자 조회. 이메일 계정(provider null)이라 비밀번호를
 /// 묻는 쪽으로 갑니다.
@@ -233,23 +234,38 @@ void main() {
   }
 
   group('마이페이지', () {
-    Widget under(_Stub stub) => ChangeNotifierProvider<MyPageViewModel>(
-      create: (_) => MyPageViewModel(
-        GetMyPageSummaryUseCase(stub),
-        CreateMyPageChildUseCase(stub),
-        GetMyPageChildrenUseCase(stub),
-        SelectMyPageChildUseCase(stub),
-      )..load(),
+    // 설정이 이 화면 안으로 들어와서 ViewModel 두 개가 함께 필요합니다.
+    Widget under(_Stub stub) => MultiProvider(
+      providers: <SingleChildWidget>[
+        ChangeNotifierProvider<MyPageViewModel>(
+          create: (_) => MyPageViewModel(
+            GetMyPageSummaryUseCase(stub),
+            CreateMyPageChildUseCase(stub),
+            GetMyPageChildrenUseCase(stub),
+            SelectMyPageChildUseCase(stub),
+          )..load(),
+        ),
+        ChangeNotifierProvider<SettingsViewModel>(
+          create: (_) => SettingsViewModel(
+            GetSettingsUseCase(stub),
+            SetReportNotificationUseCase(stub),
+            SetMarketingConsentUseCase(stub),
+          )..load(),
+        ),
+      ],
       child: const MyPageView(),
     );
 
     testWidgets('프로필 카드·메뉴·하단 내비가 보인다', (WidgetTester tester) async {
-      await pump(tester, under(_Stub(summary: _summary)));
+      await pump(tester, under(_Stub(summary: _summary, settings: _settings)));
 
       expect(find.text('하늘이 · 8살'), findsOneWidget);
       expect(find.text(MyPageStrings.completedStories(3)), findsOneWidget);
       expect(find.text(MyPageStrings.report), findsOneWidget);
-      expect(find.text(MyPageStrings.settings), findsOneWidget);
+      // 설정이 이 화면 안으로 들어왔습니다 — 별도 진입 줄 대신
+      // 알림 묶음이 바로 보입니다.
+      expect(find.text(SettingsStrings.notificationGroup), findsOneWidget);
+      expect(find.text(SettingsStrings.signOut), findsOneWidget);
       expect(find.byType(AppBottomNav), findsOneWidget);
     });
 
@@ -305,8 +321,9 @@ void main() {
       await pump(tester, under(_Stub(error: const NetworkFailure())));
 
       expect(find.text(AppStrings.retry), findsOneWidget);
-      // 프로필을 못 불러와도 설정으로는 갈 수 있어야 합니다.
-      expect(find.text(MyPageStrings.settings), findsOneWidget);
+      // 프로필을 못 불러와도 리포트·관리 메뉴는 남아 있어야 합니다.
+      expect(find.text(MyPageStrings.report), findsOneWidget);
+      expect(find.text(MyPageStrings.addChild), findsOneWidget);
     });
   });
 
@@ -419,13 +436,20 @@ void main() {
   });
 
   group('설정', () {
+    // 설정은 마이페이지 안에 펼쳐지는 묶음이 됐습니다. 화면 전체가 아니라
+    // 그 묶음만 세워 검사합니다.
     Widget under(_Stub stub) => ChangeNotifierProvider<SettingsViewModel>(
       create: (_) => SettingsViewModel(
         GetSettingsUseCase(stub),
         SetReportNotificationUseCase(stub),
         SetMarketingConsentUseCase(stub),
       )..load(),
-      child: const SettingsView(),
+      child: Scaffold(
+        body: Consumer<SettingsViewModel>(
+          builder: (_, SettingsViewModel vm, _) =>
+              SingleChildScrollView(child: SettingsSections(vm: vm)),
+        ),
+      ),
     );
 
     testWidgets('알림이 최상단이고 네 그룹이 보인다', (WidgetTester tester) async {

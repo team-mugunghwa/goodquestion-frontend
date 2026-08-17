@@ -108,48 +108,25 @@ void main() {
   });
 
   // 보호자 하위 화면들. 탭 루트가 아니라 하단 내비가 없습니다.
-  testWidgets('마이페이지의 설정을 누르면 /settings로 이동한다', (WidgetTester tester) async {
-    final router = createAppRouter(
-      initialLocation: AppRoutes.myPage,
-      authTokenProvider: () async => 'test-token',
-    );
-    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
-    for (int i = 0; i < 6; i++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 30)),
-      );
-      await tester.pump(const Duration(milliseconds: 400));
-    }
-
-    final Finder settingsTile = find.ancestor(
-      of: find.text(MyPageStrings.settings),
-      matching: find.byType(InkWell),
-    );
-    await tester.ensureVisible(settingsTile);
-    await tester.pump();
-    tester.widget<InkWell>(settingsTile).onTap!();
-    for (int i = 0; i < 3; i++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 30)),
-      );
-      await tester.pump(const Duration(milliseconds: 400));
-    }
-
-    expect(router.routeInformationProvider.value.uri.path, AppRoutes.settings);
-    expect(find.text(SettingsStrings.title), findsOneWidget);
+  //
+  // 설정은 마이페이지 안으로 들어갔습니다. 별도 화면이 없으므로 두 옛 주소는
+  // 모두 마이페이지로 넘어가야 합니다 — 푸시 알림에 실려 나간 링크가
+  // 막다른 길이 되면 안 됩니다.
+  testWidgets('/settings 로 들어가면 마이페이지로 넘어간다', (WidgetTester tester) async {
+    await pumpAt(tester, AppRoutes.settings);
+    expect(find.text(MyPageStrings.title), findsOneWidget);
   });
 
-  testWidgets('기존 /mypage/settings 주소는 /settings로 이동한다', (
+  testWidgets('기존 /mypage/settings 주소도 마이페이지로 넘어간다', (
     WidgetTester tester,
   ) async {
     await pumpAt(tester, '/mypage/settings');
-    expect(find.text(SettingsStrings.title), findsOneWidget);
+    expect(find.text(MyPageStrings.title), findsOneWidget);
   });
 
   final Map<String, String> guardianTitles = <String, String>{
     AppRoutes.report: ReportListStrings.title,
     AppRoutes.reportDetailOf('104'): ReportDetailStrings.title,
-    AppRoutes.settings: SettingsStrings.title,
   };
 
   guardianTitles.forEach((String location, String title) {
