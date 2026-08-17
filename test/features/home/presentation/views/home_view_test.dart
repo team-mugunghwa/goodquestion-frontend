@@ -49,6 +49,19 @@ const HomeSummary _withSession = HomeSummary(
   planet: PlanetSummary(stardustBalance: 7),
 );
 
+/// 히어로에 올라간 편에 **가로 전용 표지가 없는** 상태. 세로 2:3 으로 폴백합니다.
+const HomeSummary _withoutWideCover = HomeSummary(
+  child: ChildProfile(name: '하늘이'),
+  inProgressSession: InProgressSession(
+    sessionId: '2482',
+    storyTitle: '해와 달이 된 오누이',
+    lastCompletedScene: 2,
+    totalScenes: 5,
+  ),
+  recommendedStories: <RecommendedStory>[],
+  planet: PlanetSummary(stardustBalance: 7),
+);
+
 /// 이어하기는 없지만 추천 큐레이션은 있는 상태. 1순위가 히어로로 올라갑니다.
 const HomeSummary _withoutSession = HomeSummary(
   child: ChildProfile(name: '하늘이'),
@@ -126,13 +139,9 @@ void main() {
   });
 
   /// 이 화면이 한 번 반려된 이유가 **표지 잘림**이었습니다. 원칙은
-  /// "표지는 자르지 않는다"이고, 홈에서 그 원칙을 지키는 자리는 **아래 책장**
-  /// 입니다. 여기가 2:3 에서 벗어나면 목록·상세와 같은 표지가 홈에서만 다르게
+  /// "표지는 자르지 않는다"이고, 책장이 그 원칙을 지키는 자리입니다.
+  /// 여기가 2:3 에서 벗어나면 목록·상세와 같은 표지가 홈에서만 다르게
   /// 잘려 보입니다. (`docs/COVER_ART_GUIDE.md` 7장)
-  ///
-  /// 히어로는 원칙의 **유일한 예외**라 이 보증에서 뺍니다 — 가로로 긴 배너라
-  /// 세로 2:3 을 넣을 방법이 없어서, 원본에서 인물 얼굴 부근 띠만 남깁니다.
-  /// 아래 `히어로 표지는 예외로 잘린다` 가 그 사실을 따로 못박습니다.
   testWidgets('홈 책장의 표지는 세로 2:3 그대로다', (WidgetTester tester) async {
     await pumpHome(tester, _StubRepository(summary: _withSession));
 
@@ -148,23 +157,50 @@ void main() {
     );
   });
 
-  /// 히어로는 표지를 자릅니다. **알고 자릅니다.**
+  /// 히어로도 이제 **자르지 않습니다.**
   ///
-  /// 이 테스트가 깨졌다면 둘 중 하나입니다 — 히어로가 세로 표지로 돌아갔거나
-  /// (그러면 위 책장 테스트에 히어로를 다시 넣으세요), 가로 전용 그림을
-  /// 뽑아서 예외가 사라졌거나. 어느 쪽이든 `docs/COVER_ART_GUIDE.md` 7장을
-  /// 함께 고쳐야 합니다.
-  testWidgets('히어로 표지는 예외로 잘린다 (가로로 납작한 띠)', (WidgetTester tester) async {
+  /// 예전에는 세로 2:3 표지를 카드 전폭 배경으로 깔면서 원본 세로의 9% 만
+  /// 남기는 원칙의 예외였습니다. 그 자리 비율로 그린 가로 전용 표지(2.5:1)가
+  /// 들어오면서 예외가 사라졌습니다 — 패널 비율 = 그림 비율이라
+  /// [BoxFit.cover] 가 잘라낼 게 없습니다.
+  ///
+  /// 이 테스트가 깨졌다면 히어로가 다시 그림을 자르고 있다는 뜻입니다.
+  /// `docs/COVER_ART_GUIDE.md` 7장을 함께 보세요.
+  testWidgets('가로 표지가 있으면 히어로 패널이 2.5:1 이다', (WidgetTester tester) async {
+    // `방귀 뀌는 며느리` 는 가로 표지가 있는 두 편 중 하나입니다.
+    expect(
+      StoryThumbnail.localWideCoverAssetFor('방귀 뀌는 며느리'),
+      isNotNull,
+      reason: '이 테스트는 가로 표지가 있는 편을 전제로 합니다',
+    );
     await pumpHome(tester, _StubRepository(summary: _withSession));
 
     final Rect hero = tester.getRect(find.byType(StoryThumbnail).first);
     expect(
       hero.width / hero.height,
-      greaterThan(3),
-      reason: '히어로 표지가 납작한 띠가 아니면 글자를 얹을 자리가 없습니다',
+      closeTo(StoryThumbnail.wideCover, 0.01),
+      reason: '히어로 패널이 2.5:1 이 아니면 가로 표지가 잘립니다',
     );
-    // 세로 표지를 세운 시절로 되돌아가면 여기서 걸립니다.
-    expect(hero.width / hero.height, greaterThan(StoryThumbnail.portrait));
+  });
+
+  /// 일곱 편 중 다섯 편은 아직 가로 표지가 없습니다. 그때는 **세로 2:3 을
+  /// 옆에 세웁니다** — 어느 쪽이든 잘리지 않는다는 게 요점입니다.
+  testWidgets('가로 표지가 없으면 히어로가 세로 2:3 으로 폴백한다', (
+    WidgetTester tester,
+  ) async {
+    expect(
+      StoryThumbnail.localWideCoverAssetFor('해와 달이 된 오누이'),
+      isNull,
+      reason: '이 편에 가로 표지를 추가했다면 이 테스트의 제목을 바꾸세요',
+    );
+    await pumpHome(tester, _StubRepository(summary: _withoutWideCover));
+
+    final Rect hero = tester.getRect(find.byType(StoryThumbnail).first);
+    expect(
+      hero.width / hero.height,
+      closeTo(StoryThumbnail.portrait, 0.01),
+      reason: '폴백 히어로가 2:3 이 아니면 세로 표지가 잘립니다',
+    );
   });
 
   testWidgets('추천까지 비면 새 이야기 카드로 폴백한다', (WidgetTester tester) async {

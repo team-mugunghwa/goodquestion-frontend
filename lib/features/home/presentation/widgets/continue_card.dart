@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_icons.dart';
 import '../../../../core/constants/app_strings.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/screen_metrics.dart';
@@ -13,9 +14,9 @@ import 'home_hero_card.dart';
 /// 이 화면의 성패가 여기 걸려 있습니다. 진행 중인 이야기가 있는 아이에게
 /// 다른 선택지가 이어하기보다 먼저 눈에 들어오면 완주율이 새어 나갑니다.
 ///
-/// 껍데기(표지 전폭 배경 + 글자 오버레이 + 버튼)는 [HomeHeroCard] 가 갖고
-/// 있습니다. 여기서 정하는 것은 **무엇을 얹을지**뿐입니다 — 이어보던 표식,
-/// 이야기 제목, 어디까지 했는지.
+/// 껍데기(표지 패널 + 흰 글자 면 + 버튼)는 [HomeHeroCard] 가 갖고 있습니다.
+/// 여기서 정하는 것은 **무엇을 얹을지**뿐입니다 — 이어보던 표식, 이야기 제목,
+/// 어디까지 했는지.
 class ContinueCard extends StatelessWidget {
   const ContinueCard({
     super.key,
@@ -49,8 +50,9 @@ class ContinueCard extends StatelessWidget {
 /// 진행률을 퍼센트나 막대로 주지 않는 이유: 저학년은 "60%"를 자기 이야기의
 /// 위치로 바꿔 읽지 못합니다. **셀 수 있는 점**이 훨씬 빠릅니다.
 ///
-/// 점과 글자는 표지 사진 위에 얹히므로 전부 흰색 계열입니다
-/// ([HomeHeroCard.onCover]). 잉크색으로 두면 밝은 표지에서 사라집니다.
+/// 이 줄은 카드의 **흰 면** 위에 있습니다. 표지를 배경으로 깔던 시절에는 점과
+/// 글자가 전부 흰색이었지만, 지금은 사진과 글자가 자리를 나눠 갖기 때문에
+/// 잉크색·브랜드색으로 돌아왔습니다.
 class _Progress extends StatelessWidget {
   const _Progress({required this.session, required this.metrics});
 
@@ -75,19 +77,14 @@ class _Progress extends StatelessWidget {
             // 점도 Wrap 입니다. 폰에서는 점 열 개와 라벨이 한 줄에 못 서서
             // 라벨이 아래로 내려옵니다. 줄이 나뉘어도 세는 데는 지장이 없습니다.
             Wrap(
-              spacing: AppSpacing.sm,
+              spacing: HomeHeroCard.dotSpacing(metrics),
               runSpacing: AppSpacing.sm,
               children: <Widget>[
                 for (int i = 0; i < session.totalScenes; i++)
                   _Dot(done: i < session.lastCompletedScene),
               ],
             ),
-          Text(
-            label,
-            style: metrics
-                .text(AppTypography.kidLabel)
-                .copyWith(color: HomeHeroCard.onCover),
-          ),
+          Text(label, style: metrics.text(AppTypography.kidLabel)),
         ],
       ),
     );
@@ -101,16 +98,14 @@ class _Dot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    width: AppSpacing.md,
-    height: AppSpacing.md,
+    width: HomeHeroCard.dotSize,
+    height: HomeHeroCard.dotSize,
     decoration: BoxDecoration(
       shape: BoxShape.circle,
       // 아직 안 한 장면도 "빈 자리"로 보여야 해서 지우지 않고 흐리게 둡니다.
-      // 사진 위라 회색([AppColors.ink300])을 쓰면 표지 색에 따라 사라졌다
-      // 나타났다 합니다 — 같은 흰색의 농도로만 구분합니다.
-      color: done
-          ? HomeHeroCard.onCover
-          : HomeHeroCard.onCover.withValues(alpha: 0.40),
+      // 흰 면 위라 채운 점은 글자용 파랑([AppColors.brandBlueDeep]),
+      // 빈 점은 테두리색([AppColors.ink300])입니다.
+      color: done ? AppColors.brandBlueDeep : AppColors.ink300,
     ),
   );
 }

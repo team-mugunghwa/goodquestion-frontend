@@ -41,17 +41,42 @@ class StoryThumbnail extends StatelessWidget {
     return file == null ? null : 'assets/images/covers/$file.png';
   }
 
+  /// 제목 → **가로 전용 표지**(2.5:1) 파일 이름.
+  ///
+  /// 세로 표지와 달리 아직 두 편뿐입니다. 나머지 다섯 편(`story_21` ·
+  /// `story_23` · `story_31` · `story_32` · `story_41`)이 들어오면 여기에 한
+  /// 줄씩 추가하세요. (`docs/COVER_ART_GUIDE.md` 7장)
+  static const Map<String, String> _localWideCoverByTitle = <String, String>{
+    '방귀 뀌는 며느리': 'story_11',
+    '의좋은 형제': 'story_22',
+  };
+
+  /// [title] 에 대응하는 가로 전용 표지 경로. **없으면 `null`** 이고, 부르는
+  /// 쪽은 그때 세로 2:3 표지로 폴백합니다.
+  ///
+  /// 에셋이 실제로 있는지 런타임에 확인하지 않습니다 — 웹에서는 없는 에셋을
+  /// 부르는 순간 404 가 콘솔에 남습니다. **표에 있는 제목만** 가로 표지가
+  /// 있다고 보고, 파일을 넣을 때 표를 같이 고치세요.
+  static String? localWideCoverAssetFor(String? title) {
+    final String? file = title == null ? null : _localWideCoverByTitle[title];
+    return file == null ? null : 'assets/images/covers/wide/$file.webp';
+  }
+
   /// 2:3 — **표지 원본과 같은 비율.** 표지를 쓰는 자리의 기본값입니다.
   ///
   /// 표지 원본(1024×1536)은 전부 세로 그림입니다. 다른 비율로 담으면
   /// [BoxFit.cover] 가 잘라내는데, 그림책 표지에서 잘려 나가는 건 대개
   /// 인물의 얼굴입니다. 그래서 **표지는 자르지 않습니다** —
-  /// 자를 수밖에 없는 자리라면 그 비율로 그린 그림을 따로 씁니다.
-  /// (`docs/COVER_ART_GUIDE.md` 7장)
-  ///
-  /// 예외는 홈 히어로 하나뿐이고, 거기서는 [alignment] 로 어디를 남길지
-  /// 직접 지정합니다.
+  /// 자를 수밖에 없는 자리라면 그 비율로 그린 그림을 따로 씁니다
+  /// ([wideCover]). (`docs/COVER_ART_GUIDE.md` 7장)
   static const double portrait = 2 / 3;
+
+  /// 2.5:1 — **가로 전용 표지의 비율.** 홈 히어로 하나가 씁니다.
+  ///
+  /// 세로 2:3 을 가로 배너에 담을 방법이 없어서 그 자리 비율로 따로 그린
+  /// 그림입니다([localWideCoverAssetFor]). 원본이 1983×793 이라 이 비율로
+  /// 담으면 [BoxFit.cover] 가 잘라낼 게 없습니다.
+  static const double wideCover = 2.5;
 
   /// 16:9 — 표지가 아니라 **띠**로 쓰는 자리. 이야기 상세의 폰 레이아웃뿐입니다.
   ///
@@ -77,10 +102,9 @@ class StoryThumbnail extends StatelessWidget {
 
   /// [BoxFit.cover] 가 잘라낼 때 **어디를 남길지.**
   ///
-  /// 자르지 않는 자리(=[portrait])에서는 아무 효과가 없으므로 건드리지 마세요.
-  /// 자를 수밖에 없는 자리에서만 의미가 있습니다. 지금은 홈 히어로 하나이고,
-  /// 거기서 [Alignment.center] 를 그대로 두면 세로 표지의 **허리**가 남습니다
-  /// — 인물의 얼굴이 통째로 위로 잘려 나가서 표지를 쓴 의미가 사라집니다.
+  /// 그림 비율과 자리 비율이 같으면([portrait] · [wideCover]) 아무 효과가
+  /// 없으므로 건드리지 마세요. 지금 이 값을 실제로 쓰는 자리는 없습니다 —
+  /// 홈 히어로가 마지막이었고, 가로 전용 표지가 들어오면서 없어졌습니다.
   final Alignment alignment;
 
   /// 칩처럼 작은 자리에서는 [AppSizes.iconInline] 로 줄이세요.

@@ -18,20 +18,26 @@ class HomeSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) => _body(
+    return LayoutBuilder(builder: (
+      BuildContext context,
+      BoxConstraints constraints,
+    ) {
+      final double cardWidth =
+          constraints.maxWidth - metrics.screenPadding * 2;
+      return _body(
         context,
+        cardWidth,
         RecommendedStoriesSection.coverWidthOf(
           context,
           metrics,
-          constraints.maxWidth - metrics.screenPadding * 2,
+          cardWidth,
           constraints.maxHeight,
         ),
-      ),
-    );
+      );
+    });
   }
 
-  Widget _body(BuildContext context, double coverWidth) {
+  Widget _body(BuildContext context, double cardWidth, double coverWidth) {
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
         metrics.screenPadding,
@@ -42,9 +48,9 @@ class HomeSkeleton extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          // 섹션2 — 히어로 (표지 전폭 배경 + 글자 오버레이)
+          // 섹션2 — 히어로 (표지 패널 + 흰 글자 면)
           SkeletonBox(
-            height: HomeHeroCard.estimateHeight(context, metrics),
+            height: HomeHeroCard.estimateHeight(context, metrics, cardWidth),
             borderRadius: AppRadius.xl,
           ),
           const SizedBox(height: AppSpacing.lg),

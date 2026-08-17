@@ -26,8 +26,9 @@ import 'package:provider/provider.dart';
 ///
 /// | 주소 | 상태 |
 /// |---|---|
-/// | `/` | 이어하기 있음 |
-/// | `/today` | 이어하기 없음 · 추천 1순위가 히어로 |
+/// | `/` | 이어하기 있음 (가로 표지 있는 편) |
+/// | `/today` | 이어하기 없음 · 추천 1순위가 히어로 (가로 표지 있는 편) |
+/// | `/today-fallback` | 히어로에 올라간 편에 가로 표지가 없음 → 세로 2:3 폴백 |
 /// | `/fallback` | 이어하기도 추천도 없음 |
 /// | `/loading` | 스켈레톤 |
 ///
@@ -44,6 +45,13 @@ void main() => runApp(const _HomeHeroPreviewApp());
 const ChildProfile _child = ChildProfile(name: '지우');
 const PlanetSummary _planet = PlanetSummary(stardustBalance: 15);
 
+/// 표지가 있는 편을 **전부** 넣습니다. 세 편만 두면 책장 줄이 휑해서 "첫
+/// 화면에 몇 줄이 들어오는가"를 잘못 재게 됩니다. (`방귀 뀌는 며느리`는
+/// 이어하기 히어로가 쓰므로 목록에 없습니다)
+///
+/// 1순위 `의좋은 형제`는 **가로 표지가 있는** 편이라 `/today` 에서 히어로로
+/// 올라가면 가로 패널 모양이 나옵니다. 가로 표지가 없는 편이 히어로로 갔을
+/// 때의 폴백 모양은 `/today-fallback` 에서 봅니다.
 const List<RecommendedStory> _recommended = <RecommendedStory>[
   RecommendedStory(
     storyId: '22',
@@ -65,6 +73,27 @@ const List<RecommendedStory> _recommended = <RecommendedStory>[
     image: 'assets/images/covers/story_23.png',
     estimatedMinutes: 15,
     topicTag: '가족',
+  ),
+  RecommendedStory(
+    storyId: '31',
+    title: '토끼와 거북이',
+    image: 'assets/images/covers/story_31.png',
+    estimatedMinutes: 10,
+    topicTag: '용기',
+  ),
+  RecommendedStory(
+    storyId: '32',
+    title: '호랑이와 곶감',
+    image: 'assets/images/covers/story_32.png',
+    estimatedMinutes: 15,
+    topicTag: '용기',
+  ),
+  RecommendedStory(
+    storyId: '41',
+    title: '학교 가는 길',
+    image: 'assets/images/covers/story_41.png',
+    estimatedMinutes: 10,
+    topicTag: '일상',
   ),
 ];
 
@@ -98,6 +127,18 @@ class _HomeHeroPreviewApp extends StatelessWidget {
             const HomeSummary(
               child: _child,
               recommendedStories: _recommended,
+              planet: _planet,
+            ),
+          ),
+        ),
+        // 히어로에 올라간 편에 **가로 표지가 없을 때**의 폴백 모양.
+        // 1순위만 바꿔 끼웁니다.
+        GoRoute(
+          path: '/today-fallback',
+          builder: (_, __) => _preview(
+            HomeSummary(
+              child: _child,
+              recommendedStories: _recommended.reversed.toList(),
               planet: _planet,
             ),
           ),

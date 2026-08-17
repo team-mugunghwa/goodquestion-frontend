@@ -91,7 +91,7 @@ class RecommendedStoriesSection extends StatelessWidget {
     // 섹션 제목 줄("더 보기" 버튼이 높이를 정합니다), 제목~책 사이.
     final double above =
         AppSpacing.md +
-        HomeHeroCard.estimateHeight(context, metrics) +
+        HomeHeroCard.estimateHeight(context, metrics, maxWidth) +
         AppSpacing.lg +
         AppSizes.tapChildSecondary +
         AppSpacing.md;

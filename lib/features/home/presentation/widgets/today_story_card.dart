@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_icons.dart';
 import '../../../../core/constants/app_strings.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/screen_metrics.dart';
@@ -53,10 +54,10 @@ class TodayStoryCard extends StatelessWidget {
 
 /// "🕐 20분 · 옛이야기" — 한 줄.
 ///
-/// 이야기 목록의 카드는 같은 정보를 칩 두 개로 줍니다. 여기서는 못 씁니다 —
-/// 칩의 면([AppColors.brandBlueSurface])은 흰 카드 위에 한 겹을 더 얹으라고
-/// 만든 색이라 표지 사진 위에서는 뿌옇게 뭉갭니다. 그래서 흰 글자 한 줄
-/// ([HomeStrings.storyMeta])로 눕히고, 앞에 시계 글리프만 붙입니다.
+/// 이야기 목록의 카드는 같은 정보를 칩 두 개로 줍니다. 여기서는 안 씁니다 —
+/// 히어로의 글자 면은 제목·진행·버튼으로 이미 세 덩이라, 칩까지 얹으면 눈이
+/// 무엇부터 볼지 못 정합니다. 한 줄([HomeStrings.storyMeta])로 눕히고 앞에
+/// 시계 글리프만 붙입니다.
 ///
 /// 이 줄은 추천 책장에는 없습니다. 히어로는 아이가 지금 고를 한 편이라
 /// "얼마나 걸리는지"가 결정에 쓰이지만, 책장은 표지로 훑는 자리입니다.
@@ -74,7 +75,7 @@ class _Meta extends StatelessWidget {
         const Icon(
           AppIcons.duration,
           size: AppSizes.iconInline,
-          color: HomeHeroCard.onCover,
+          color: AppColors.ink500,
         ),
         const SizedBox(width: AppSpacing.xs),
         Flexible(
@@ -82,9 +83,7 @@ class _Meta extends StatelessWidget {
             HomeStrings.storyMeta(story.estimatedMinutes, story.topicTag),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: metrics
-                .text(AppTypography.kidLabel)
-                .copyWith(color: HomeHeroCard.onCover),
+            style: metrics.text(AppTypography.kidLabel),
           ),
         ),
       ],
