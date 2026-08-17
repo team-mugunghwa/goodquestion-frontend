@@ -332,8 +332,12 @@ class _StarFieldPainter extends CustomPainter {
       ];
 
   /// 유성 하나가 하늘을 가로지르는 데 쓰는 루프 구간.
-  /// 시작 간격(0.16)보다 짧아야 여섯이 겹쳐 쏟아지지 않습니다.
-  static const double _meteorWindow = 0.13;
+  ///
+  /// 10초 루프의 0.26 이면 한 줄기가 2.6초에 걸쳐 지나갑니다. 1초대로
+  /// 끊으면 휙 지나가 버려 "떨어진다"가 아니라 "번쩍인다"로 보입니다.
+  /// 시작 간격(0.16)보다 길어 한두 줄기가 겹치는데, 밤하늘의 유성도
+  /// 그렇게 겹칩니다.
+  static const double _meteorWindow = 0.26;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -430,20 +434,25 @@ class _StarFieldPainter extends CustomPainter {
       );
       final Offset direction = -delta / delta.distance;
       // 꼬리가 짧으면 별이 그냥 깜빡인 것처럼 보입니다. 길게 끌어야
-      // "가로질렀다"가 읽힙니다.
-      final Offset tail = head + direction * (120 + 40 * fade);
+      // "가로질렀다"가 읽힙니다. 길이는 밝기와 거의 무관하게 두어,
+      // 흐려질 때 짧고 굵은 토막으로 뭉치지 않게 합니다.
+      final Offset tail = head + direction * (150 + 30 * fade);
 
       // 굵기가 일정한 선을 그으면 색연필로 그은 자국처럼 보입니다.
       // 머리에서 꼬리로 **가늘어지는 바늘 모양**을 채웁니다.
       //
+      // 두께도 밝기를 따라갑니다. 폭을 고정해 두면 이제 막 나타났거나
+      // 사라지는 참에 짧고 굵고 흐린 토막이 남아, 그 순간만 붓자국처럼
+      // 보입니다. 밝을 때만 굵고 흐려질수록 실처럼 가늘어져야 합니다.
+      //
       // 흐림(MaskFilter)은 매 프레임 도는 이 레이어에서 비싸므로, 넓고
       // 옅은 무리 위에 좁고 밝은 심을 겹쳐 번짐을 흉내 냅니다.
-      _paintStreak(canvas, head, tail, 5.0, 0.16 * fade);
-      _paintStreak(canvas, head, tail, 1.8, 0.9 * fade);
+      _paintStreak(canvas, head, tail, 2.6 * fade, 0.14 * fade);
+      _paintStreak(canvas, head, tail, 0.9 * fade, 0.85 * fade);
 
       // 머리는 점이 아니라 **빛나는 점**입니다. 가장자리가 딱 떨어지는
       // 원을 찍으면 그 하나 때문에 전체가 스티커처럼 보입니다.
-      final double glow = 5.0 + 2.0 * fade;
+      final double glow = (1.6 + 2.4 * fade) * fade;
       canvas.drawCircle(
         head,
         glow,
@@ -471,7 +480,7 @@ class _StarFieldPainter extends CustomPainter {
     double halfWidth,
     double alpha,
   ) {
-    if (alpha <= 0) return;
+    if (alpha <= 0 || halfWidth <= 0) return;
     final Offset along = tail - head;
     final double length = along.distance;
     if (length == 0) return;
@@ -480,20 +489,21 @@ class _StarFieldPainter extends CustomPainter {
     final Offset normal = Offset(-along.dy / length, along.dx / length);
     final Offset a = head + normal * halfWidth;
     final Offset b = head - normal * halfWidth;
-    // 옆선을 안쪽으로 당기는 조종점. 머리 근처에서만 두껍고 곧 좁아집니다.
-    final Offset mid = head + along * 0.3;
+    // 옆선을 안쪽으로 당기는 조종점. 머리 바로 뒤에서 급히 좁아지고
+    // 나머지는 실처럼 끌립니다 — 굵은 몸통이 길게 남으면 붓자국이 됩니다.
+    final Offset mid = head + along * 0.18;
 
     final Path path = Path()
       ..moveTo(a.dx, a.dy)
       ..quadraticBezierTo(
-        mid.dx + normal.dx * halfWidth * 0.55,
-        mid.dy + normal.dy * halfWidth * 0.55,
+        mid.dx + normal.dx * halfWidth * 0.3,
+        mid.dy + normal.dy * halfWidth * 0.3,
         tail.dx,
         tail.dy,
       )
       ..quadraticBezierTo(
-        mid.dx - normal.dx * halfWidth * 0.55,
-        mid.dy - normal.dy * halfWidth * 0.55,
+        mid.dx - normal.dx * halfWidth * 0.3,
+        mid.dy - normal.dy * halfWidth * 0.3,
         b.dx,
         b.dy,
       )
