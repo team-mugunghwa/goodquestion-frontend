@@ -31,8 +31,10 @@ class KidInfoChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final IconData? glyph = icon;
     return Container(
+      // 좌우 여백이 md(16)면 좁은 카드 안에서 아이콘·글자를 밀어내 넘칩니다.
+      // 정보 칩은 읽는 것이지 누르는 것이 아니라 여백이 작아도 됩니다.
       padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
+        horizontal: AppSpacing.sm,
         vertical: AppSpacing.xs,
       ),
       decoration: BoxDecoration(

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -333,11 +334,19 @@ double _cellHeightOf(
   final double imageHeight = cellWidth * 3 / 2;
   // 제목은 카드용 크기(kidButton) 두 줄 기준. 한 줄짜리 제목도 같은 셀
   // 높이를 쓰므로 그리드 행이 들쭉날쭉하지 않습니다.
+  //
+  // 칩 높이는 글자만이 아니라 **아이콘까지** 봐야 합니다. 인라인 아이콘(24)이
+  // kidLabel 한 줄보다 커서, 글자 높이만 더하면 몇 픽셀이 모자라 넘칩니다.
+  final double chipHeight =
+      AppSpacing.xs * 2 +
+      math.max(
+        metrics.lineHeight(context, AppTypography.kidLabel),
+        AppSizes.iconInline,
+      );
   final double textHeight =
       AppSpacing.md * 2 +
       metrics.lineHeight(context, AppTypography.kidButton) * 2 +
       AppSpacing.sm +
-      metrics.lineHeight(context, AppTypography.kidLabel) +
-      AppSpacing.xs * 2;
+      chipHeight;
   return imageHeight + textHeight;
 }

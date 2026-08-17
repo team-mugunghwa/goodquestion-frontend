@@ -82,16 +82,22 @@ class StoryCard extends StatelessWidget {
                 .copyWith(color: AppColors.ink900),
           ),
           const SizedBox(height: AppSpacing.sm),
-          Wrap(
-            spacing: AppSpacing.sm,
-            runSpacing: AppSpacing.sm,
+          // 칩은 **한 줄**입니다. 줄바꿈을 허용하면 좁은 셀에서만 두 줄이
+          // 되어 카드 높이가 제각각이 되고, 고정 높이 그리드에서는 넘칩니다.
+          // 자리가 모자라면 칩 안의 라벨이 줄어듭니다.
+          Row(
             children: <Widget>[
-              KidInfoChip(
-                icon: AppIcons.duration,
-                label: '$estimatedMinutes분',
-                metrics: metrics,
+              Flexible(
+                child: KidInfoChip(
+                  icon: AppIcons.duration,
+                  label: '$estimatedMinutes분',
+                  metrics: metrics,
+                ),
               ),
-              KidInfoChip(label: topicLabel, metrics: metrics),
+              const SizedBox(width: AppSpacing.sm),
+              Flexible(
+                child: KidInfoChip(label: topicLabel, metrics: metrics),
+              ),
             ],
           ),
         ],
@@ -120,10 +126,13 @@ class StoryCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  // 그리드 안에서는 카드 높이가 셀에 맞춰 고정되므로, 이미지가
-                  // 남는 높이를 먹고 글자 블록이 잘리지 않게 합니다.
-                  Flexible(child: thumbnail),
-                  body,
+                  // 표지는 **비율로만** 높이가 정해집니다. 예전처럼 남는
+                  // 높이를 먹게 두면 제목이 한 줄인 카드의 표지만 길어져서,
+                  // 한 줄에 늘어놓은 카드들의 그림 높이가 제각각이 됩니다.
+                  thumbnail,
+                  // 대신 글자 블록이 남는 높이를 가져갑니다. 제목이 짧으면
+                  // 아래가 비고, 길어도 셀 밖으로 넘치지 않습니다.
+                  Flexible(child: body),
                 ],
               ),
       ),
