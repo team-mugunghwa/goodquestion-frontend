@@ -13,6 +13,9 @@ import 'package:goodquestion/features/home/domain/repositories/home_repository.d
 import 'package:goodquestion/features/home/domain/usecases/get_home_summary_use_case.dart';
 import 'package:goodquestion/features/home/presentation/viewmodels/home_view_model.dart';
 import 'package:goodquestion/features/home/presentation/views/home_view.dart';
+import 'package:goodquestion/features/mypage/domain/entities/my_page_summary.dart';
+import 'package:goodquestion/features/mypage/domain/repositories/my_page_repository.dart';
+import 'package:goodquestion/features/mypage/domain/usecases/my_page_use_cases.dart';
 import 'package:provider/provider.dart';
 
 class _StubRepository implements HomeRepository {
@@ -68,8 +71,11 @@ void main() {
       MaterialApp(
         theme: AppTheme.light,
         home: ChangeNotifierProvider<HomeViewModel>(
-          create: (_) =>
-              HomeViewModel(GetHomeSummaryUseCase(repository))..load(),
+          create: (_) => HomeViewModel(
+            GetHomeSummaryUseCase(repository),
+            const GetMyPageChildrenUseCase(_StubChildren()),
+            const SelectMyPageChildUseCase(_StubChildren()),
+          )..load(),
           child: const HomeView(),
         ),
       ),
@@ -126,4 +132,23 @@ void main() {
     expect(find.text(HomeStrings.resume), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+}
+
+/// 아이 목록·전환은 홈의 곁가지라 테스트용 고정 저장소를 씁니다.
+class _StubChildren implements ChildProfileRepository {
+  const _StubChildren();
+
+  @override
+  String? get selectedChildId => 'c1';
+
+  @override
+  Future<void> createChild({required String name, required int age}) async {}
+
+  @override
+  Future<List<MyPageChild>> getChildren() async => const <MyPageChild>[
+    MyPageChild(childId: 'c1', name: '하늘이', age: 8),
+  ];
+
+  @override
+  Future<void> selectChild(String childId) async {}
 }

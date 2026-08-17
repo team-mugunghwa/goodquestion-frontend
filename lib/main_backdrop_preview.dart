@@ -92,6 +92,8 @@ final GoRouter _router = GoRouter(
           const GetHomeSummaryUseCase(
             HomeRepositoryMock(HomeLocalDataSource()),
           ),
+          const GetMyPageChildrenUseCase(_PreviewChildren()),
+          const SelectMyPageChildUseCase(_PreviewChildren()),
         )..load(),
         child: const HomeView(),
       ),

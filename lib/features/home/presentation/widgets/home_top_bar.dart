@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_shadows.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../core/widgets/child_avatar.dart';
 import '../../../../core/widgets/press_scale.dart';
 import '../../../../core/widgets/screen_metrics.dart';
 import '../../../../core/widgets/skeleton_box.dart';
@@ -156,7 +157,13 @@ class _ProfileArea extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            _Avatar(profile: profile, isLoading: isLoading),
+            if (isLoading)
+              const SkeletonBox(
+                width: AppSizes.tapChildSecondary,
+                height: AppSizes.tapChildSecondary,
+              )
+            else
+              ChildAvatar(name: profile?.name, image: profile?.avatar),
             const SizedBox(width: AppSpacing.sm),
             if (isLoading)
               const SkeletonBox(width: AppSizes.mic, height: AppSpacing.lg)
@@ -196,74 +203,6 @@ class _ProfileArea extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _Avatar extends StatelessWidget {
-  const _Avatar({required this.profile, required this.isLoading});
-
-  final ChildProfile? profile;
-  final bool isLoading;
-
-  @override
-  Widget build(BuildContext context) {
-    if (isLoading) {
-      return const SkeletonBox(
-        width: AppSizes.tapChildSecondary,
-        height: AppSizes.tapChildSecondary,
-      );
-    }
-
-    final String? avatar = profile?.avatar;
-    final String name = profile?.name ?? '';
-    // 흰 링 + 부드러운 그림자로 또렷해진 배경에서 아바타를 분리합니다.
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        color: AppColors.surface,
-        boxShadow: AppShadows.soft,
-      ),
-      child: ClipOval(
-        child: SizedBox.square(
-          dimension: AppSizes.tapChildSecondary,
-          child: avatar == null
-              ? _AvatarFallback(name: name)
-              : Image.asset(
-                  avatar,
-                  fit: BoxFit.cover,
-                  excludeFromSemantics: true,
-                  errorBuilder:
-                      (BuildContext context, Object error, StackTrace? _) =>
-                          _AvatarFallback(name: name),
-                ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 아바타를 아직 고르지 않았을 때. 이름 첫 글자를 파스텔 면 위에 둡니다.
-class _AvatarFallback extends StatelessWidget {
-  const _AvatarFallback({required this.name});
-
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    final String initial = name.isEmpty ? '' : name.substring(0, 1);
-    return ColoredBox(
-      color: AppColors.brandMint,
-      child: Center(
-        child: initial.isEmpty
-            ? const Icon(
-                AppIcons.childProfile,
-                size: AppSizes.iconInline,
-                color: AppColors.ink900,
-              )
-            : Text(initial, style: AppTypography.kidLabel),
       ),
     );
   }
