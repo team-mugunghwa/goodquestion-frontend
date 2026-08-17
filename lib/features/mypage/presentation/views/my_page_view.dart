@@ -11,6 +11,7 @@ import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/app_state_views.dart';
+import '../../../../core/widgets/child_avatar.dart';
 import '../../../../core/widgets/guardian_list.dart';
 import '../../../../core/widgets/guardian_scaffold.dart';
 import '../../../../core/widgets/skeleton_box.dart';
@@ -206,10 +207,10 @@ class MyPageView extends StatelessWidget {
                         horizontal: AppSpacing.sm,
                         vertical: AppSpacing.xs,
                       ),
-                      leading: CircleAvatar(
-                        child: Text(
-                          child.name.isEmpty ? '?' : child.name.substring(0, 1),
-                        ),
+                      leading: ChildAvatar(
+                        name: child.name,
+                        image: child.avatar,
+                        diameter: AppSizes.tapGuardian,
                       ),
                       title: Text(child.name),
                       subtitle: Text('${child.age}살'),
