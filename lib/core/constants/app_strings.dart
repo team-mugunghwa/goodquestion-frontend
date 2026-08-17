@@ -282,6 +282,9 @@ abstract final class WordStrings {
   /// 헤더의 좋아요 필터 버튼.
   static const String likedOnly = '좋아요한 단어만 보기';
 
+  /// 이야기 묶음 옆의 단어 수. 문장이 아니라 꼬리표라 짧게 씁니다.
+  static String groupCount(int count) => '$count개';
+
   /// 좋아요 필터를 켰는데 이 이야기에는 좋아요한 단어가 없을 때.
   static const String emptyLiked = '여기엔 좋아요한 단어가 없어.\n마음에 드는 단어에 하트를 눌러 봐!';
   static const String showAllWords = '전체 보기';

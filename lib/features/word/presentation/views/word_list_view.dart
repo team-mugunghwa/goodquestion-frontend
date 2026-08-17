@@ -427,28 +427,47 @@ class _GroupHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final String? cover = group.storyImage;
     return Row(
       children: <Widget>[
-        ClipRRect(
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          child: SizedBox.square(
-            dimension: AppSizes.tapChildSecondary,
-            child: StoryThumbnail(
-              image: group.storyImage,
-              fallbackIcon: AppIcons.stories,
-              aspectRatio: StoryThumbnail.square,
-              iconSize: AppSizes.iconInline,
+        // 표지가 있을 때만 그립니다. 없을 때 책 아이콘을 원에 박아 넣던
+        // 예전 폴백은 이야기마다 똑같은 그림이 반복돼 자리만 먹었습니다.
+        // 모서리는 원이 아니라 둥근 사각 — 표지는 얼굴이 아니라 그림입니다.
+        if (cover != null) ...<Widget>[
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            child: SizedBox.square(
+              dimension: AppSizes.iconChild,
+              child: StoryThumbnail(
+                image: cover,
+                fallbackIcon: AppIcons.stories,
+                aspectRatio: StoryThumbnail.square,
+                iconSize: AppSizes.iconCaption,
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: AppSpacing.md),
-        Expanded(
+          const SizedBox(width: AppSpacing.sm),
+        ],
+        // 화면 제목(32)과 같은 크기를 쓰면 묶음 이름이 화면의 주인처럼
+        // 보입니다. 한 단계 낮춰 "내 단어장 > 이야기" 순서를 만듭니다.
+        Flexible(
           child: Text(
             group.storyTitle,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: metrics.text(AppTypography.kidTitle),
+            style: metrics
+                .text(AppTypography.kidButton)
+                .copyWith(color: AppColors.ink900),
           ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        // 몇 개가 들어 있는지. 묶음을 접었다 펴지 않으므로 개수가
+        // 여기서 유일한 규모 신호입니다.
+        Text(
+          WordStrings.groupCount(group.words.length),
+          style: metrics
+              .text(AppTypography.kidCaption)
+              .copyWith(color: AppColors.ink500),
         ),
       ],
     );
