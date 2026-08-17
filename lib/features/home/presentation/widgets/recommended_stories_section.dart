@@ -55,12 +55,15 @@ class RecommendedStoriesSection extends StatelessWidget {
             style: metrics.text(AppTypography.kidBody),
           )
         else if (metrics.isWide)
+          // 태블릿에서도 **가로 카드**입니다. 세로 카드를 3장 늘어놓으면
+          // 표지 하나가 화면 높이의 절반을 먹어서 추천이 접히는 곳 아래로
+          // 내려갑니다. 여기는 목록이 아니라 "다음에 뭐 할래?" 한 줄입니다.
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               for (int i = 0; i < stories.length; i++) ...<Widget>[
                 if (i > 0) const SizedBox(width: AppSpacing.lg),
-                Expanded(child: _card(stories[i], horizontal: false)),
+                Expanded(child: _card(stories[i], horizontal: true)),
               ],
             ],
           )
@@ -86,10 +89,9 @@ class RecommendedStoriesSection extends StatelessWidget {
     topicLabel: story.topicTag,
     metrics: metrics,
     horizontal: horizontal,
-    // 표지 원본이 그림책 세로 판형(2:3)입니다. 16:9 로 깔면 그림의 3분의 2가
-    // 잘려 인물 얼굴이 날아갑니다. 원본 비율 그대로 두면 잘림이 없습니다.
-    // (폰의 가로 카드는 글자 블록 높이에 맞는 정사각을 그대로 씁니다)
-    coverAspectRatio: horizontal ? null : StoryThumbnail.portrait,
+    // 표지 원본이 그림책 세로 판형(2:3)입니다. 16:9 나 정사각으로 깔면
+    // 그림이 잘려 인물 얼굴이 날아갑니다. 원본 비율 그대로 둡니다.
+    coverAspectRatio: StoryThumbnail.portrait,
     onTap: () => onStoryTap(story),
   );
 }

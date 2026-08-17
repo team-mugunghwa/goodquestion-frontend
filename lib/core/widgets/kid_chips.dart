@@ -46,7 +46,15 @@ class KidInfoChip extends StatelessWidget {
             Icon(glyph, size: AppSizes.iconInline, color: AppColors.ink700),
             const SizedBox(width: AppSpacing.xs),
           ],
-          Text(label, style: metrics.text(AppTypography.kidLabel)),
+          // 좁은 카드 안에서도 칩이 넘치지 않게 라벨을 줄입니다.
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: metrics.text(AppTypography.kidLabel),
+            ),
+          ),
         ],
       ),
     );
