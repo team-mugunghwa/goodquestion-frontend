@@ -84,6 +84,7 @@ class HomeView extends StatelessWidget {
                         stardustBalance: summary?.planet.stardustBalance,
                         isLoading: summary == null && !vm.state.isError,
                         onProfileTap: () => _openChildSwitch(context, metrics),
+                        onPlanetTap: () => context.go(AppRoutes.planet),
                       ),
                       Expanded(
                         child: AnimatedSwitcher(

@@ -72,8 +72,13 @@ class WordListView extends StatelessWidget {
           fit: StackFit.expand,
           children: <Widget>[
             // 담은 단어는 "내 행성"으로 가져가는 재산 — 배경도 같은 세계관.
-            // 내비가 떠 있는 알약이라 달을 화면 바닥까지 내립니다.
-            const CosmicBackdrop(seed: 11, planetCenterX: 0.78),
+            // 달이 유리 내비 뒤에 반쯤 가리면 있는 줄도 모릅니다.
+            // 내비 블록(위 여백 + 바 + 아래 여백) 높이만큼 올려 앉힙니다.
+            const CosmicBackdrop(
+              seed: 11,
+              planetCenterX: 0.78,
+              bottomInset: AppSizes.bottomNav + AppSpacing.lg,
+            ),
             SafeArea(bottom: false, child: _layout(context, vm)),
           ],
         ),

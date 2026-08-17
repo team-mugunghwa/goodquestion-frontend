@@ -67,9 +67,13 @@ class StoryListView extends StatelessWidget {
           children: <Widget>[
             // 이야기 카드 그리드가 화면을 덮어도, 로딩·빈 상태에서 하늘이
             // 비어 보이지 않게 별과 달을 깔아 둡니다.
-            // 내비가 떠 있는 알약이 되면서 달은 화면 바닥까지 내려앉습니다.
-            // 알약 뒤로 달이 비쳐 배경과 내비가 한 장면이 됩니다.
-            const CosmicBackdrop(seed: 23, planetCenterX: 0.22),
+            // 달이 유리 내비 뒤에 반쯤 가리면 있는 줄도 모릅니다.
+            // 내비 블록(위 여백 + 바 + 아래 여백) 높이만큼 올려 앉힙니다.
+            const CosmicBackdrop(
+              seed: 23,
+              planetCenterX: 0.22,
+              bottomInset: AppSizes.bottomNav + AppSpacing.lg,
+            ),
             SafeArea(bottom: false, child: _layout(context, vm)),
           ],
         ),
