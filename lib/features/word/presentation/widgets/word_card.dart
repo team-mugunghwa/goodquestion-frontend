@@ -75,7 +75,10 @@ class WordCard extends StatelessWidget {
                       word.word,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: metrics.text(AppTypography.kidButton),
+                      // kidButton 은 파란 버튼 위 흰 글자용이라 색을 잉크로.
+                      style: metrics
+                          .text(AppTypography.kidButton)
+                          .copyWith(color: AppColors.ink900),
                     ),
                     const SizedBox(width: AppSpacing.md),
                     // 뜻은 오른쪽 정렬 한 줄. 길면 잘리고, 전체는 상세에서.
