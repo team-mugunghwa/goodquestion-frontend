@@ -467,8 +467,9 @@ class _PlanetPainter extends CustomPainter {
     final double h = size.height;
 
     final double radius = (w * 0.42).clamp(260.0, 520.0);
-    // 화면에 보이는 달의 높이. 너무 크면 본문을 밀어내는 느낌이 듭니다.
-    final double visible = (h * 0.14).clamp(88.0, 168.0);
+    // 화면에 보이는 달의 높이. 카드가 일부를 덮어도 달인 걸 알아볼 만큼
+    // 올라와야 합니다 — 너무 낮으면 배경 얼룩처럼 보입니다.
+    final double visible = (h * 0.2).clamp(120.0, 220.0);
     final double horizon = h - bottomInset;
     final Offset center = Offset(
       w * centerXFraction,
