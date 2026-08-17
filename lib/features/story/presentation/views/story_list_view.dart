@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -18,7 +17,6 @@ import '../../../../core/widgets/cosmic_backdrop.dart';
 import '../../../../core/widgets/screen_metrics.dart';
 import '../../../../core/widgets/skeleton_box.dart';
 import '../../../../core/widgets/story_card.dart';
-import '../../../../core/widgets/story_thumbnail.dart';
 import '../../domain/entities/story_summary.dart';
 import '../../domain/entities/story_topic.dart';
 import '../../domain/usecases/get_story_catalog_use_case.dart';
@@ -251,8 +249,6 @@ class _Grid extends StatelessWidget {
           estimatedMinutes: story.estimatedMinutes,
           topicLabel: _topicLabel(story),
           metrics: metrics,
-          // 목록은 그림책 세로 표지. 홈 카드(16:9)와 의도적으로 다릅니다.
-          coverAspectRatio: StoryThumbnail.portrait,
           // 제목이 잘려 "방귀 뀌는 ..." 이 되면 아이가 이야기를 못 알아봅니다.
           // 두 줄까지 허용해 전체 제목을 보여 줍니다.
           titleMaxLines: 2,
@@ -325,49 +321,15 @@ int _columnsFor(double width) {
 /// 반영하므로 1.3배로 키워도 안 잘립니다.
 ///
 /// 스켈레톤도 같은 값을 써야 데이터가 도착할 때 화면이 안 덜컹입니다.
+/// 식은 [StoryCard.heightOf] 에 있습니다. 홈 추천도 같은 카드를 쓰므로
+/// 계산을 두 벌 두면 한쪽만 고쳐져 카드 높이가 화면마다 어긋납니다.
 double _cellHeightOf(
   BuildContext context,
   ScreenMetrics metrics,
   double width,
   int columns,
-) {
-  final double cellWidth = (width - AppSpacing.lg * (columns - 1)) / columns;
-  // 세로 표지(2:3): 너비의 1.5배가 표지 높이.
-  final double imageHeight = cellWidth * 3 / 2;
-
-  // 글자 높이는 **재서** 씁니다. `fontSize * height` 로 어림하면 폰트의
-  // 실제 상·하단 여백만큼 몇 px 모자라, 제목이 두 줄인 카드에서만 넘칩니다.
-  final double titleHeight = _measuredHeight(
-    context,
-    metrics.text(AppTypography.kidButton),
-    lines: 2,
-  );
-  // 칩 높이는 글자만이 아니라 **아이콘까지** 봐야 합니다. 카드는 작은
-  // 칩(compact)을 쓰므로 kidCaption 글자와 iconCaption 중 큰 쪽입니다.
-  final double chipHeight =
-      AppSpacing.xs * 2 +
-      math.max(
-        _measuredHeight(context, metrics.text(AppTypography.kidCaption)),
-        AppSizes.iconCaption,
-      );
-  final double textHeight =
-      AppSpacing.md * 2 + titleHeight + AppSpacing.sm + chipHeight;
-  return imageHeight + textHeight;
-}
-
-/// 이 스타일로 [lines] 줄을 그렸을 때의 실제 높이.
-double _measuredHeight(BuildContext context, TextStyle style, {int lines = 1}) {
-  final TextPainter painter = TextPainter(
-    // 한글 한 글자를 줄 수만큼. 어떤 글자든 줄 높이는 같습니다.
-    text: TextSpan(
-      text: List<String>.filled(lines, '가').join('\n'),
-      style: style,
-    ),
-    maxLines: lines,
-    textDirection: TextDirection.ltr,
-    textScaler: MediaQuery.textScalerOf(context),
-  )..layout();
-  final double height = painter.height;
-  painter.dispose();
-  return height;
-}
+) => StoryCard.heightOf(
+  context,
+  metrics,
+  (width - AppSpacing.lg * (columns - 1)) / columns,
+);

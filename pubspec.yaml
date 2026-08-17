@@ -97,6 +97,9 @@ flutter:
     # 플러터는 assets/images/ 하위 폴더를 재귀 포함하지 않으므로 명시합니다.
     # 이야기 표지 원본(세로 2:3). 파일이 없으면 코드 표지로 폴백합니다.
     - assets/images/covers/
+    # 홈 히어로 전용 가로 표지(2.5:1, WebP). 아직 story_11 · story_22 뿐이고
+    # 없는 편은 위 세로 표지로 폴백합니다. 원본 PNG 는 저장소에 넣지 않는다.
+    - assets/images/covers/wide/
     - assets/images/dialogue/
     # 대화 장면 캐릭터 상태 에셋(WebP). 매니페스트는 banggui/states.json.
     # 원본 PNG 39MB -> WebP 3.4MB. 원본은 저장소에 넣지 않는다.

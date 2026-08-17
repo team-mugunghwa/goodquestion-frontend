@@ -67,12 +67,35 @@ abstract final class HomeStrings {
   static String sceneProgress(int lastCompletedScene) =>
       '$lastCompletedScene번째 장면까지 했어요';
 
-  /// 진행 중인 이야기가 없을 때 섹션2를 대신하는 카드.
+  /// 진행 중인 이야기가 없을 때 히어로에 올라가는 **추천 1순위** 표식.
+  ///
+  /// 아이에게 고르라고 밀지 않고 이미 한 편을 골라 놓고 물어봅니다 —
+  /// 이 화면이 하는 일은 선택지를 줄여 3초 안에 다음 행동을 정하게 하는 것입니다.
+  static const String todayBadge = '오늘은 이거 어때?';
+
+  /// 오늘의 이야기 히어로 버튼.
+  ///
+  /// 누르면 **이야기 상세**로 갑니다. 세션이 만들어지는 곳은 상세 화면 하나라서
+  /// "시작하기"라고 부르면 눌렀을 때 곧장 말하기가 열릴 것처럼 읽힙니다.
+  /// 버튼 이름과 도착지는 같은 말이어야 합니다. (`docs/DESIGN_SYSTEM.md` 11장)
+  static const String todayAction = '이 이야기 볼래';
+
+  /// 진행 중인 이야기도, 추천도 없을 때 섹션2를 대신하는 카드.
+  /// (추천이 있으면 [todayBadge] 히어로가 이 자리를 씁니다)
   static const String startTitle = '새 이야기를 골라볼까?';
   static const String startAction = '이야기 고르기';
 
   /// 새 이야기 카드 표지 위의 표식.
   static const String startBadge = '새 이야기';
+
+  /// "20분 · 옛이야기" — 히어로 제목 밑의 **한 줄** 메타.
+  ///
+  /// 이야기 목록·책장은 시간과 주제를 칩 두 개로 보여 주지만, 히어로에서는
+  /// 그럴 수 없습니다. 칩의 면([AppColors.brandBlueSurface])은 흰 카드 위에서
+  /// 한 겹을 구분하라고 만든 색이라 표지 사진 위에서는 뿌옇게 뭉갭니다.
+  /// 그래서 같은 정보를 가운뎃점으로 이은 **글자 한 줄**로 줍니다.
+  static String storyMeta(int minutes, String topicTag) =>
+      '${AppStrings.minutes(minutes)} · $topicTag';
 
   // ── 섹션3 추천 ──
   static const String recommendedTitle = '새로운 이야기';
