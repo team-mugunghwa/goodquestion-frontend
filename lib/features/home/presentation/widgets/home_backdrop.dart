@@ -37,7 +37,6 @@ class _BackdropPainter extends CustomPainter {
 
     _paintLightGlow(canvas, w, h);
     _paintClouds(canvas, w, h);
-    _paintBubbleMotifs(canvas, w, h);
     _paintHills(canvas, w, h);
   }
 
@@ -97,47 +96,6 @@ class _BackdropPainter extends CustomPainter {
     canvas.drawCircle(c.translate(r * 1.1, r * 0.25), r * 0.78, paint);
     canvas.drawCircle(c.translate(-r * 1.05, r * 0.30), r * 0.70, paint);
     canvas.drawCircle(c.translate(r * 0.1, r * 0.55), r * 0.90, paint);
-  }
-
-  /// 이 앱의 서명인 말풍선을 배경에 또렷하게 반복합니다. 채운 원 + 꼬리로
-  /// 로고 Q 와 같은 형태를 암시하되, 콘텐츠를 방해하지 않게 흰빛·파랑 중알파.
-  void _paintBubbleMotifs(Canvas canvas, double w, double h) {
-    _bubble(
-      canvas,
-      Offset(w * 0.87, h * 0.58),
-      w * 0.085,
-      AppColors.surface.withValues(alpha: 0.66),
-    );
-    _bubble(
-      canvas,
-      Offset(w * 0.11, h * 0.56),
-      w * 0.055,
-      AppColors.brandBlue.withValues(alpha: 0.22),
-    );
-    _bubble(
-      canvas,
-      Offset(w * 0.72, h * 0.28),
-      w * 0.035,
-      AppColors.surface.withValues(alpha: 0.7),
-    );
-    _bubble(
-      canvas,
-      Offset(w * 0.40, h * 0.72),
-      w * 0.045,
-      AppColors.brandGreen.withValues(alpha: 0.20),
-    );
-  }
-
-  void _bubble(Canvas canvas, Offset c, double r, Color color) {
-    final Paint p = Paint()..color = color;
-    canvas.drawCircle(c, r, p);
-    // 왼쪽 아래로 향하는 작은 꼬리 — 로고 말풍선과 같은 방향.
-    final Path tail = Path()
-      ..moveTo(c.dx - r * 0.55, c.dy + r * 0.45)
-      ..lineTo(c.dx - r * 0.95, c.dy + r * 1.05)
-      ..lineTo(c.dx - r * 0.10, c.dy + r * 0.80)
-      ..close();
-    canvas.drawPath(tail, p);
   }
 
   /// 화면 바닥의 낮은 언덕 세 겹. 낮 세계를 땅 위에 앉혀 "완성된" 느낌을 줍니다.

@@ -17,9 +17,21 @@ class WordListViewModel extends BaseViewModel {
 
   WordBook? _book;
   String _selectedStoryId = allStoryId;
+  bool _likedOnly = false;
 
   WordBook? get book => _book;
   String get selectedStoryId => _selectedStoryId;
+
+  /// 좋아요한 단어만 볼지. 하트를 누르는 이유가 여기 있습니다 —
+  /// 켜고 끌 곳이 없으면 하트는 그냥 눌리는 그림입니다.
+  bool get likedOnly => _likedOnly;
+
+  /// 좋아요한 단어 수. 0 이면 필터 버튼을 숨깁니다 —
+  /// 눌러도 빈 화면만 나오는 버튼은 고장으로 보입니다.
+  int get likedCount => allGroups
+      .expand((WordGroup g) => g.words)
+      .where((SavedWord w) => w.liked)
+      .length;
 
   int get totalCount => _book?.totalCount ?? 0;
   String? get childName => _book?.childName;
@@ -27,12 +39,29 @@ class WordListViewModel extends BaseViewModel {
 
   List<WordGroup> get allGroups => _book?.groups ?? const <WordGroup>[];
 
-  /// 화면에 그릴 그룹들. 이야기 필터가 이미 적용돼 있습니다.
-  List<WordGroup> get visibleGroups => _selectedStoryId == allStoryId
-      ? allGroups
-      : allGroups
-            .where((WordGroup g) => g.filterKey == _selectedStoryId)
-            .toList(growable: false);
+  /// 화면에 그릴 그룹들. 이야기 필터와 좋아요 필터가 이미 적용돼 있습니다.
+  ///
+  /// 좋아요 필터는 그룹이 아니라 **단어**를 거릅니다. 걸러 낸 뒤 빈 그룹은
+  /// 통째로 빼서, 제목만 남은 이야기 머리글이 떠 있지 않게 합니다.
+  List<WordGroup> get visibleGroups {
+    final Iterable<WordGroup> byStory = _selectedStoryId == allStoryId
+        ? allGroups
+        : allGroups.where((WordGroup g) => g.filterKey == _selectedStoryId);
+    if (!_likedOnly) return byStory.toList(growable: false);
+    return byStory
+        .map(
+          (WordGroup g) => WordGroup(
+            storyId: g.storyId,
+            storyTitle: g.storyTitle,
+            storyImage: g.storyImage,
+            words: g.words
+                .where((SavedWord w) => w.liked)
+                .toList(growable: false),
+          ),
+        )
+        .where((WordGroup g) => g.words.isNotEmpty)
+        .toList(growable: false);
+  }
 
   /// 아직 아무것도 담지 않음. 필터 결과 0건과 **다른 상태**입니다 —
   /// 이때는 필터 칩 자체를 숨기고 이야기로 보냅니다.
@@ -49,6 +78,11 @@ class WordListViewModel extends BaseViewModel {
   void selectStory(String storyId) {
     if (_selectedStoryId == storyId) return;
     _selectedStoryId = storyId;
+    safeNotify();
+  }
+
+  void toggleLikedOnly() {
+    _likedOnly = !_likedOnly;
     safeNotify();
   }
 

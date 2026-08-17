@@ -8,6 +8,7 @@ import '../../../../core/constants/app_strings.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_shadows.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/guardian_scaffold.dart';
@@ -161,7 +162,7 @@ class _SummaryBand extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.ink100),
+        boxShadow: AppShadows.soft,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

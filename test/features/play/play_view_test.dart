@@ -126,14 +126,44 @@ void main() {
     expect(find.text('이야기를 잠시 멈췄어요'), findsNothing);
   });
 
-  testWidgets('나가기는 한 번 확인하고, 이어 들을 수 있다고 알려준다', (WidgetTester tester) async {
+  testWidgets('나가기는 멈춤 화면과 같은 카드로 묻는다 - 문구만 다르다', (WidgetTester tester) async {
     await pumpPlay(tester);
 
     await tester.tap(find.byTooltip('나가기'));
     await tester.pumpAndSettle();
+
     expect(find.text('이야기에서 나갈까요?'), findsOneWidget);
     // 나가도 듣던 자리는 남습니다 - 겁주는 문구로 나가기를 막으면 안 됩니다.
     expect(find.text('여기까지 들은 곳을 기억해 둘게요. 홈에서 이어 들을 수 있어요.'), findsOneWidget);
+    expect(find.text('계속 듣기'), findsOneWidget);
+    expect(find.text('나가기'), findsOneWidget);
+    // 멈춤 문구가 아니라 나가기 문구입니다.
+    expect(find.text('이야기를 잠시 멈췄어요'), findsNothing);
+  });
+
+  testWidgets('멈춤 버튼으로 뜬 카드는 멈춤 문구를 쓴다 - 나가기와 섞이지 않는다', (
+    WidgetTester tester,
+  ) async {
+    await pumpPlay(tester);
+
+    await tester.tap(find.byTooltip('잠시 멈춤'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('이야기를 잠시 멈췄어요'), findsOneWidget);
+    expect(find.text('이야기 나가기'), findsOneWidget);
+    expect(find.text('이야기에서 나갈까요?'), findsNothing);
+  });
+
+  testWidgets('나가기로 뜬 카드에서 계속 듣기를 누르면 이야기로 돌아온다', (WidgetTester tester) async {
+    await pumpPlay(tester);
+
+    await tester.tap(find.byTooltip('나가기'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('계속 듣기'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('이야기에서 나갈까요?'), findsNothing);
+    expect(find.byType(PlayPage), findsOneWidget);
   });
 
   testWidgets('나가기는 세션을 끝내지 않는다 - 홈에서 이어 들을 수 있어야 한다', (
@@ -144,7 +174,7 @@ void main() {
 
     await tester.tap(find.byTooltip('나가기'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('나가기').last);
+    await tester.tap(find.text('나가기'));
     await tester.pumpAndSettle();
 
     expect(
@@ -165,7 +195,7 @@ void main() {
 
     await tester.tap(find.byTooltip('나가기'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('나가기').last);
+    await tester.tap(find.text('나가기'));
     await tester.pumpAndSettle();
 
     expect(find.byType(PlayPage), findsNothing);

@@ -107,6 +107,20 @@ abstract final class AppTypography {
     color: AppColors.ink700,
   );
 
+  /// 카드 안에 들어가는 아주 짧은 꼬리표. 이야기 카드의 시간·주제 칩.
+  ///
+  /// [kidLabel] 을 카드에 그대로 쓰면 폭 200 짜리 카드에서 칩 두 개가
+  /// 한 줄에 안 들어가 주제 이름이 잘립니다. **읽는 정보이지 누르는 것이
+  /// 아니라서** 조금 작아도 됩니다. 누르는 칩([KidFilterChips])에는
+  /// 쓰지 마세요 — 그쪽은 터치 타겟 64 를 지켜야 합니다.
+  static const TextStyle kidCaption = TextStyle(
+    fontFamily: AppFonts.display,
+    fontSize: 15,
+    height: 1.3,
+    fontWeight: FontWeight.w700,
+    color: AppColors.ink700,
+  );
+
   // ─────────────────────────────────────────────────────────
   // 보호자·시스템 화면
   //

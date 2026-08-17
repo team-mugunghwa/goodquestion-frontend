@@ -13,6 +13,7 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/app_canvas.dart';
 import '../../../../core/widgets/app_state_views.dart';
+import '../../../../core/widgets/cosmic_backdrop.dart';
 import '../../../../core/widgets/screen_metrics.dart';
 import '../../../../core/widgets/skeleton_box.dart';
 import '../../../../core/widgets/story_card.dart';
@@ -60,52 +61,67 @@ class StoryListView extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: AppCanvas.day(
-        child: SafeArea(
-          bottom: false,
-          child: LayoutBuilder(
-            builder: (BuildContext context, BoxConstraints constraints) {
-              final ScreenMetrics metrics = ScreenMetrics.of(
-                constraints.maxWidth,
-              );
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  _Header(metrics: metrics),
-                  // 칩은 로딩 중에도 즉시 보입니다. 화면이 텅 비어 보이지
-                  // 않게 하는 것도 있지만, 여기가 이 화면의 조작부입니다.
-                  if (vm.topics.isNotEmpty) ...<Widget>[
-                    TopicChipBar(
-                      topics: vm.topics,
-                      selectedId: vm.selectedTopicId,
-                      onSelected: vm.selectTopic,
-                      metrics: metrics,
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                  ],
-                  Expanded(
-                    child: AnimatedSwitcher(
-                      duration: respect(context, AppDurations.normal),
-                      switchInCurve: AppCurves.standard,
-                      switchOutCurve: AppCurves.exit,
-                      layoutBuilder: (Widget? current, List<Widget> previous) =>
-                          Stack(
-                            fit: StackFit.expand,
-                            alignment: Alignment.topCenter,
-                            children: <Widget>[
-                              ...previous,
-                              if (current != null) current,
-                            ],
-                          ),
-                      child: _body(context, vm, metrics),
-                    ),
-                  ),
-                  const AppBottomNav(current: AppNavTab.stories),
-                ],
-              );
-            },
-          ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            // 이야기 카드 그리드가 화면을 덮어도, 로딩·빈 상태에서 하늘이
+            // 비어 보이지 않게 별과 달을 깔아 둡니다.
+            // 달이 유리 내비 뒤에 반쯤 가리면 있는 줄도 모릅니다.
+            // 내비 블록(위 여백 + 바 + 아래 여백) 높이만큼 올려 앉힙니다.
+            const CosmicBackdrop(
+              seed: 23,
+              // 단어장과 같은 자리. 화면마다 달이 좌우로 튀면 탭을 옮길 때
+              // 배경이 흔들리는 것처럼 보입니다.
+              planetCenterX: 0.78,
+              bottomInset: AppSizes.bottomNav + AppSpacing.lg,
+            ),
+            SafeArea(bottom: false, child: _layout(context, vm)),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _layout(BuildContext context, StoryListViewModel vm) {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final ScreenMetrics metrics = ScreenMetrics.of(constraints.maxWidth);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            _Header(metrics: metrics),
+            // 칩은 로딩 중에도 즉시 보입니다. 화면이 텅 비어 보이지
+            // 않게 하는 것도 있지만, 여기가 이 화면의 조작부입니다.
+            if (vm.topics.isNotEmpty) ...<Widget>[
+              TopicChipBar(
+                topics: vm.topics,
+                selectedId: vm.selectedTopicId,
+                onSelected: vm.selectTopic,
+                metrics: metrics,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+            ],
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: respect(context, AppDurations.normal),
+                switchInCurve: AppCurves.standard,
+                switchOutCurve: AppCurves.exit,
+                layoutBuilder: (Widget? current, List<Widget> previous) =>
+                    Stack(
+                      fit: StackFit.expand,
+                      alignment: Alignment.topCenter,
+                      children: <Widget>[
+                        ...previous,
+                        if (current != null) current,
+                      ],
+                    ),
+                child: _body(context, vm, metrics),
+              ),
+            ),
+            const AppBottomNav(current: AppNavTab.stories),
+          ],
+        );
+      },
     );
   }
 
@@ -163,19 +179,21 @@ class _Header extends StatelessWidget {
         metrics.screenPadding,
         AppSpacing.lg,
       ),
-      child: Row(
+      // 제목 앞 아이콘을 뗐습니다. 아이콘+제목 조합은 제목을 메뉴처럼
+      // 보이게 합니다 — 큰 글자 하나가 화면의 얼굴입니다.
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Icon(
-            AppIcons.stories,
-            size: AppSizes.iconChild,
-            color: AppColors.brandBlueDeep,
+          Text(
+            StoryListStrings.title,
+            style: metrics.text(AppTypography.kidTitle),
           ),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Text(
-              StoryListStrings.title,
-              style: metrics.text(AppTypography.kidTitle),
-            ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            StoryListStrings.subtitle,
+            style: metrics
+                .text(AppTypography.kidLabel)
+                .copyWith(color: AppColors.ink500),
           ),
         ],
       ),
@@ -231,8 +249,9 @@ class _Grid extends StatelessWidget {
           estimatedMinutes: story.estimatedMinutes,
           topicLabel: _topicLabel(story),
           metrics: metrics,
-          // 목록 카드의 제목은 큰 글씨 한 줄. (PRD F-03)
-          titleMaxLines: 1,
+          // 제목이 잘려 "방귀 뀌는 ..." 이 되면 아이가 이야기를 못 알아봅니다.
+          // 두 줄까지 허용해 전체 제목을 보여 줍니다.
+          titleMaxLines: 2,
           // go 가 아니라 push — 목록을 스택에 남겨야 상세에서 돌아왔을 때
           // 고른 필터가 그대로입니다.
           onTap: () => context.push(AppRoutes.storyDetailOf(story.storyId)),
@@ -302,20 +321,15 @@ int _columnsFor(double width) {
 /// 반영하므로 1.3배로 키워도 안 잘립니다.
 ///
 /// 스켈레톤도 같은 값을 써야 데이터가 도착할 때 화면이 안 덜컹입니다.
+/// 식은 [StoryCard.heightOf] 에 있습니다. 홈 추천도 같은 카드를 쓰므로
+/// 계산을 두 벌 두면 한쪽만 고쳐져 카드 높이가 화면마다 어긋납니다.
 double _cellHeightOf(
   BuildContext context,
   ScreenMetrics metrics,
   double width,
   int columns,
-) {
-  final double cellWidth = (width - AppSpacing.lg * (columns - 1)) / columns;
-  // 세로 표지(2:3): 너비의 1.5배가 표지 높이.
-  final double imageHeight = cellWidth * 3 / 2;
-  final double textHeight =
-      AppSpacing.md * 2 +
-      metrics.lineHeight(context, AppTypography.kidTitle) +
-      AppSpacing.sm +
-      metrics.lineHeight(context, AppTypography.kidLabel) +
-      AppSpacing.xs * 2;
-  return imageHeight + textHeight;
-}
+) => StoryCard.heightOf(
+  context,
+  metrics,
+  (width - AppSpacing.lg * (columns - 1)) / columns,
+);

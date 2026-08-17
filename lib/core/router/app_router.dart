@@ -13,10 +13,10 @@ import '../../features/helpdesk/presentation/views/notice_detail_view.dart';
 import '../../features/helpdesk/presentation/views/notice_list_view.dart';
 import '../../features/helpdesk/presentation/views/notification_list_view.dart';
 import '../../features/home/presentation/views/home_view.dart';
+import '../../features/mypage/domain/guardian_gate.dart';
 import '../../features/mypage/presentation/views/my_page_view.dart';
 import '../../features/mypage/presentation/views/report_detail_view.dart';
 import '../../features/mypage/presentation/views/report_list_view.dart';
-import '../../features/mypage/presentation/views/settings_view.dart';
 import '../../features/planet/presentation/views/planet_view.dart';
 import '../../features/play/data/dialogue_word_capture.dart';
 import '../../features/play/domain/repositories/play_repository.dart';
@@ -24,6 +24,8 @@ import '../../features/play/presentation/views/play_recap_view.dart';
 import '../../features/play/presentation/views/play_view.dart';
 import '../../features/story/presentation/views/story_detail_view.dart';
 import '../../features/story/presentation/views/story_list_view.dart';
+import '../../features/word/domain/entities/saved_word.dart';
+import '../../features/word/presentation/views/sentence_practice_view.dart';
 import '../../features/word/presentation/views/word_list_view.dart';
 import '../di/injector.dart';
 import '../widgets/route_placeholder_view.dart';
@@ -48,11 +50,12 @@ final GoRouter appRouter = createAppRouter();
 GoRouter createAppRouter({
   String initialLocation = AppRoutes.home,
   Future<String?> Function()? authTokenProvider,
+  GuardianGate? guardianGate,
 }) {
   final Future<String?> Function() readToken =
       authTokenProvider ?? getIt<AuthTokenStore>().read;
 
-  return GoRouter(
+  final GoRouter router = GoRouter(
     initialLocation: initialLocation,
     redirect: (BuildContext context, GoRouterState state) async {
       final bool signedIn = (await readToken())?.isNotEmpty ?? false;
@@ -123,6 +126,20 @@ GoRouter createAppRouter({
         path: AppRoutes.words,
         builder: (BuildContext context, GoRouterState state) =>
             const WordListPage(),
+        routes: <RouteBase>[
+          GoRoute(
+            path: ':${AppRoutes.wordIdParam}/practice',
+            builder: (BuildContext context, GoRouterState state) {
+              // 목록이 push 하면서 단어를 extra 로 실어 보냅니다. 주소로 바로
+              // 들어오면(새로고침, 딥링크) 화면이 서버에서 다시 찾습니다.
+              final Object? extra = state.extra;
+              return SentencePracticePage(
+                wordId: state.pathParameters[AppRoutes.wordIdParam]!,
+                initialWord: extra is SavedWord ? extra : null,
+              );
+            },
+          ),
+        ],
       ),
       GoRoute(
         path: AppRoutes.myPage,
@@ -150,10 +167,12 @@ GoRouter createAppRouter({
           ),
         ],
       ),
+      // 설정은 마이페이지 안으로 들어갔습니다. 이 경로로 들어오는 기존
+      // 링크(푸시 알림 등)가 깨지지 않게 마이페이지로 넘깁니다.
       GoRoute(
         path: AppRoutes.settings,
-        builder: (BuildContext context, GoRouterState state) =>
-            const SettingsPage(),
+        redirect: (BuildContext context, GoRouterState state) =>
+            AppRoutes.myPage,
       ),
       GoRoute(
         path: AppRoutes.notices,
@@ -234,4 +253,22 @@ GoRouter createAppRouter({
     errorBuilder: (BuildContext context, GoRouterState state) =>
         RoutePlaceholderView(path: state.uri.toString(), title: '없는 경로'),
   );
+
+  // **리포트 영역을 벗어나면 보호자 확인을 다시 잠급니다.**
+  //
+  // 통과 상태를 세션 내내 열어 두면, 보호자가 리포트를 보고 태블릿을 아이에게
+  // 넘긴 뒤 아이가 비밀번호 없이 리포트를 엽니다. 아동용 기기는 번갈아 쓰는
+  // 물건이라 실제로 일어나는 상황입니다.
+  //
+  // 화면의 dispose 가 아니라 **주소**로 판별합니다. 목록 → 상세는 주소가
+  // 여전히 리포트 영역이라 그대로 열려 있고(둘 사이에서 매번 물으면 아무도
+  // 안 씁니다), 목록 화면이 살아 있는지와 무관하게 같은 규칙이 적용됩니다.
+  // 이동이 **끝난 뒤**에 보므로 redirect 처럼 여러 번 불리거나 취소된 이동에
+  // 휘둘리지 않습니다.
+  final GuardianGate gate = guardianGate ?? getIt<GuardianGate>();
+  router.routerDelegate.addListener(() {
+    final String path = router.routerDelegate.currentConfiguration.uri.path;
+    if (!AppRoutes.isReportArea(path)) gate.reset();
+  });
+  return router;
 }

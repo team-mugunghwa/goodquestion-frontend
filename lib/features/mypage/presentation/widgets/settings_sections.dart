@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
 
 import '../../../../core/constants/app_icons.dart';
 import '../../../../core/constants/app_strings.dart';
@@ -8,101 +7,46 @@ import '../../../../core/di/injector.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
-import '../../../../core/widgets/app_state_views.dart';
+import '../../../../core/widgets/confirm_actions.dart';
 import '../../../../core/widgets/guardian_list.dart';
-import '../../../../core/widgets/guardian_scaffold.dart';
 import '../../../../core/widgets/policy_document_view.dart';
-import '../../../../core/widgets/skeleton_box.dart';
 import '../../../auth/domain/usecases/auth_use_cases.dart';
 import '../../domain/entities/app_settings.dart';
 import '../../domain/guardian_gate.dart';
-import '../../domain/usecases/my_page_use_cases.dart';
 import '../viewmodels/settings_view_model.dart';
 
-/// 설정 — 보호자 전용 운영·계정 관리.
+/// 설정 항목 묶음. **마이페이지 안에서** 펼쳐집니다.
 ///
-/// 아이 화면 문법(그림·음성 우선, 큰 글씨)을 따르지 않는 화면입니다.
-/// 성인용 설정 UI 관행(그룹 리스트 + 토글 + chevron)을 그대로 씁니다.
+/// 예전에는 `/settings` 라는 별도 화면이었는데, 알림 토글 하나 바꾸거나
+/// 로그아웃 한 번 하려고 마이페이지에서 한 뎁스를 더 들어가야 했습니다.
+/// 보호자가 이 앱에 오래 머무는 화면이 아니라서, 들어갔다 나오는 왕복이
+/// 그대로 마찰이 됩니다. 그래서 화면을 합치고 **묶음으로 구분**합니다.
 ///
-/// **게이트를 두지 않습니다** — 아이가 열어도 유해한 정보가 없습니다.
-/// 게이트는 리포트 전용입니다.
-///
-/// | 섹션 | 내용 |
+/// | 묶음 | 내용 |
 /// |---|---|
-/// | 1 | 헤더 — 뒤로 · "설정" |
-/// | 2 | 알림 — 리포트 도착 · 마케팅 수신 |
-/// | 3 | 안내 — 공지 · 이용 안내 · 고객센터 |
-/// | 4 | 약관·정책 |
-/// | 5 | 계정 — 로그인 수단 · 로그아웃 |
-/// | 6 | 앱 버전 |
-class SettingsPage extends StatelessWidget {
-  const SettingsPage({super.key});
+/// | 알림 | 리포트 도착 · 마케팅 수신 |
+/// | 안내 | 알림함 · 공지 · 이용 안내 · 고객센터 |
+/// | 약관·정책 | 이용약관 · 아동 개인정보 · 개인정보 |
+/// | 계정 | 로그인 수단 · 로그아웃 |
+///
+/// 마이페이지가 이미 쓰고 있는 [GuardianSection] 을 그대로 써서, 합쳐도
+/// 한 화면이 두 가지 문법으로 갈리지 않게 합니다.
+class SettingsSections extends StatelessWidget {
+  const SettingsSections({super.key, required this.vm});
+
+  final SettingsViewModel vm;
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<SettingsViewModel>(
-      create: (_) => SettingsViewModel(
-        getIt<GetSettingsUseCase>(),
-        getIt<SetReportNotificationUseCase>(),
-        getIt<SetMarketingConsentUseCase>(),
-      )..load(),
-      child: const SettingsView(),
-    );
-  }
-}
-
-/// ViewModel 이 이미 위에 있다고 가정하는 본체. (테스트에서 직접 씁니다)
-class SettingsView extends StatelessWidget {
-  const SettingsView({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final SettingsViewModel vm = context.watch<SettingsViewModel>();
-
-    // 마케팅 동의는 법적 의미가 있어서 바뀐 걸 알립니다.
-    final bool? toast = vm.takeMarketingToast();
-    if (toast != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              toast
-                  ? SettingsStrings.marketingOn
-                  : SettingsStrings.marketingOff,
-            ),
-          ),
-        );
-      });
-    }
-
-    return GuardianScaffold(
-      title: SettingsStrings.title,
-      onBack: () =>
-          context.canPop() ? context.pop() : context.go(AppRoutes.myPage),
-      child: _body(context, vm),
-    );
-  }
-
-  Widget _body(BuildContext context, SettingsViewModel vm) {
-    if (vm.state.isError) {
-      return AppErrorView(
-        message: vm.errorMessage ?? SettingsStrings.loadFailed,
-        onRetry: vm.load,
-      );
-    }
     final AppSettings? settings = vm.settings;
-    if (settings == null) return const _Skeleton();
+    // 설정이 아직 안 왔어도 마이페이지 위쪽(프로필·리포트)은 이미 보입니다.
+    // 여기만 조용히 비워 두는 편이 화면 전체를 스켈레톤으로 덮는 것보다 낫습니다.
+    if (settings == null) return const SizedBox.shrink();
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.md,
-        0,
-        AppSpacing.md,
-        AppSpacing.xl,
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        // 알림이 최상단입니다 — 보호자가 이 화면에 오는 가장 잦은 목적입니다.
+        // 알림이 가장 위입니다 — 보호자가 설정을 여는 가장 잦은 목적입니다.
         GuardianSection(
           title: SettingsStrings.notificationGroup,
           children: <Widget>[
@@ -250,14 +194,13 @@ class SettingsView extends StatelessWidget {
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
         title: const Text(SettingsStrings.signOutConfirm),
+        actionsPadding: ConfirmActions.dialogPadding,
         actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text(SettingsStrings.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text(SettingsStrings.signOut),
+          ConfirmActions(
+            cancelLabel: SettingsStrings.cancel,
+            confirmLabel: SettingsStrings.signOut,
+            onCancel: () => Navigator.of(dialogContext).pop(false),
+            onConfirm: () => Navigator.of(dialogContext).pop(true),
           ),
         ],
       ),
@@ -268,24 +211,5 @@ class SettingsView extends StatelessWidget {
     // 보호자 세션이 끊기므로 리포트 게이트도 다시 잠급니다.
     getIt<GuardianGate>().reset();
     context.go(AppRoutes.auth);
-  }
-}
-
-class _Skeleton extends StatelessWidget {
-  const _Skeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-      children: <Widget>[
-        for (int i = 0; i < 4; i++) ...<Widget>[
-          const SkeletonBox(width: 80, height: AppSpacing.md),
-          const SizedBox(height: AppSpacing.sm),
-          const SkeletonBox(height: 96, borderRadius: AppRadius.md),
-          const SizedBox(height: AppSpacing.xl),
-        ],
-      ],
-    );
   }
 }

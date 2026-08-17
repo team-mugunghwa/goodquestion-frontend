@@ -57,6 +57,14 @@ abstract final class AppSizes {
   /// 아이 화면 아이콘.
   static const double iconChild = 40;
 
+  /// 하단 내비게이션 아이콘. [iconChild] 40 은 라벨과 함께 두면 내비가
+  /// 둔해 보여서, 내비에서만 한 단계 줄입니다. 터치 타겟은 탭 전체입니다.
+  static const double iconNav = 32;
+
+  /// 카드 안 작은 꼬리표의 아이콘. 이야기 카드의 시계 글리프.
+  /// [iconInline] 24 는 폭 200 짜리 카드에서 주제 이름을 잘라 먹습니다.
+  static const double iconCaption = 18;
+
   /// 보호자 화면 아이콘.
   static const double iconGuardian = 24;
 
@@ -75,6 +83,10 @@ abstract final class AppSizes {
 
   /// 말풍선 최대 폭. 이보다 넓으면 한 줄이 길어져 아이가 눈으로 놓칩니다.
   static const double bubbleMaxWidth = 560;
+
+  /// 시트 최대 폭. Material 기본값(640)은 아이 화면의 큰 카드를 늘어놓기에
+  /// 좁아서, 태블릿에서 한 줄에 서너 명이 들어가도록 넓혔습니다.
+  static const double sheetMaxWidth = 880;
 
   /// 행성 조작 버튼(회전·확대·되돌리기)의 지름.
   static const double planetControl = 72;

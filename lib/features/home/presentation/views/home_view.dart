@@ -11,14 +11,15 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/app_canvas.dart';
 import '../../../../core/widgets/app_state_views.dart';
+import '../../../../core/widgets/cosmic_backdrop.dart';
 import '../../../../core/widgets/screen_metrics.dart';
+import '../../../mypage/domain/usecases/my_page_use_cases.dart';
 import '../../domain/entities/home_summary.dart';
 import '../../domain/entities/in_progress_session.dart';
 import '../../domain/entities/recommended_story.dart';
 import '../../domain/usecases/get_home_summary_use_case.dart';
 import '../viewmodels/home_view_model.dart';
 import '../widgets/continue_card.dart';
-import '../widgets/home_backdrop.dart';
 import '../widgets/home_sheets.dart';
 import '../widgets/home_skeleton.dart';
 import '../widgets/home_top_bar.dart';
@@ -57,7 +58,11 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<HomeViewModel>(
-      create: (_) => HomeViewModel(getIt<GetHomeSummaryUseCase>())..load(),
+      create: (_) => HomeViewModel(
+        getIt<GetHomeSummaryUseCase>(),
+        getIt<GetMyPageChildrenUseCase>(),
+        getIt<SelectMyPageChildUseCase>(),
+      )..load(),
       child: const HomeView(),
     );
   }
@@ -77,9 +82,13 @@ class HomeView extends StatelessWidget {
       body: AppCanvas.day(
         child: Stack(
           children: <Widget>[
-            // 낮 배경에 깊이를 더하는 장식 레이어(빛·구름·말풍선·언덕).
-            // 콘텐츠 뒤에 깔리고 터치를 통과시킵니다.
-            const Positioned.fill(child: HomeBackdrop()),
+            // 다른 화면과 같은 하늘. 위쪽엔 반짝이는 별과 유성, 아래쪽엔
+            // 화면 밖으로 반쯤 잠긴 달이 뜹니다.
+            const CosmicBackdrop(
+              seed: 5,
+              planetCenterX: 0.5,
+              bottomInset: AppSizes.bottomNav + AppSpacing.lg,
+            ),
             SafeArea(
               bottom: false,
               child: LayoutBuilder(
@@ -160,13 +169,14 @@ class HomeView extends StatelessWidget {
     ScreenMetrics metrics,
   ) async {
     final HomeViewModel vm = context.read<HomeViewModel>();
-    final bool switched = await showChildSwitchSheet(
+    final String? childId = await showChildSwitchSheet(
       context,
       metrics: metrics,
+      children: vm.children,
       current: vm.summary?.child,
     );
-    // 아이가 바뀌었으면 홈 데이터를 그 아이 기준으로 다시 받습니다.
-    if (switched) await vm.load();
+    // 고른 아이가 있으면 그 아이 기준으로 홈을 다시 받습니다.
+    if (childId != null) await vm.selectChild(childId);
   }
 }
 

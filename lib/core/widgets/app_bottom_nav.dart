@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -18,6 +20,7 @@ enum AppNavTab {
   home(AppRoutes.home, AppIcons.home, NavStrings.home),
   stories(AppRoutes.stories, AppIcons.stories, NavStrings.stories),
   words(AppRoutes.words, AppIcons.words, NavStrings.words),
+  planet(AppRoutes.planet, AppIcons.planet, NavStrings.planet),
   myPage(AppRoutes.myPage, AppIcons.myPage, NavStrings.myPage);
 
   const AppNavTab(this.route, this.icon, this.label);
@@ -42,28 +45,53 @@ class AppBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        boxShadow: AppShadows.soft,
-      ),
-      child: SafeArea(
-        top: false,
-        child: ConstrainedBox(
-          // 글자 크기 설정을 키운 기기에서 넘치지 않도록 "최소" 높이입니다.
-          constraints: const BoxConstraints(minHeight: AppSizes.bottomNav),
-          child: Row(
-            children: <Widget>[
-              for (final AppNavTab tab in AppNavTab.values)
-                Expanded(
-                  child: _NavItem(
-                    tab: tab,
-                    selected: tab == current,
-                    // 같은 탭을 다시 눌러도 히스토리를 쌓지 않습니다.
-                    onTap: tab == current ? null : () => context.go(tab.route),
+    // 화면 폭을 꽉 채운 판 대신 떠 있는 알약 바. 바깥은 투명해서 뒤의
+    // 캔버스(낮 그라디언트·우주 배경)가 비쳐 화면이 한 장으로 이어집니다.
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.md,
+          AppSpacing.sm,
+          AppSpacing.md,
+          AppSpacing.md,
+        ),
+        child: DecoratedBox(
+          // 반투명 유리 바 — 달이 내비에 가려 사라지지 않고 은은하게 비칩니다.
+          // 흐림은 이 알약 하나에만 적용되어 비용이 제한적입니다.
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            boxShadow: AppShadows.lift,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+              child: ColoredBox(
+                color: AppColors.surface.withValues(alpha: 0.82),
+                child: ConstrainedBox(
+                  // 글자 크기 설정을 키운 기기에서 넘치지 않는 "최소" 높이입니다.
+                  constraints: const BoxConstraints(
+                    minHeight: AppSizes.bottomNav,
+                  ),
+                  child: Row(
+                    children: <Widget>[
+                      for (final AppNavTab tab in AppNavTab.values)
+                        Expanded(
+                          child: _NavItem(
+                            tab: tab,
+                            selected: tab == current,
+                            // 같은 탭을 다시 눌러도 히스토리를 쌓지 않습니다.
+                            onTap: tab == current
+                                ? null
+                                : () => context.go(tab.route),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-            ],
+              ),
+            ),
           ),
         ),
       ),
@@ -108,7 +136,7 @@ class _NavItem extends StatelessWidget {
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(AppRadius.pill),
                 ),
-                child: Icon(tab.icon, size: AppSizes.iconChild, color: color),
+                child: Icon(tab.icon, size: AppSizes.iconNav, color: color),
               ),
               const SizedBox(height: AppSpacing.xs),
               Text(

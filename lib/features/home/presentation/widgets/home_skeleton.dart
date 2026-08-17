@@ -18,23 +18,22 @@ class HomeSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (
-      BuildContext context,
-      BoxConstraints constraints,
-    ) {
-      final double cardWidth =
-          constraints.maxWidth - metrics.screenPadding * 2;
-      return _body(
-        context,
-        cardWidth,
-        RecommendedStoriesSection.coverWidthOf(
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final double cardWidth =
+            constraints.maxWidth - metrics.screenPadding * 2;
+        return _body(
           context,
-          metrics,
           cardWidth,
-          constraints.maxHeight,
-        ),
-      );
-    });
+          RecommendedStoriesSection.coverWidthOf(
+            context,
+            metrics,
+            cardWidth,
+            constraints.maxHeight,
+          ),
+        );
+      },
+    );
   }
 
   Widget _body(BuildContext context, double cardWidth, double coverWidth) {

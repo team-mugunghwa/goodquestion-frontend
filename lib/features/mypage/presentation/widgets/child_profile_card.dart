@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_icons.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_shadows.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/widgets/child_avatar.dart';
 import '../../domain/entities/my_page_summary.dart';
 
 /// 섹션2 — 현재 아이 프로필 카드.
@@ -34,7 +36,7 @@ class ChildProfileCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.ink100),
+        boxShadow: AppShadows.soft,
       ),
       child: child == null
           ? _NoChild(onCreate: onCreate)
@@ -120,52 +122,19 @@ class _NoChild extends StatelessWidget {
   }
 }
 
+/// 아이 얼굴. 홈·단어장과 **같은 공용 위젯**을 씁니다 — 화면마다 다른
+/// 이니셜 원과 아이콘 원이 섞이면 같은 앱으로 안 보입니다.
 class _Avatar extends StatelessWidget {
   const _Avatar({required this.child});
 
   final MyPageChild child;
 
   @override
-  Widget build(BuildContext context) {
-    final String? avatar = child.avatar;
-    return ClipOval(
-      child: SizedBox.square(
-        dimension: AppSizes.tapGuardian,
-        child: avatar == null
-            ? _AvatarFallback(name: child.name)
-            : Image.asset(
-                avatar,
-                fit: BoxFit.cover,
-                excludeFromSemantics: true,
-                errorBuilder: (BuildContext context, Object e, StackTrace? s) =>
-                    _AvatarFallback(name: child.name),
-              ),
-      ),
-    );
-  }
-}
-
-class _AvatarFallback extends StatelessWidget {
-  const _AvatarFallback({required this.name});
-
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    final String initial = name.isEmpty ? '' : name.substring(0, 1);
-    return ColoredBox(
-      color: AppColors.brandMint,
-      child: Center(
-        child: initial.isEmpty
-            ? const Icon(
-                AppIcons.childProfile,
-                size: AppSizes.iconGuardian,
-                color: AppColors.ink900,
-              )
-            : Text(initial, style: Theme.of(context).textTheme.titleMedium),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => ChildAvatar(
+    name: child.name,
+    image: child.avatar,
+    diameter: AppSizes.tapGuardian,
+  );
 }
 
 class _Stat extends StatelessWidget {

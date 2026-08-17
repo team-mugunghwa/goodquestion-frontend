@@ -32,8 +32,7 @@ class HomeTopBar extends StatelessWidget {
   /// 아이 프로필 전환 모달(모달 6)을 엽니다.
   final VoidCallback onProfileTap;
 
-  /// 내 행성으로 이동. 별가루가 쓰이는 곳이 행성 꾸미기뿐이라 잔액 바로 옆에
-  /// 입구를 둡니다(2026-08-16 합의) — "모은 것"과 "쓰는 곳"이 한 시선에 잡힙니다.
+  /// 내 행성으로 이동. 별가루 잔액 옆의 입구입니다.
   final VoidCallback? onPlanetTap;
 
   /// 아직 아이 프로필이 없으면 `null`.
@@ -54,7 +53,7 @@ class HomeTopBar extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.fromLTRB(
         metrics.screenPadding,
-        AppSpacing.sm,
+        AppSpacing.md,
         metrics.screenPadding,
         AppSpacing.sm,
       ),
@@ -77,6 +76,9 @@ class HomeTopBar extends StatelessWidget {
           // 잔액을 모르는 채 0 을 보여 주면 아이가 별가루를 잃었다고 읽습니다.
           else if (balance != null)
             StardustChip.day(count: balance),
+          // 내 행성 입구. 하단 내비에도 행성 탭이 있지만, "모은 별가루(칩)"
+          // 바로 옆에 "쓰는 곳(행성)"이 붙어 있어야 보상의 흐름이 한 시선에
+          // 잡힙니다. 중복이 아니라 의도된 두 개의 문입니다.
           if (!isLoading && onPlanetTap != null) ...<Widget>[
             const SizedBox(width: AppSpacing.sm),
             _PlanetEntry(onTap: onPlanetTap!),
@@ -149,103 +151,52 @@ class _ProfileArea extends StatelessWidget {
       semanticLabel: profile == null
           ? HomeStrings.profileSemantics
           : '${profile.name} · ${HomeStrings.profileSemantics}',
+      // 아바타를 뗐습니다. 인사말이 이미 이름을 부르고 있어서 얼굴 그림이
+      // 같은 말을 한 번 더 하고, 왼쪽 구석에 원·이름·부제·화살표가 몰려
+      // 상단이 빽빽해 보였습니다. 남는 건 **인사말과 바꾸기 화살표**뿐입니다.
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            _Avatar(profile: profile, isLoading: isLoading),
-            const SizedBox(width: AppSpacing.sm),
-            if (isLoading)
-              const SkeletonBox(width: AppSizes.mic, height: AppSpacing.lg)
+        child: isLoading
+            ? const SkeletonBox(width: AppSizes.mic, height: AppSizes.iconChild)
             // 아이 프로필이 없으면 이름 자리를 비워 둡니다. 여기서 "이름을
             // 만들어"라고 부르면, 정작 불러오기에 실패한 경우에도 그렇게 보입니다.
-            else if (profile != null)
-              Flexible(
-                child: Text(
-                  profile.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: metrics.text(AppTypography.kidLabel),
-                ),
+            : profile == null
+            ? const SizedBox.shrink()
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Text(
+                          HomeStrings.greeting(profile.name),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: metrics.text(AppTypography.kidTitle),
+                        ),
+                        Text(
+                          HomeStrings.greetingSub,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: metrics
+                              .text(AppTypography.kidLabel)
+                              .copyWith(color: AppColors.ink500),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  // 이름 옆의 작은 화살표. 이름이 곧 라벨이라 아이콘은
+                  // "여기를 누르면 바뀐다"는 표시만 합니다.
+                  const Icon(
+                    AppIcons.switchChild,
+                    size: AppSizes.iconCaption,
+                    color: AppColors.ink500,
+                  ),
+                ],
               ),
-            const SizedBox(width: AppSpacing.sm),
-            // 아이콘 하나로 "바꾸기"를 알릴 수는 없지만, 이름이 곧 라벨입니다.
-            const Icon(
-              AppIcons.switchChild,
-              size: AppSizes.iconInline,
-              color: AppColors.ink500,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Avatar extends StatelessWidget {
-  const _Avatar({required this.profile, required this.isLoading});
-
-  final ChildProfile? profile;
-  final bool isLoading;
-
-  @override
-  Widget build(BuildContext context) {
-    if (isLoading) {
-      return const SkeletonBox(
-        width: AppSizes.tapChildSecondary,
-        height: AppSizes.tapChildSecondary,
-      );
-    }
-
-    final String? avatar = profile?.avatar;
-    final String name = profile?.name ?? '';
-    // 흰 링 + 부드러운 그림자로 또렷해진 배경에서 아바타를 분리합니다.
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        color: AppColors.surface,
-        boxShadow: AppShadows.soft,
-      ),
-      child: ClipOval(
-        child: SizedBox.square(
-          dimension: AppSizes.tapChildSecondary,
-          child: avatar == null
-              ? _AvatarFallback(name: name)
-              : Image.asset(
-                  avatar,
-                  fit: BoxFit.cover,
-                  excludeFromSemantics: true,
-                  errorBuilder:
-                      (BuildContext context, Object error, StackTrace? _) =>
-                          _AvatarFallback(name: name),
-                ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 아바타를 아직 고르지 않았을 때. 이름 첫 글자를 파스텔 면 위에 둡니다.
-class _AvatarFallback extends StatelessWidget {
-  const _AvatarFallback({required this.name});
-
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    final String initial = name.isEmpty ? '' : name.substring(0, 1);
-    return ColoredBox(
-      color: AppColors.brandMint,
-      child: Center(
-        child: initial.isEmpty
-            ? const Icon(
-                AppIcons.childProfile,
-                size: AppSizes.iconInline,
-                color: AppColors.ink900,
-              )
-            : Text(initial, style: AppTypography.kidLabel),
       ),
     );
   }

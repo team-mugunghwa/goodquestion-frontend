@@ -291,7 +291,11 @@ class HomeHeroCard extends StatelessWidget {
   }
 
   /// 가로 화면 — 패널 왼쪽, 글자 오른쪽. 목업의 모양입니다.
-  Widget _sideBySide(BuildContext context, double cardWidth, String? wideCover) {
+  Widget _sideBySide(
+    BuildContext context,
+    double cardWidth,
+    String? wideCover,
+  ) {
     final ({double height, bool metaWraps}) layout = _wideLayout(
       context,
       metrics,
@@ -542,11 +546,7 @@ class _HeroBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Icon(
-            icon,
-            size: AppSizes.iconInline,
-            color: AppColors.brandBlueDeep,
-          ),
+          Icon(icon, size: AppSizes.iconInline, color: AppColors.brandBlueDeep),
           const SizedBox(width: AppSpacing.xs),
           Text(
             label,

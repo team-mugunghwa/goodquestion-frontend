@@ -6,6 +6,8 @@ import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_shadows.dart';
+import '../../../../core/theme/app_spacing.dart';
 import '../../domain/entities/auth_options.dart';
 import '../viewmodels/auth_view_model.dart';
 
@@ -17,83 +19,75 @@ class SignInStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        final bool twoColumns = constraints.maxWidth >= 760;
-        final Widget social = _SectionCard(
-          title: AuthStrings.socialSignIn,
-          child: _SocialPanel(vm: vm, options: options),
-        );
-        final Widget email = _SectionCard(
-          title: AuthStrings.emailSignIn,
-          child: _EmailPanel(vm: vm),
-        );
-
-        return ListView(
-          padding: const EdgeInsets.fromLTRB(24, 28, 24, 40),
-          children: <Widget>[
-            Image.asset(AppAssets.logo, height: 62, fit: BoxFit.contain),
-            const SizedBox(height: 10),
-            Text(
-              AuthStrings.tagline,
-              textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(color: AppColors.ink500),
-            ),
-            const SizedBox(height: 28),
-            if (twoColumns)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    // 소셜 우선의 단일 카드. 태블릿에서 카드 두 장을 나란히 두면 시선이
+    // 갈라지고 폼이 낮게 눌립니다 — 가운데 한 장이 읽는 순서를 만듭니다.
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 40, 24, 40),
+      children: <Widget>[
+        Image.asset(AppAssets.logo, height: 62, fit: BoxFit.contain),
+        const SizedBox(height: 10),
+        // 로고 아래 한 줄. 제목이 아니라 설명이라 굵기를 낮추고 색을 죽입니다.
+        Text(
+          AuthStrings.tagline,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: AppColors.ink500,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xl),
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: _SectionCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  Expanded(child: social),
-                  const SizedBox(width: 20),
-                  Expanded(child: email),
+                  _SocialPanel(vm: vm, options: options),
+                  const SizedBox(height: 24),
+                  // "또는 이메일로" 구분선. 이메일은 보조 경로입니다.
+                  Row(
+                    children: <Widget>[
+                      const Expanded(child: Divider()),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Text(
+                          AuthStrings.emailSignIn,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: AppColors.ink500),
+                        ),
+                      ),
+                      const Expanded(child: Divider()),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  _EmailPanel(vm: vm),
                 ],
-              )
-            else ...<Widget>[social, const SizedBox(height: 16), email],
-          ],
-        );
-      },
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
 
 class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.title, required this.child});
+  const _SectionCard({required this.child});
 
-  final String title;
   final Widget child;
 
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(28),
     decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: 0.96),
-      borderRadius: BorderRadius.circular(28),
-      border: Border.all(color: const Color(0xFFE6E3EE)),
-      boxShadow: const <BoxShadow>[
-        BoxShadow(
-          color: Color(0x120D0820),
-          blurRadius: 24,
-          offset: Offset(0, 8),
-        ),
-      ],
+      // 우주 배경이 살짝 비치도록 아주 옅게 투명합니다.
+      // 테두리 없이 그림자만으로 띄워야 카드가 종이가 아니라 면으로 보입니다.
+      color: AppColors.surface.withValues(alpha: 0.94),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      boxShadow: AppShadows.lift,
     ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Text(
-          title,
-          textAlign: TextAlign.center,
-          style: Theme.of(
-            context,
-          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 24),
-        child,
-      ],
-    ),
+    child: child,
   );
 }
 
@@ -118,20 +112,21 @@ class _SocialPanel extends StatelessWidget {
               ? null
               : () => vm.signInWithSocial('google'),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: AppSpacing.sm),
         _SocialButton(
           label: AuthStrings.kakaoSignIn,
           icon: AppAssets.kakaoLogo,
           backgroundColor: const Color(0xFFFEE500),
           foregroundColor: const Color(0xFF191919),
-          borderColor: const Color(0xFFF2D900),
+          // 노란 면에 노란 테두리를 두르면 경계가 지저분해집니다.
+          borderColor: Colors.transparent,
           onPressed: vm.isSubmitting || !enabledProviders.contains('kakao')
               ? null
               : () => vm.signInWithSocial('kakao'),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: AppSpacing.md),
         Text(
-          '간편하고 안전하게 시작하세요',
+          AuthStrings.socialHint,
           textAlign: TextAlign.center,
           style: Theme.of(
             context,
@@ -147,9 +142,9 @@ class _SocialButton extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.onPressed,
-    this.backgroundColor = Colors.white,
-    this.foregroundColor = const Color(0xFF222222),
-    this.borderColor = const Color(0xFFD8D6E0),
+    this.backgroundColor = AppColors.surface,
+    this.foregroundColor = AppColors.ink900,
+    this.borderColor = AppColors.ink300,
   });
 
   final String label;
@@ -188,33 +183,27 @@ class _EmailPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
+        // 입력란 앞의 아이콘을 뺐습니다. 라벨이 "이메일", "비밀번호"라고
+        // 이미 말하고 있어서 봉투·자물쇠 그림은 같은 말을 한 번 더 하고,
+        // 면 스타일 입력란 안에서 글자를 오른쪽으로 밀어 놓기만 합니다.
         if (vm.isSignUpMode) ...<Widget>[
           TextField(
-            decoration: const InputDecoration(
-              labelText: AuthStrings.name,
-              prefixIcon: Icon(Icons.person_outline_rounded),
-            ),
+            decoration: const InputDecoration(labelText: AuthStrings.name),
             enabled: !busy,
             onChanged: vm.setGuardianName,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
         ],
         TextField(
-          decoration: const InputDecoration(
-            labelText: AuthStrings.email,
-            prefixIcon: Icon(Icons.mail_outline_rounded),
-          ),
+          decoration: const InputDecoration(labelText: AuthStrings.email),
           keyboardType: TextInputType.emailAddress,
           autofillHints: const <String>[AutofillHints.email],
           enabled: !busy,
           onChanged: vm.setEmail,
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         TextField(
-          decoration: const InputDecoration(
-            labelText: AuthStrings.password,
-            prefixIcon: Icon(Icons.lock_outline_rounded),
-          ),
+          decoration: const InputDecoration(labelText: AuthStrings.password),
           obscureText: true,
           autofillHints: const <String>[AutofillHints.password],
           enabled: !busy,
@@ -260,10 +249,12 @@ class _EmailPanel extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
+        // 가운뎃점으로 잇던 세 링크를 간격만으로 나란히 둡니다.
+        // 문자 구분자는 버튼 사이에서 눌리지 않는 글자로 남아 지저분합니다.
         Wrap(
           alignment: WrapAlignment.center,
           crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 2,
+          spacing: AppSpacing.sm,
           children: <Widget>[
             TextButton(
               onPressed: busy ? null : vm.toggleSignUpMode,
@@ -273,12 +264,10 @@ class _EmailPanel extends StatelessWidget {
                     : AuthStrings.signUpWithEmail,
               ),
             ),
-            const Text('·'),
             TextButton(
               onPressed: busy ? null : () => context.go(AppRoutes.findId),
               child: const Text(AuthStrings.findId),
             ),
-            const Text('·'),
             TextButton(
               onPressed: busy ? null : () => context.go(AppRoutes.findPassword),
               child: const Text(AuthStrings.findPassword),

@@ -5,14 +5,17 @@
     "coverImage": null,
     "estimatedMinutes": 20,
     "difficulty": "쉬움",
-    "topics": ["가족", "웃음"],
+    "topics": [
+      "가족",
+      "웃음"
+    ],
     "introText": "옛날 어느 마을에 방귀를 꾹 참는 며느리가 살았어요.\n참고 참다가 얼굴이 노래졌대요.",
     "introAudio": "assets/sounds/story_11_intro.mp3",
     "situationText": "오늘은 며느리가 무슨 일인지 말해 줄 참이에요.",
     "role": {
       "name": "며느리의 친구",
       "description": "며느리를 도와서 고민을 들어주게 될 거야.",
-      "characterImage": null
+      "characterImage": "assets/images/dialogue/banggui/scene_09/character_purposeful_hopeful.webp"
     }
   },
   "21": {
@@ -21,7 +24,10 @@
     "coverImage": null,
     "estimatedMinutes": 15,
     "difficulty": "보통",
-    "topics": ["용기", "가족"],
+    "topics": [
+      "용기",
+      "가족"
+    ],
     "introText": "깊은 산속에 오누이 둘만 남았어요.\n문 밖에서 누가 문을 두드려요.",
     "introAudio": "assets/sounds/story_21_intro.mp3",
     "situationText": "누구인지 알아내야 문을 열지 말지 정할 수 있어요.",
@@ -37,7 +43,10 @@
     "coverImage": null,
     "estimatedMinutes": 20,
     "difficulty": "쉬움",
-    "topics": ["우정", "가족"],
+    "topics": [
+      "우정",
+      "가족"
+    ],
     "introText": "형과 아우가 밤마다 서로의 볏단을 몰래 옮겨요.\n아침이면 볏단이 그대로예요.",
     "introAudio": "assets/sounds/story_22_intro.mp3",
     "situationText": "왜 줄지 않는지 아무도 몰라서 궁금해하고 있어요.",
@@ -53,7 +62,10 @@
     "coverImage": null,
     "estimatedMinutes": 15,
     "difficulty": "쉬움",
-    "topics": ["가족", "웃음"],
+    "topics": [
+      "가족",
+      "웃음"
+    ],
     "introText": "흥부가 다리 다친 제비를 고쳐 주었어요.\n제비가 씨앗 하나를 물고 왔어요.",
     "introAudio": "assets/sounds/story_23_intro.mp3",
     "situationText": "이 씨앗을 어떻게 할지 흥부가 고민하고 있어요.",
@@ -69,7 +81,10 @@
     "coverImage": null,
     "estimatedMinutes": 15,
     "difficulty": "쉬움",
-    "topics": ["동물", "용기"],
+    "topics": [
+      "동물",
+      "용기"
+    ],
     "introText": "토끼가 거북이에게 달리기 시합을 하자고 했어요.\n거북이는 느린데도 좋다고 했어요.",
     "introAudio": "assets/sounds/story_31_intro.mp3",
     "situationText": "거북이가 왜 그랬는지 아직 아무도 못 물어봤어요.",
@@ -85,7 +100,10 @@
     "coverImage": null,
     "estimatedMinutes": 20,
     "difficulty": "보통",
-    "topics": ["동물", "웃음"],
+    "topics": [
+      "동물",
+      "웃음"
+    ],
     "introText": "호랑이가 마을에 내려왔다가 \"곶감\"이라는 말을 들었어요.\n그게 무서운 것인 줄 알았대요.",
     "introAudio": "assets/sounds/story_32_intro.mp3",
     "situationText": "호랑이가 곶감이 무엇인지 몰라 떨고 있어요.",
@@ -101,7 +119,10 @@
     "coverImage": null,
     "estimatedMinutes": 15,
     "difficulty": "쉬움",
-    "topics": ["일상", "우정"],
+    "topics": [
+      "일상",
+      "우정"
+    ],
     "introText": "학교 가는 길에 우산을 안 가져온 친구를 만났어요.\n비가 점점 세게 와요.",
     "introAudio": "assets/sounds/story_41_intro.mp3",
     "situationText": "우산은 하나뿐이라 어떻게 할지 정해야 해요.",

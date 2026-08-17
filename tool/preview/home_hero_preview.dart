@@ -13,6 +13,9 @@ import 'package:goodquestion/features/home/domain/repositories/home_repository.d
 import 'package:goodquestion/features/home/domain/usecases/get_home_summary_use_case.dart';
 import 'package:goodquestion/features/home/presentation/viewmodels/home_view_model.dart';
 import 'package:goodquestion/features/home/presentation/views/home_view.dart';
+import 'package:goodquestion/features/mypage/domain/entities/my_page_summary.dart';
+import 'package:goodquestion/features/mypage/domain/repositories/my_page_repository.dart';
+import 'package:goodquestion/features/mypage/domain/usecases/my_page_use_cases.dart';
 import 'package:provider/provider.dart';
 
 /// 홈 히어로를 **로그인·백엔드 없이** 눈으로 보는 프리뷰입니다.
@@ -180,10 +183,33 @@ class _HomeHeroPreviewApp extends StatelessWidget {
 }
 
 Widget _preview(HomeSummary? summary) => ChangeNotifierProvider<HomeViewModel>(
-  create: (_) =>
-      HomeViewModel(GetHomeSummaryUseCase(_StubRepository(summary)))..load(),
+  create: (_) => HomeViewModel(
+    GetHomeSummaryUseCase(_StubRepository(summary)),
+    // 아이 전환은 이 프리뷰가 보려는 것이 아니라, 상단 바가 이름을 띄우는 데
+    // 필요할 뿐입니다. 한 명만 있는 척합니다.
+    const GetMyPageChildrenUseCase(_StubChildren()),
+    const SelectMyPageChildUseCase(_StubChildren()),
+  )..load(),
   child: const HomeView(),
 );
+
+class _StubChildren implements ChildProfileRepository {
+  const _StubChildren();
+
+  @override
+  String? get selectedChildId => 'c1';
+
+  @override
+  Future<void> createChild({required String name, required int age}) async {}
+
+  @override
+  Future<List<MyPageChild>> getChildren() async => const <MyPageChild>[
+    MyPageChild(childId: 'c1', name: '지우', age: 8),
+  ];
+
+  @override
+  Future<void> selectChild(String childId) async {}
+}
 
 /// [summary] 가 `null` 이면 영원히 로딩 — 스켈레톤을 붙잡아 두려고 그렇습니다.
 class _StubRepository implements HomeRepository {

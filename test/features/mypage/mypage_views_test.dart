@@ -3,8 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:goodquestion/core/constants/app_strings.dart';
 import 'package:goodquestion/core/di/injector.dart';
 import 'package:goodquestion/core/error/failure.dart';
+import 'package:goodquestion/core/network/dio_client.dart';
 import 'package:goodquestion/core/theme/app_theme.dart';
 import 'package:goodquestion/core/widgets/app_bottom_nav.dart';
+import 'package:goodquestion/core/widgets/confirm_actions.dart';
+import 'package:goodquestion/features/mypage/data/datasources/settings_remote_data_source.dart';
 import 'package:goodquestion/features/mypage/domain/entities/app_settings.dart';
 import 'package:goodquestion/features/mypage/domain/entities/my_page_summary.dart';
 import 'package:goodquestion/features/mypage/domain/entities/report_detail.dart';
@@ -19,8 +22,23 @@ import 'package:goodquestion/features/mypage/presentation/viewmodels/settings_vi
 import 'package:goodquestion/features/mypage/presentation/views/my_page_view.dart';
 import 'package:goodquestion/features/mypage/presentation/views/report_detail_view.dart';
 import 'package:goodquestion/features/mypage/presentation/views/report_list_view.dart';
-import 'package:goodquestion/features/mypage/presentation/views/settings_view.dart';
+import 'package:goodquestion/features/mypage/presentation/widgets/settings_sections.dart';
 import 'package:provider/provider.dart';
+import 'package:provider/single_child_widget.dart';
+
+/// 게이트가 부르는 보호자 조회. 이메일 계정(provider null)이라 비밀번호를
+/// 묻는 쪽으로 갑니다.
+class _GateRemote extends SettingsRemoteDataSource {
+  _GateRemote() : super(DioClient());
+
+  @override
+  Future<Map<String, dynamic>> getParent() async => <String, dynamic>{
+    'provider': null,
+  };
+
+  @override
+  Future<void> verifyPassword(String password) async {}
+}
 
 class _Stub
     implements
@@ -194,8 +212,12 @@ const AppSettings _settings = AppSettings(
 );
 
 void main() {
-  // 마이페이지가 게이트를 getIt 에서 꺼내 씁니다.
-  setUpAll(() => getIt.registerLazySingleton<GuardianGate>(GuardianGate.new));
+  // 마이페이지가 게이트를, 게이트가 보호자 조회를 getIt 에서 꺼내 씁니다.
+  setUpAll(() {
+    getIt
+      ..registerLazySingleton<GuardianGate>(GuardianGate.new)
+      ..registerLazySingleton<SettingsRemoteDataSource>(_GateRemote.new);
+  });
   tearDownAll(getIt.reset);
   setUp(() => getIt<GuardianGate>().reset());
 
@@ -212,23 +234,38 @@ void main() {
   }
 
   group('마이페이지', () {
-    Widget under(_Stub stub) => ChangeNotifierProvider<MyPageViewModel>(
-      create: (_) => MyPageViewModel(
-        GetMyPageSummaryUseCase(stub),
-        CreateMyPageChildUseCase(stub),
-        GetMyPageChildrenUseCase(stub),
-        SelectMyPageChildUseCase(stub),
-      )..load(),
+    // 설정이 이 화면 안으로 들어와서 ViewModel 두 개가 함께 필요합니다.
+    Widget under(_Stub stub) => MultiProvider(
+      providers: <SingleChildWidget>[
+        ChangeNotifierProvider<MyPageViewModel>(
+          create: (_) => MyPageViewModel(
+            GetMyPageSummaryUseCase(stub),
+            CreateMyPageChildUseCase(stub),
+            GetMyPageChildrenUseCase(stub),
+            SelectMyPageChildUseCase(stub),
+          )..load(),
+        ),
+        ChangeNotifierProvider<SettingsViewModel>(
+          create: (_) => SettingsViewModel(
+            GetSettingsUseCase(stub),
+            SetReportNotificationUseCase(stub),
+            SetMarketingConsentUseCase(stub),
+          )..load(),
+        ),
+      ],
       child: const MyPageView(),
     );
 
     testWidgets('프로필 카드·메뉴·하단 내비가 보인다', (WidgetTester tester) async {
-      await pump(tester, under(_Stub(summary: _summary)));
+      await pump(tester, under(_Stub(summary: _summary, settings: _settings)));
 
       expect(find.text('하늘이 · 8살'), findsOneWidget);
       expect(find.text(MyPageStrings.completedStories(3)), findsOneWidget);
       expect(find.text(MyPageStrings.report), findsOneWidget);
-      expect(find.text(MyPageStrings.settings), findsOneWidget);
+      // 설정이 이 화면 안으로 들어왔습니다 — 별도 진입 줄 대신
+      // 알림 묶음이 바로 보입니다.
+      expect(find.text(SettingsStrings.notificationGroup), findsOneWidget);
+      expect(find.text(SettingsStrings.signOut), findsOneWidget);
       expect(find.byType(AppBottomNav), findsOneWidget);
     });
 
@@ -246,6 +283,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text(MyPageStrings.gateTitle), findsOneWidget);
+      expect(find.text(MyPageStrings.gatePasswordLabel), findsOneWidget);
       // 취소하면 아무 데도 안 갑니다.
       await tester.tap(find.text(MyPageStrings.gateCancel));
       await tester.pumpAndSettle();
@@ -283,8 +321,9 @@ void main() {
       await pump(tester, under(_Stub(error: const NetworkFailure())));
 
       expect(find.text(AppStrings.retry), findsOneWidget);
-      // 프로필을 못 불러와도 설정으로는 갈 수 있어야 합니다.
-      expect(find.text(MyPageStrings.settings), findsOneWidget);
+      // 프로필을 못 불러와도 리포트·관리 메뉴는 남아 있어야 합니다.
+      expect(find.text(MyPageStrings.report), findsOneWidget);
+      expect(find.text(MyPageStrings.addChild), findsOneWidget);
     });
   });
 
@@ -397,13 +436,20 @@ void main() {
   });
 
   group('설정', () {
+    // 설정은 마이페이지 안에 펼쳐지는 묶음이 됐습니다. 화면 전체가 아니라
+    // 그 묶음만 세워 검사합니다.
     Widget under(_Stub stub) => ChangeNotifierProvider<SettingsViewModel>(
       create: (_) => SettingsViewModel(
         GetSettingsUseCase(stub),
         SetReportNotificationUseCase(stub),
         SetMarketingConsentUseCase(stub),
       )..load(),
-      child: const SettingsView(),
+      child: Scaffold(
+        body: Consumer<SettingsViewModel>(
+          builder: (_, SettingsViewModel vm, _) =>
+              SingleChildScrollView(child: SettingsSections(vm: vm)),
+        ),
+      ),
     );
 
     testWidgets('알림이 최상단이고 네 그룹이 보인다', (WidgetTester tester) async {
@@ -446,6 +492,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text(SettingsStrings.signOutConfirm), findsOneWidget);
+      // 취소와 로그아웃이 대등하게 놓입니다 - 되돌리기 어려운 동작이라
+      // 한쪽으로 기울면 안 됩니다.
+      expect(find.byType(ConfirmActions), findsOneWidget);
     });
 
     testWidgets('설정 화면에는 게이트가 없다', (WidgetTester tester) async {

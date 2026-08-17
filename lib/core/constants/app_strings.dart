@@ -42,12 +42,17 @@ abstract final class NavStrings {
   static const String home = '홈';
   static const String stories = '이야기';
   static const String words = '단어장';
+  static const String planet = '행성';
   static const String myPage = '마이';
 }
 
 /// 홈(`/`) 전용 문구.
 abstract final class HomeStrings {
   // ── 섹션1 상단 바 ──
+  /// 인사말 헤더. 이름이 없으면 [greetingNoName] 을 씁니다.
+  static String greeting(String name) => '안녕, $name!';
+  static const String greetingNoName = '안녕!';
+  static const String greetingSub = '오늘은 어떤 이야기를 해볼까?';
   static const String profileSemantics = '아이 바꾸기';
   static const String stardust = '별가루';
 
@@ -118,6 +123,9 @@ abstract final class HomeStrings {
 /// 이야기 목록(`/stories`) 전용 문구.
 abstract final class StoryListStrings {
   static const String title = '어떤 이야기를 해볼까?';
+
+  /// 제목 아래 한 줄. 화면의 일을 아이 말로 알려 줍니다.
+  static const String subtitle = '마음에 드는 그림을 골라 봐';
 
   /// 고른 주제에 이야기가 없을 때. 아이 탓이 아니라는 톤.
   static const String emptyTopic = '이 주제는 아직 이야기가 없어.\n다른 것도 볼까?';
@@ -268,6 +276,9 @@ abstract final class RecapStrings {
 abstract final class WordStrings {
   static const String title = '내 단어장';
 
+  /// 제목 아래 한 줄. 담은 개수를 자연스러운 문장으로 녹입니다.
+  static String subtitle(int count) => '이야기에서 만난 단어 $count개를 다시 만나요';
+
   /// 총 담은 단어 수. 스크린리더용 풀 문장.
   static String savedCount(int count) => '담은 단어 $count개';
 
@@ -289,7 +300,84 @@ abstract final class WordStrings {
   static const String exampleInDaily = '평소에는 이렇게 써';
   static const String exampleAdvanced = '조금 어려운 문장에도 도전!';
   static const String like = '좋아요';
+  static const String unlike = '좋아요 해제';
+
+  /// 헤더의 좋아요 필터 버튼.
+  static const String likedOnly = '좋아요한 단어만 보기';
+
+  /// 이야기 묶음 옆의 단어 수. 문장이 아니라 꼬리표라 짧게 씁니다.
+  static String groupCount(int count) => '$count개';
+
+  /// 좋아요 필터를 켰는데 이 이야기에는 좋아요한 단어가 없을 때.
+  static const String emptyLiked = '여기엔 좋아요한 단어가 없어.\n마음에 드는 단어에 하트를 눌러 봐!';
+  static const String showAllWords = '전체 보기';
+  static const String practice = '따라 말하기';
   static const String close = '닫기';
+}
+
+/// 예문 따라 말하기(`/words/:wordId/practice`) 전용 문구.
+///
+/// 아이 화면입니다. 캐릭터가 말을 걸고, 못 알아들은 건 아이 탓이 아닙니다 -
+/// "인식 실패" 대신 "잘 안 들렸어"라고 말합니다.
+abstract final class SentencePracticeStrings {
+  static const String title = '따라 말하기';
+
+  // ── 1단계 예문 고르기 ──
+  static const String pickGuide = '어떤 문장을 따라 말해 볼까?';
+
+  /// 예문 카드 오른쪽의 시작 버튼. 카드 전체가 눌리지만, 아이는 **버튼이
+  /// 보여야** 누를 수 있다는 걸 압니다.
+  static const String pickStart = '시작';
+  static const String typeStory = '이야기 예문';
+  static const String typeDaily = '일상 예문';
+  static const String typeAdvanced = '심화 예문';
+
+  /// 따라 말할 예문이 하나도 없는 단어로 들어온 경우. (딥링크 등)
+  static const String noSentence = '이 단어는 아직 따라 말할 문장이 없어.';
+  static const String backToWords = '단어장으로';
+
+  // ── 2단계 말하기 ──
+  static const String speakGuide = '이 문장을 천천히 따라 말해 봐';
+  static const String micReady = '마이크를 누르고 말해 봐';
+  static String micRecording(int seconds) => '듣고 있어, $seconds초\n다 말했으면 다시 눌러 줘';
+  static const String micTranscribing = '네 목소리를 글자로 옮기고 있어...';
+  static const String micSubmitting = '얼마나 닮게 말했는지 보고 있어...';
+
+  /// 스크린리더용 마이크 라벨.
+  static const String micStart = '눌러서 말하기';
+  static const String micStop = '말하기 끝내기';
+
+  // ── 마이크 옆 짧은 안내 ──
+  static const String hintNotHeard = '잘 안 들렸어. 한 번만 더 말해 줄래?';
+  static const String hintTooLong = '조금 길었어. 짧게 말해 볼까?';
+  static const String hintWait = '지금은 잘 안 들려. 조금 있다가 다시 해 볼까?';
+  static const String hintMicPermission = '마이크를 켜 주면 네 목소리를 들을 수 있어.';
+  static const String hintMicFailed = '마이크가 안 켜졌어. 다시 한번 눌러 줄래?';
+
+  // ── 3단계 결과 ──
+  static const String rewardedTitle = '우와, 문장이랑 똑같았어!';
+
+  /// "+2" - 이번에 받은 별가루.
+  static String stardustGain(int amount) => '+$amount';
+  static const String stardustBalanceLabel = '내 별가루';
+
+  static const String alreadyRewardedTitle = '이번에도 멋지게 말했어!';
+  static const String alreadyRewardedBody = '이 문장은 벌써 별가루를 받았어.\n다른 예문도 해 볼까?';
+
+  static const String dailyLimitTitle = '오늘도 정말 잘 말했어!';
+  static const String dailyLimitBody = '오늘 별가루 주머니가 가득 찼어.\n내일 또 하자!';
+
+  static const String notMatchedTitle = '거의 다 왔어!';
+  static String similarity(int percent) => '문장이랑 $percent% 닮았어';
+  static const String targetLabel = '따라 할 문장';
+  static const String spokenLabel = '이렇게 들렸어';
+  static const String retry = '다시 말하기';
+
+  static const String anotherSentence = '다른 예문 해보기';
+
+  /// `EXAMPLE_SENTENCE_MISSING` - 예문 확장 전에 담은 단어.
+  static const String sentenceMissing = '이 문장은 아직 준비하고 있어.\n다른 예문을 골라 볼까?';
+  static const String pickAgain = '예문 고르기';
 }
 
 /// 마이페이지(`/mypage`) 전용 문구.
@@ -323,7 +411,21 @@ abstract final class MyPageStrings {
 
   // ── 보호자 확인 게이트(모달 5) 호출 지점 ──
   static const String gateTitle = '보호자 확인';
-  static const String gateBody = '리포트는 보호자만 볼 수 있어요.\n보호자가 맞다면 확인을 눌러 주세요.';
+
+  /// 이메일 계정에 묻는 말. 소셜 계정은 비밀번호가 없어 아예 묻지 않습니다.
+  static const String gateBody = '리포트는 보호자만 볼 수 있어요.\n계정 비밀번호를 입력해 주세요.';
+  static const String gatePasswordLabel = '비밀번호';
+
+  /// 비밀번호가 틀렸을 때. 다이얼로그를 닫지 않고 이 자리에만 뜹니다 -
+  /// 닫아 버리면 보호자가 리포트 메뉴부터 다시 눌러야 합니다.
+  static const String gateWrongPassword = '비밀번호가 올바르지 않아요.';
+
+  /// 보호자 조회·비밀번호 확인이 네트워크 문제로 실패했을 때.
+  /// **통과시키지 않습니다** - 연결이 끊긴 상태에서 게이트가 뚫리는 것보다
+  /// 보호자가 잠깐 못 보고 다시 시도하는 편이 낫습니다.
+  static const String gateNetworkError = '잠시 후 다시 시도해 주세요.';
+  static const String gateRetry = '다시 시도';
+
   static const String gateConfirm = '확인';
   static const String gateCancel = '취소';
 }
@@ -435,6 +537,9 @@ abstract final class AuthStrings {
   static const String signIn = '로그인';
   static const String socialSignIn = '소셜 로그인';
   static const String emailSignIn = '이메일 로그인';
+
+  /// 소셜 버튼 아래 한 줄. 왜 이 경로를 먼저 권하는지 짧게 말해 줍니다.
+  static const String socialHint = '간편하고 안전하게 시작하세요';
   static const String kakaoSignIn = '카카오로 계속하기';
   static const String googleSignIn = '구글로 계속하기';
   static const String keepSignedIn = '로그인 유지';
@@ -506,11 +611,19 @@ abstract final class AuthRecoveryStrings {
   static const String resetPasswordTab = 'PW 찾기';
 
   static const String findIdTitle = '가입한 이메일을 찾아드릴게요';
-  static const String findIdDescription = '회원가입할 때 입력한 보호자 정보로 가입 이메일을 확인합니다.';
+  static const String findIdDescription =
+      '가입할 때 입력한 보호자 이름과 아이 정보로 가입 이메일을 확인합니다.';
   static const String guardianName = '보호자 이름';
-  static const String birthDate = '보호자 생년월일';
-  static const String birthDateHint = '예: 1990.03.15';
+  static const String childName = '아이 이름';
+  static const String childNameHint = '예: 지우';
+  static const String childBirthYear = '아이 출생연도';
+  static const String childBirthYearHint = '예: 2018';
   static const String findIdAction = '가입 이메일 확인하기';
+
+  /// 아이 정보를 왜 다 받는지. **비워 두면 못 찾습니다** - 서버가 아이 정보
+  /// 없이 찾을 때는 아이가 등록된 계정을 결과에서 빼기 때문입니다(아이 정보
+  /// 없이 남의 계정을 캐낼 수 없게 하는 조건).
+  static const String childInfoNotice = '아이 이름과 출생연도를 모두 입력해야 계정을 찾을 수 있어요.';
 
   static const String resetTitle = '비밀번호를 다시 설정해요';
   static const String resetDescription = '가입한 이메일로 안전한 비밀번호 재설정 링크를 보내드립니다.';
@@ -519,17 +632,31 @@ abstract final class AuthRecoveryStrings {
   static const String resetAction = '재설정 링크 받기';
 
   static const String requiredFields = '입력하지 않은 항목이 있어요.';
-  static const String invalidBirthDate = '생년월일을 YYYY.MM.DD 형식으로 입력해 주세요.';
+  static const String invalidBirthYear = '출생연도를 네 자리로 입력해 주세요. (예: 2018)';
   static const String invalidEmail = '올바른 이메일 주소를 입력해 주세요.';
   static const String requestFailed = '요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.';
 
   static const String findIdDoneTitle = '가입 이메일을 확인했어요';
-  static const String findIdDoneBody =
-      '백엔드 연결 후에는 입력한 정보와 일치하는 가입 이메일을 이곳에 안전하게 표시합니다.';
+
+  /// 이메일은 **서버가 가려서** 옵니다(`de***@...`). 화면에서 또 가리지 않습니다.
+  static const String findIdDoneBody = '아래 주소로 로그인해 보세요.';
+
+  /// 못 찾았을 때. 오류가 아니라 결과입니다 - 서버도 404 가 아니라 빈 목록을 줍니다.
+  static const String findIdEmptyTitle = '일치하는 계정을 찾지 못했어요';
+  static const String findIdEmptyBody =
+      '이름과 아이 정보가 가입할 때와 같은지 확인해 주세요. 소셜 계정으로 가입했다면 카카오·구글 로그인을 눌러 보세요.';
   static const String resetDoneTitle = '재설정 안내를 보냈어요';
   static const String resetDoneBody =
       '입력한 이메일로 비밀번호 재설정 링크를 보냈습니다. 메일함을 확인해 주세요.';
   static const String resend = '다시 보내기';
+
+  /// ID 찾기의 같은 자리. 보낸 것이 없으니 "다시 보내기"가 아닙니다 -
+  /// 특히 못 찾은 화면에서는 이 버튼이 유일한 재시도 통로입니다.
+  static const String findIdRetry = '다시 찾기';
+
+  /// **PW 찾기 전용입니다.** ID 찾기는 목적 자체가 이메일을 알려 주는 것이라
+  /// 결과가 갈리고, 서버도 그렇게 동작합니다. 그 화면에는 [childInfoNotice] 를
+  /// 씁니다.
   static const String securityNotice = '계정 보호를 위해 가입 여부와 관계없이 동일한 안내를 표시합니다.';
   static const String newPasswordTitle = '새 비밀번호 설정';
   static const String newPassword = '새 비밀번호';

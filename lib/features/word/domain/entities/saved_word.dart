@@ -1,3 +1,5 @@
+import 'sentence_practice.dart';
+
 /// 아이가 이야기 도중 담아 둔 단어 하나.
 ///
 /// [meaning] 과 [sentence] 는 **목록에 노출하지 않습니다.** 상세 모달의
@@ -47,6 +49,20 @@ class SavedWord {
 
   /// 뜻이 아직 없는 단어인가. 서버가 만들어 주기 전이거나 생성에 실패한 경우.
   bool get hasMeaning => meaning.trim().isNotEmpty;
+
+  /// 종류별 예문. 이야기 예문은 [sentence] 이고, 없으면 빈 문자열이라
+  /// 호출부는 `trim().isNotEmpty` 로 거릅니다.
+  String? sentenceOf(SentenceType type) => switch (type) {
+    SentenceType.story => sentence,
+    SentenceType.daily => sentenceDaily,
+    SentenceType.advanced => sentenceAdvanced,
+  };
+
+  /// 따라 말할 수 있는 예문이 하나라도 있는가. 상세 모달이 이 값으로
+  /// "따라 말하기" 버튼을 보여 줄지 정합니다.
+  bool get hasPracticeSentence => SentenceType.values.any(
+    (SentenceType type) => (sentenceOf(type) ?? '').trim().isNotEmpty,
+  );
 
   SavedWord copyWith({bool? liked}) => SavedWord(
     wordId: wordId,

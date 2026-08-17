@@ -80,19 +80,23 @@ abstract final class AppTheme {
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size.fromHeight(AppSizes.tapGuardian),
-          textStyle: AppTypography.textTheme.labelLarge,
+          textStyle: AppTypography.textTheme.labelLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.sm),
+            borderRadius: BorderRadius.circular(AppRadius.md),
           ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           minimumSize: const Size.fromHeight(AppSizes.tapGuardian),
-          textStyle: AppTypography.textTheme.labelLarge,
+          textStyle: AppTypography.textTheme.labelLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
           side: const BorderSide(color: AppColors.ink300),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.sm),
+            borderRadius: BorderRadius.circular(AppRadius.md),
           ),
         ),
       ),
@@ -102,23 +106,28 @@ abstract final class AppTheme {
           textStyle: AppTypography.textTheme.labelLarge,
         ),
       ),
+      // 흰 카드 위에 옅은 잉크빛 면을 깐 테두리 없는 입력 필드.
+      // 테두리 상자보다 조용하고, 포커스가 오면 그때 링이 생깁니다.
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surface,
+        fillColor: AppColors.guardianCanvas,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
           vertical: AppSpacing.md,
         ),
+        hintStyle: AppTypography.textTheme.bodyMedium?.copyWith(
+          color: AppColors.ink500,
+        ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-          borderSide: const BorderSide(color: AppColors.ink300),
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-          borderSide: const BorderSide(color: AppColors.ink300),
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.sm),
+          borderRadius: BorderRadius.circular(AppRadius.md),
           borderSide: const BorderSide(color: AppColors.focus, width: 2),
         ),
       ),

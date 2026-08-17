@@ -52,6 +52,9 @@ abstract final class AppIcons {
   /// 다시 녹음.
   static const IconData retry = Icons.refresh_rounded;
 
+  /// 말하기 끝내기. 녹음 중인 마이크 버튼이 이 아이콘으로 바뀝니다.
+  static const IconData stop = Icons.stop_rounded;
+
   /// 타이핑으로 고치기. **보조 수단이므로 마이크보다 작게 둡니다.**
   static const IconData typeInstead = Icons.keyboard_rounded;
 
@@ -128,6 +131,10 @@ abstract final class AppIcons {
 
   /// 아코디언 펼침. 접힌 상태에서 아래를, 펼친 상태에서 위를 가리킵니다.
   static const IconData expand = Icons.expand_more_rounded;
+
+  /// 목록에서 고른 것 / 안 고른 것. 색만으로 구분하지 않기 위한 짝입니다.
+  static const IconData checked = Icons.check_circle_rounded;
+  static const IconData unchecked = Icons.radio_button_unchecked_rounded;
 
   // 공통
   /// "더 보기 ›", "가기 ›" 처럼 이동을 암시하는 꺾쇠.

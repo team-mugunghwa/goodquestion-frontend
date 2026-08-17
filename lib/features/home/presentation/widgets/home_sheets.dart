@@ -3,45 +3,134 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_icons.dart';
 import '../../../../core/constants/app_strings.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../core/widgets/child_avatar.dart';
 import '../../../../core/widgets/kid_button.dart';
+import '../../../../core/widgets/press_scale.dart';
 import '../../../../core/widgets/screen_metrics.dart';
+import '../../../mypage/domain/entities/my_page_summary.dart';
 import '../../domain/entities/child_profile.dart';
 
-/// 아이 프로필 전환 모달(모달 6)을 여는 자리.
+/// 아이 프로필 전환 시트. 이 계정의 아이들을 늘어놓고 하나를 고릅니다.
 ///
-/// **홈은 분기 렌더만 담당합니다.** 어떤 아이가 있고 어떻게 고르는지는
-/// 모달 6 의 몫이라, 여기서는 호출 지점과 "닫으면 홈으로 돌아온다"는 계약만
-/// 만들어 둡니다. 모달 6 가 만들어지면 이 함수 안의 위젯만 바뀝니다.
-///
-/// 반환값이 `true` 면 아이가 바뀐 것이므로 호출한 쪽이 홈 데이터를 다시
-/// 불러옵니다.
-Future<bool> showChildSwitchSheet(
+/// 고른 아이의 `childId` 를 돌려줍니다. 그냥 닫으면 `null` 입니다 —
+/// 호출한 쪽은 값이 있을 때만 홈을 다시 받습니다.
+Future<String?> showChildSwitchSheet(
   BuildContext context, {
   required ScreenMetrics metrics,
+  required List<MyPageChild> children,
   ChildProfile? current,
-}) async {
-  final bool? switched = await showModalBottomSheet<bool>(
+}) {
+  return showModalBottomSheet<String>(
     context: context,
     showDragHandle: true,
-    builder: (BuildContext context) => _KidSheet(
+    // 기본 시트는 폭 640 에서 잘려 아이 카드가 한 줄에 두 명도 안 들어갑니다.
+    constraints: const BoxConstraints(maxWidth: AppSizes.sheetMaxWidth),
+    builder: (BuildContext sheetContext) => _KidSheet(
       title: HomeStrings.switchChildTitle,
       metrics: metrics,
       children: <Widget>[
-        if (current != null)
-          Text(current.name, style: metrics.text(AppTypography.kidBody)),
+        if (children.isEmpty)
+          Text(current?.name ?? '', style: metrics.text(AppTypography.kidBody))
+        else
+          // 아이가 몇 명이든 한 줄에 늘어놓고, 넘치면 다음 줄로 접습니다.
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: AppSpacing.md,
+            runSpacing: AppSpacing.md,
+            children: <Widget>[
+              for (final MyPageChild child in children)
+                _ChildOption(
+                  child: child,
+                  // 홈 응답에는 아이 id 가 없어 이름으로 맞춥니다.
+                  selected: child.name == current?.name,
+                  metrics: metrics,
+                  onTap: () => Navigator.of(sheetContext).pop(child.childId),
+                ),
+            ],
+          ),
         const SizedBox(height: AppSpacing.lg),
-        KidPrimaryButton(
+        KidSecondaryButton(
           icon: AppIcons.close,
           label: HomeStrings.close,
           labelStyle: metrics.text(AppTypography.kidButton),
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(sheetContext).pop(),
         ),
       ],
     ),
   );
-  return switched ?? false;
+}
+
+/// 시트 안의 아이 하나. 얼굴(아바타) + 이름 + 나이.
+///
+/// 고른 아이는 색만이 아니라 **테두리와 체크**로도 구분합니다 —
+/// 색을 구분하기 어려운 아이도 누가 선택됐는지 알아야 합니다.
+class _ChildOption extends StatelessWidget {
+  const _ChildOption({
+    required this.child,
+    required this.selected,
+    required this.metrics,
+    required this.onTap,
+  });
+
+  final MyPageChild child;
+  final bool selected;
+  final ScreenMetrics metrics;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      selected: selected,
+      child: PressScale(
+        onTap: onTap,
+        borderRadius: AppRadius.xl,
+        semanticLabel: child.name,
+        child: Container(
+          width: AppSizes.mic + AppSpacing.xl,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.lg,
+          ),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.brandBlueSurface : AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadius.xl),
+            border: Border.all(
+              color: selected ? AppColors.brandBlueDeep : AppColors.ink100,
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              ChildAvatar(
+                name: child.name,
+                image: child.avatar,
+                diameter: AppSizes.tapChildSecondary,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                child.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: metrics
+                    .text(AppTypography.kidLabel)
+                    .copyWith(color: AppColors.ink900),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Icon(
+                selected ? AppIcons.checked : AppIcons.unchecked,
+                size: AppSizes.iconInline,
+                color: selected ? AppColors.brandBlueDeep : AppColors.ink300,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// 아이 프로필이 없는 계정이 이야기에 들어가려 할 때. (PRD F-01 게이트)
@@ -89,8 +178,13 @@ class _KidSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 태블릿 가로에서는 화면 높이가 낮아 시트가 세로로 넘칩니다.
+    // 스크롤을 허용하고, 일러스트도 남는 높이에 맞춰 줄입니다.
+    final double illustration = metrics.isWide
+        ? AppSizes.mic
+        : AppSizes.illustration;
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
           metrics.screenPadding,
           AppSpacing.md,
@@ -102,8 +196,8 @@ class _KidSheet extends StatelessWidget {
           children: <Widget>[
             Image.asset(
               AppAssets.logoMark,
-              width: AppSizes.illustration,
-              height: AppSizes.illustration,
+              width: illustration,
+              height: illustration,
               fit: BoxFit.contain,
               excludeFromSemantics: true,
             ),

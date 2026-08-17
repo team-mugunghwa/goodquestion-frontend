@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../../../core/config/app_config.dart';
 import '../../../../core/constants/app_icons.dart';
@@ -198,6 +199,10 @@ class _PlayPageState extends State<PlayPage> {
   /// 제출합니다. 잘 알아들은 턴은 시계를 걸지 않고 아이의 탭을 기다립니다.
   Timer? _confirmTimer;
   String? _retainedStoryImageUrl;
+
+  /// 멈춤 화면이 **나가기(X)로 떴는가.** 멈춤 버튼으로 뜬 것과 카드는 같고
+  /// 묻는 말만 다릅니다. → [_PauseOverlay.exit]
+  bool _exitPrompt = false;
 
   /// 지금 화면이 붙잡고 있는 장면. 장면이 바뀌는 순간을 [_activateSnapshot]
   /// 이 알아채고 이전 장면의 아이 발화를 지우는 데 씁니다.
@@ -1405,6 +1410,7 @@ class _PlayPageState extends State<PlayPage> {
   /// 문장 처음이 아니라 소리가 끊긴 바로 그 자리에서 이어집니다. 장면을
   /// 처음부터 다시 읽는 것은 "다시 듣기" 버튼의 몫입니다.
   void _toggleStoryPause() {
+    _exitPrompt = false;
     _storyTimer?.cancel();
     if (!_storyPaused) {
       // 멈추는 쪽입니다. **[_speechToken] 을 올리지 않습니다** - 올리면
@@ -1760,6 +1766,7 @@ class _PlayPageState extends State<PlayPage> {
   /// ([_awaitResume]) 다시 재생할 때 그 문장부터 이어 읽게 합니다.
   /// 전개 화면의 [_toggleStoryPause] 와 같은 방식입니다.
   void _togglePause() {
+    _exitPrompt = false;
     if (_phase == _DialoguePhase.paused) {
       setState(() => _phase = _phaseBeforePause);
       _openPauseGate();
@@ -1807,25 +1814,31 @@ class _PlayPageState extends State<PlayPage> {
   ///
   /// 그래도 한 번 묻습니다. 잃는 것은 없지만 화면이 통째로 바뀌는 일이라,
   /// 잘못 눌렀을 때 되돌릴 틈은 있어야 합니다.
-  Future<void> _confirmExit() async {
-    final bool? leave = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        title: const Text('이야기에서 나갈까요?'),
-        content: const Text('여기까지 들은 곳을 기억해 둘게요. 홈에서 이어 들을 수 있어요.'),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('계속 듣기'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('나가기'),
-          ),
-        ],
-      ),
-    );
-    if (leave != true || !mounted) return;
+  /// 나가기(X). **확인 창을 따로 띄우지 않고 일시정지 화면을 그대로 씁니다.**
+  ///
+  /// 그 화면에 이미 아이가 고를 두 갈래가 있습니다 - "계속 듣기"와
+  /// "이야기 나가기". 같은 물음에 생김새가 다른 창을 하나 더 두면, 아이는
+  /// 나가려다 만난 화면이 방금 멈춤 버튼으로 본 화면과 왜 다른지부터
+  /// 헷갈립니다. 소리도 함께 멈춰서 묻는 동안 이야기가 계속 들리지 않습니다
+  /// (예전 확인 창은 뒤에서 이야기가 그대로 흘렀습니다).
+  void _requestExit() {
+    if (_snapshot?.phase == PlayPhase.story) {
+      if (!_storyPaused) _toggleStoryPause();
+    } else if (_phase != _DialoguePhase.paused) {
+      _togglePause();
+    }
+    // 멈춘 뒤에 세웁니다 - 위 토글이 이 표시를 지웁니다.
+    setState(() => _exitPrompt = true);
+  }
+
+  /// 일시정지 화면의 "이야기 나가기". **다시 묻지 않습니다** - 멈춤 화면에서
+  /// 두 갈래 중 하나를 이미 고른 것이라, 여기서 또 물으면 같은 질문을 두 번
+  /// 하는 셈입니다.
+  ///
+  /// 세션은 끝내지 않습니다(`stop` 을 부르지 않습니다) - 되돌릴 수 없는
+  /// 행동에만 씁니다. 화면을 벗어나는 것은 그런 행동이 아닙니다.
+  /// → `docs/이야기_전개_가이드.md` 3.8 · 8장
+  void _leaveStory() {
     // 나가기로 마음을 정한 순간 소리부터 멈춥니다 - 화면이 바뀌는 동안에도
     // 이야기가 계속 들리면 안 나가지는 것처럼 보입니다.
     _stopSpeaking();
@@ -1877,7 +1890,9 @@ class _PlayPageState extends State<PlayPage> {
           isAdvancing: _advancingScene,
           soundOn: _soundOn,
           totalScenes: widget.totalScenes,
-          onExit: _confirmExit,
+          onExit: _requestExit,
+          onLeave: _leaveStory,
+          exitPrompt: _exitPrompt,
           onPause: _toggleStoryPause,
           // "다시 듣기"는 지금처럼 장면 처음부터입니다. 이어 재생은
           // 일시정지 버튼의 몫이라 둘을 섞지 않습니다.
@@ -1902,14 +1917,19 @@ class _PlayPageState extends State<PlayPage> {
           return Stack(
             fit: StackFit.expand,
             children: <Widget>[
-              _StoryBackdrop(
+              _SceneBackdrop(
                 // 제작한 장면 배경이 있으면 그것이 우선이다. 서버 imageUrl은 배경과 캐릭터가
                 // 합쳐진 한 장이라 캐릭터를 따로 얹으면 인물이 둘로 보인다.
-                asset:
+                imageAsset:
                     _character?.scene.backgroundAsset ??
                     _retainedStoryImageUrl ??
                     dialogueScene?.imageUrl ??
                     widget.backgroundAsset,
+                // 같은 이유로 캐릭터 무대가 떠 있으면 장면 영상도 틀지 않는다 -
+                // 서버 영상은 캐릭터가 구워져 들어간 한 장이라 표정 무대와 겹치면
+                // 인물이 둘이 된다. 무대가 없는 폴백 화면에서만 영상을 얹는다.
+                videoUrl: _character == null ? dialogueScene?.videoUrl : null,
+                loop: true,
               ),
               const _BackdropShade(),
               SafeArea(
@@ -1921,7 +1941,7 @@ class _PlayPageState extends State<PlayPage> {
                       soundOn: _soundOn,
                       sceneOrder: dialogueScene?.sceneOrder,
                       totalScenes: widget.totalScenes,
-                      onExit: _confirmExit,
+                      onExit: _requestExit,
                       onPause: _togglePause,
                       onReplay: _playQuestion,
                       onSound: _toggleSound,
@@ -1992,7 +2012,15 @@ class _PlayPageState extends State<PlayPage> {
                 ),
               ),
               if (_phase == _DialoguePhase.paused)
-                _PauseOverlay(onResume: _togglePause, onExit: _confirmExit),
+                (_exitPrompt
+                    ? _PauseOverlay.exit(
+                        onResume: _togglePause,
+                        onExit: _leaveStory,
+                      )
+                    : _PauseOverlay(
+                        onResume: _togglePause,
+                        onExit: _leaveStory,
+                      )),
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 430),
                 reverseDuration: const Duration(milliseconds: 320),
@@ -2054,6 +2082,8 @@ class _StorySceneView extends StatelessWidget {
     required this.soundOn,
     required this.totalScenes,
     required this.onExit,
+    required this.onLeave,
+    required this.exitPrompt,
     required this.onPause,
     required this.onReplay,
     required this.onSound,
@@ -2065,7 +2095,15 @@ class _StorySceneView extends StatelessWidget {
   final bool isAdvancing;
   final bool soundOn;
   final int? totalScenes;
+
+  /// 상단 X. 멈춤 화면을 띄웁니다.
   final VoidCallback onExit;
+
+  /// 멈춤 화면의 "이야기 나가기". 곧장 나갑니다.
+  final VoidCallback onLeave;
+
+  /// 멈춤 화면이 나가기(X)로 떴는가. 카드는 같고 문구만 다릅니다.
+  final bool exitPrompt;
   final VoidCallback onPause;
   final VoidCallback onReplay;
   final VoidCallback onSound;
@@ -2087,7 +2125,11 @@ class _StorySceneView extends StatelessWidget {
       body: Stack(
         fit: StackFit.expand,
         children: <Widget>[
-          _StoryBackdrop(asset: scene.imageUrl),
+          _SceneBackdrop(
+            imageAsset: scene.imageUrl,
+            videoUrl: scene.videoUrl,
+            loop: true,
+          ),
           const _BackdropShade(),
           SafeArea(
             minimum: const EdgeInsets.all(22),
@@ -2157,9 +2199,177 @@ class _StorySceneView extends StatelessWidget {
               ],
             ),
           ),
-          if (isPaused) _PauseOverlay(onResume: onPause, onExit: onExit),
+          if (isPaused)
+            exitPrompt
+                ? _PauseOverlay.exit(onResume: onPause, onExit: onLeave)
+                : _PauseOverlay(onResume: onPause, onExit: onLeave),
         ],
       ),
+    );
+  }
+}
+
+/// 장면 배경 한 층. [videoUrl]이 없으면 지금처럼 이미지 한 장이고, 있으면
+/// 이미지를 밑에 깐 채 영상이 준비된 뒤에만 위에 얹는다 - 초기화 전·초기화
+/// 실패·재생 오류 어느 경우든 밑의 이미지가 그대로 보여서 흰 화면이나
+/// 깜빡임 없이 기존 배경으로 떨어진다.
+/// → 팀원공유 `전달_장면영상과_추가요청.md` §1·§2-1
+class _SceneBackdrop extends StatelessWidget {
+  const _SceneBackdrop({this.imageAsset, this.videoUrl, this.loop = false});
+
+  final String? imageAsset;
+  final String? videoUrl;
+
+  /// 장면 영상은 전부 반복 재생한다. 처음에는 STORY를 1회 재생 후 정지로
+  /// 설계했으나, 멈춘 화면이 "영상이 끝났다/고장났다"로 읽혀 전 장면 반복으로
+  /// 확정했다(2026-08-16 팀 결정). 5초 단일본 클립은 반복 시 이음매가 보일 수
+  /// 있는데, 그건 프론트가 아니라 루프본 에셋(_loop)으로 푼다.
+  final bool loop;
+
+  @override
+  Widget build(BuildContext context) {
+    final String? url = videoUrl;
+    if (url == null || url.isEmpty) {
+      return _StoryBackdrop(asset: imageAsset);
+    }
+    return _SceneVideoBackdrop(
+      videoUrl: url,
+      loop: loop,
+      imageAsset: imageAsset,
+    );
+  }
+}
+
+class _SceneVideoBackdrop extends StatefulWidget {
+  const _SceneVideoBackdrop({
+    required this.videoUrl,
+    required this.loop,
+    this.imageAsset,
+  });
+
+  final String videoUrl;
+  final bool loop;
+  final String? imageAsset;
+
+  @override
+  State<_SceneVideoBackdrop> createState() => _SceneVideoBackdropState();
+}
+
+class _SceneVideoBackdropState extends State<_SceneVideoBackdrop> {
+  VideoPlayerController? _controller;
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _start();
+  }
+
+  @override
+  void didUpdateWidget(_SceneVideoBackdrop oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.videoUrl != widget.videoUrl) {
+      // 장면 전환 - 이전 장면 컨트롤러를 정리하고 새로 만든다.
+      _disposeController();
+      setState(_start);
+    } else if (oldWidget.loop != widget.loop) {
+      unawaited(_controller?.setLooping(widget.loop));
+    }
+  }
+
+  /// 서버가 `/stories/...` 상대경로를 주므로 API base의 origin에 붙인다.
+  /// base가 `/api`로 끝나도 절대경로 resolve는 path를 통째로 바꾸므로
+  /// `/api`가 앞에 남지 않는다(이미지 배경과 같은 규칙).
+  Uri? get _resolvedUri {
+    final String raw = widget.videoUrl.startsWith('/')
+        ? Uri.parse(AppConfig.apiBaseUrl).resolve(widget.videoUrl).toString()
+        : widget.videoUrl;
+    final Uri? uri = Uri.tryParse(raw);
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+      return null;
+    }
+    return uri;
+  }
+
+  void _start() {
+    _ready = false;
+    final Uri? uri = _resolvedUri;
+    if (uri == null) return; // 이해할 수 없는 주소 - 이미지로만 간다.
+    final VideoPlayerController controller = VideoPlayerController.networkUrl(
+      uri,
+    );
+    _controller = controller;
+    controller.addListener(_onControllerChanged);
+    unawaited(
+      controller
+          .initialize()
+          .then((_) async {
+            if (!mounted || _controller != controller) return;
+            // 영상 자체가 무음이지만(나레이션은 scene_audio가 따로 맡는다)
+            // 웹 자동재생 정책이 음소거를 요구하므로 명시해 둔다.
+            await controller.setVolume(0);
+            await controller.setLooping(widget.loop);
+            await controller.play();
+            if (!mounted || _controller != controller) return;
+            setState(() => _ready = true);
+          })
+          .catchError((Object _) {
+            // 초기화·자동재생 실패 - _ready가 false로 남아 이미지가 보인다.
+            if (!mounted || _controller != controller) return;
+            setState(() => _ready = false);
+          }),
+    );
+  }
+
+  void _onControllerChanged() {
+    final VideoPlayerController? controller = _controller;
+    if (controller == null || !mounted) return;
+    // 재생 도중 오류가 나면 영상 층을 내리고 이미지로 돌아간다.
+    if (controller.value.hasError && _ready) {
+      setState(() => _ready = false);
+    }
+  }
+
+  void _disposeController() {
+    final VideoPlayerController? controller = _controller;
+    _controller = null;
+    if (controller != null) {
+      controller.removeListener(_onControllerChanged);
+      unawaited(controller.dispose());
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposeController();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final VideoPlayerController? controller = _controller;
+    final bool showVideo =
+        _ready &&
+        controller != null &&
+        controller.value.isInitialized &&
+        !controller.value.hasError &&
+        controller.value.size.width > 0 &&
+        controller.value.size.height > 0;
+    return Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        _StoryBackdrop(asset: widget.imageAsset),
+        if (showVideo)
+          FittedBox(
+            fit: BoxFit.cover,
+            clipBehavior: Clip.hardEdge,
+            child: SizedBox(
+              width: controller.value.size.width,
+              height: controller.value.size.height,
+              child: VideoPlayer(controller),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -3639,9 +3849,28 @@ class _ListeningMic extends StatelessWidget {
   }
 }
 
+/// 이야기를 멈춰 세운 카드. **멈춤 버튼과 나가기(X)가 같은 카드를 씁니다** -
+/// 생김새가 다른 창을 하나 더 두면 아이가 방금 본 화면과 왜 다른지부터
+/// 헷갈립니다. 다른 것은 묻는 말과 버튼 이름뿐입니다.
 class _PauseOverlay extends StatelessWidget {
-  const _PauseOverlay({required this.onResume, required this.onExit});
+  const _PauseOverlay({required this.onResume, required this.onExit})
+    : title = '이야기를 잠시 멈췄어요',
+      message = null,
+      exitLabel = '이야기 나가기';
 
+  /// 나가기(X)로 뜬 변형. 이야기를 멈춰 두는 것은 같고 **나갈지 묻습니다.**
+  /// 듣던 자리가 남는다는 것을 함께 말해 줍니다 - 겁주는 문구로 나가기를
+  /// 막지 않되, 잘못 눌렀을 때 되돌릴 틈은 있어야 합니다.
+  const _PauseOverlay.exit({required this.onResume, required this.onExit})
+    : title = '이야기에서 나갈까요?',
+      message = '여기까지 들은 곳을 기억해 둘게요. 홈에서 이어 들을 수 있어요.',
+      exitLabel = '나가기';
+
+  final String title;
+
+  /// 제목 아래 한 줄. 멈춤에는 없습니다 - 멈춘 것만으로는 덧붙일 말이 없습니다.
+  final String? message;
+  final String exitLabel;
   final VoidCallback onResume;
   final VoidCallback onExit;
 
@@ -3672,10 +3901,26 @@ class _PauseOverlay extends StatelessWidget {
                     size: 48,
                   ),
                   const SizedBox(height: 10),
-                  const Text(
-                    '이야기를 잠시 멈췄어요',
-                    style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
+                  if (message != null) ...<Widget>[
+                    const SizedBox(height: 8),
+                    Text(
+                      message!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        height: 1.4,
+                        color: Color(0xFF5A6B7C),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 18),
                   FilledButton.icon(
                     onPressed: onResume,
@@ -3683,10 +3928,7 @@ class _PauseOverlay extends StatelessWidget {
                     label: const Text('계속 듣기'),
                   ),
                   const SizedBox(height: 4),
-                  TextButton(
-                    onPressed: onExit,
-                    child: const Text('이야기 나가기'),
-                  ),
+                  TextButton(onPressed: onExit, child: Text(exitLabel)),
                 ],
               ),
             ),
