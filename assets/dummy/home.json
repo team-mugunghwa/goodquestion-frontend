@@ -12,6 +12,13 @@
   },
   "recommendedStories": [
     {
+      "storyId": 11,
+      "title": "방귀 뀌는 며느리",
+      "image": "assets/images/covers/story_11.png",
+      "estimatedMinutes": 20,
+      "topicTag": "옛이야기"
+    },
+    {
       "storyId": 21,
       "title": "해와 달이 된 오누이",
       "image": "assets/images/covers/story_21.png",
@@ -24,13 +31,6 @@
       "image": "assets/images/covers/story_22.png",
       "estimatedMinutes": 20,
       "topicTag": "우정"
-    },
-    {
-      "storyId": 23,
-      "title": "흥부와 놀부",
-      "image": "assets/images/covers/story_23.png",
-      "estimatedMinutes": 15,
-      "topicTag": "가족"
     }
   ],
   "planet": {
