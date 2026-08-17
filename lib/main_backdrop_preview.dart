@@ -29,9 +29,12 @@ import 'features/story/presentation/views/story_detail_view.dart';
 import 'features/story/presentation/views/story_list_view.dart';
 import 'features/word/data/datasources/word_local_data_source.dart';
 import 'features/word/data/repositories/word_repository_mock.dart';
+import 'features/word/domain/entities/saved_word.dart';
 import 'features/word/domain/usecases/get_word_book_use_case.dart';
 import 'features/word/domain/usecases/toggle_word_like_use_case.dart';
+import 'features/word/presentation/viewmodels/sentence_practice_view_model.dart';
 import 'features/word/presentation/viewmodels/word_list_view_model.dart';
+import 'features/word/presentation/views/sentence_practice_view.dart';
 import 'features/word/presentation/views/word_list_view.dart';
 
 /// 백엔드·로그인 없이 우주 배경(CosmicBackdrop)이 적용된 로그인 이후
@@ -130,10 +133,17 @@ final GoRouter _router = GoRouter(
         );
       },
     ),
-    // 프리뷰 범위 밖의 목적지들. 하단 내비·카드 탭이 죽지 않게만 받아 줍니다.
     GoRoute(
       path: AppRoutes.wordPracticePath,
-      builder: (_, _) => const _OutOfScope(),
+      builder: (_, GoRouterState state) =>
+          ChangeNotifierProvider<SentencePracticeViewModel>(
+            create: (_) => SentencePracticeViewModel(
+              _wordRepository,
+              wordId: state.pathParameters['wordId'] ?? '',
+              initialWord: state.extra as SavedWord?,
+            )..load(),
+            child: const SentencePracticeView(),
+          ),
     ),
   ],
 );
@@ -169,17 +179,4 @@ class _PreviewChildren implements ChildProfileRepository {
 
   @override
   Future<void> selectChild(String childId) async {}
-}
-
-/// 프리뷰가 다루지 않는 화면의 자리 표시.
-class _OutOfScope extends StatelessWidget {
-  const _OutOfScope();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('미리보기 범위 밖')),
-      body: const Center(child: Text('이 화면은 본 앱에서 확인하세요.')),
-    );
-  }
 }
