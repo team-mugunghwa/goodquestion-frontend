@@ -340,13 +340,13 @@ double _cellHeightOf(
     metrics.text(AppTypography.kidButton),
     lines: 2,
   );
-  // 칩 높이는 글자만이 아니라 **아이콘까지** 봐야 합니다. 인라인 아이콘(24)이
-  // kidLabel 한 줄보다 커서, 글자 높이만 더하면 몇 픽셀이 모자랍니다.
+  // 칩 높이는 글자만이 아니라 **아이콘까지** 봐야 합니다. 카드는 작은
+  // 칩(compact)을 쓰므로 kidCaption 글자와 iconCaption 중 큰 쪽입니다.
   final double chipHeight =
       AppSpacing.xs * 2 +
       math.max(
-        _measuredHeight(context, metrics.text(AppTypography.kidLabel)),
-        AppSizes.iconInline,
+        _measuredHeight(context, metrics.text(AppTypography.kidCaption)),
+        AppSizes.iconCaption,
       );
   final double textHeight =
       AppSpacing.md * 2 + titleHeight + AppSpacing.sm + chipHeight;

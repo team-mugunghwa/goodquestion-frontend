@@ -21,11 +21,16 @@ class KidInfoChip extends StatelessWidget {
     required this.label,
     required this.metrics,
     this.icon,
+    this.compact = false,
   });
 
   final String label;
   final ScreenMetrics metrics;
   final IconData? icon;
+
+  /// 카드 안처럼 자리가 좁을 때. 글자(15)와 아이콘(18)을 한 단계 줄입니다.
+  /// 읽는 정보라 작아도 되고, 그래야 아이콘을 달고도 이름이 안 잘립니다.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +50,11 @@ class KidInfoChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           if (glyph != null) ...<Widget>[
-            Icon(glyph, size: AppSizes.iconInline, color: AppColors.ink700),
+            Icon(
+              glyph,
+              size: compact ? AppSizes.iconCaption : AppSizes.iconInline,
+              color: AppColors.ink700,
+            ),
             const SizedBox(width: AppSpacing.xs),
           ],
           // 좁은 카드 안에서도 칩이 넘치지 않게 라벨을 줄입니다.
@@ -54,7 +63,9 @@ class KidInfoChip extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: metrics.text(AppTypography.kidLabel),
+              style: metrics.text(
+                compact ? AppTypography.kidCaption : AppTypography.kidLabel,
+              ),
             ),
           ),
         ],
