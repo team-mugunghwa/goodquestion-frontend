@@ -212,6 +212,23 @@ void main() {
     expect(find.byType(WordCard), findsNWidgets(1));
   });
 
+  testWidgets('좋아요 필터를 켜면 좋아요한 단어만 남는다', (WidgetTester tester) async {
+    await pump(tester, _StubRepository(book: _book));
+
+    const Key filter = Key('words-liked-filter');
+    // 더미 3개 중 좋아요한 단어는 하나뿐입니다.
+    await tester.tap(find.byKey(filter));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(WordCard), findsNWidgets(1));
+
+    // 다시 누르면 전체로 돌아옵니다.
+    await tester.tap(find.byKey(filter));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(WordCard), findsNWidgets(3));
+  });
+
   testWidgets('담은 단어가 없으면 이야기로 보낸다', (WidgetTester tester) async {
     await pump(tester, _StubRepository(book: _emptyBook));
 

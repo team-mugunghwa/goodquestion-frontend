@@ -8,6 +8,7 @@ import '../../../../core/di/injector.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_motion.dart';
+import '../../../../core/theme/app_shadows.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
@@ -15,6 +16,7 @@ import '../../../../core/widgets/app_canvas.dart';
 import '../../../../core/widgets/app_state_views.dart';
 import '../../../../core/widgets/cosmic_backdrop.dart';
 import '../../../../core/widgets/kid_chips.dart';
+import '../../../../core/widgets/press_scale.dart';
 import '../../../../core/widgets/screen_metrics.dart';
 import '../../../../core/widgets/skeleton_box.dart';
 import '../../../../core/widgets/story_thumbnail.dart';
@@ -154,6 +156,19 @@ class WordListView extends StatelessWidget {
       );
     }
     if (vm.isEmptyByFilter) {
+      // 어느 필터 때문에 비었는지에 따라 나가는 문이 다릅니다.
+      // 좋아요 필터를 켠 채로 "전체 이야기"를 눌러도 여전히 비어 있으면
+      // 아이는 앱이 고장 난 줄 압니다.
+      if (vm.likedOnly) {
+        return AppKidEmptyView(
+          key: const ValueKey<String>('words-empty-liked'),
+          message: WordStrings.emptyLiked,
+          actionIcon: AppIcons.likeOff,
+          actionLabel: WordStrings.showAllWords,
+          messageStyle: metrics.text(AppTypography.kidBody),
+          onAction: vm.toggleLikedOnly,
+        );
+      }
       return AppKidEmptyView(
         key: const ValueKey<String>('words-empty-filter'),
         message: WordStrings.emptyInStory,
@@ -220,52 +235,77 @@ class _Header extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: AppSpacing.md),
-          _Avatar(name: vm.childName, image: vm.childAvatar),
+          // 아바타를 뗐습니다. 누를 수도 없고 "누구의 단어장인지"는 이미
+          // 홈에서 정해져 오는 정보라, 헤더 오른쪽 자리는 **조작부**가
+          // 차지하는 편이 낫습니다. 좋아요 필터가 여기 옵니다.
+          if (vm.likedCount > 0) ...<Widget>[
+            const SizedBox(width: AppSpacing.md),
+            _LikedFilterButton(
+              key: const ValueKey<String>('words-liked-filter'),
+              vm: vm,
+              metrics: metrics,
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-class _Avatar extends StatelessWidget {
-  const _Avatar({required this.name, required this.image});
+/// 좋아요한 단어만 보기. 하트를 누르는 이유가 되는 자리입니다.
+///
+/// 켜진 상태는 색만이 아니라 **채워진 하트**로도 구분합니다 —
+/// 색을 구분하기 어려운 아이도 지금 걸러진 상태인지 알아야 합니다.
+class _LikedFilterButton extends StatelessWidget {
+  const _LikedFilterButton({
+    super.key,
+    required this.vm,
+    required this.metrics,
+  });
 
-  final String? name;
-  final String? image;
+  final WordListViewModel vm;
+  final ScreenMetrics metrics;
 
   @override
   Widget build(BuildContext context) {
-    final String? avatar = image;
-    return ClipOval(
-      child: SizedBox.square(
-        dimension: AppSizes.tapChildSecondary,
-        child: avatar != null
-            ? Image.asset(
-                avatar,
-                fit: BoxFit.cover,
-                excludeFromSemantics: true,
-                errorBuilder: (BuildContext context, Object e, StackTrace? s) =>
-                    const _AvatarFallback(),
-              )
-            : const _AvatarFallback(),
+    final bool on = vm.likedOnly;
+    final Color foreground = on ? AppColors.surface : AppColors.brandBlueDeep;
+    return Semantics(
+      selected: on,
+      button: true,
+      child: PressScale(
+        onTap: vm.toggleLikedOnly,
+        borderRadius: AppRadius.pill,
+        semanticLabel: WordStrings.likedOnly,
+        child: Container(
+          height: AppSizes.tapChildSecondary,
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+          decoration: BoxDecoration(
+            color: on ? AppColors.brandBlueDeep : AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            boxShadow: AppShadows.soft,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(
+                on ? AppIcons.like : AppIcons.likeOff,
+                size: AppSizes.iconInline,
+                color: foreground,
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Text(
+                '${vm.likedCount}',
+                style: metrics
+                    .text(AppTypography.kidLabel)
+                    .copyWith(color: foreground),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
-}
-
-class _AvatarFallback extends StatelessWidget {
-  const _AvatarFallback();
-
-  @override
-  Widget build(BuildContext context) => const ColoredBox(
-    color: AppColors.brandMint,
-    child: Icon(
-      AppIcons.childProfile,
-      size: AppSizes.iconInline,
-      color: AppColors.ink900,
-    ),
-  );
 }
 
 /// 섹션2 — 이야기 필터. 글자보다 **이야기 대표 이미지**가 앞섭니다.

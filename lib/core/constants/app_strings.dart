@@ -278,6 +278,13 @@ abstract final class WordStrings {
   static const String exampleAdvanced = '조금 어려운 문장에도 도전!';
   static const String like = '좋아요';
   static const String unlike = '좋아요 해제';
+
+  /// 헤더의 좋아요 필터 버튼.
+  static const String likedOnly = '좋아요한 단어만 보기';
+
+  /// 좋아요 필터를 켰는데 이 이야기에는 좋아요한 단어가 없을 때.
+  static const String emptyLiked = '여기엔 좋아요한 단어가 없어.\n마음에 드는 단어에 하트를 눌러 봐!';
+  static const String showAllWords = '전체 보기';
   static const String practice = '따라 말하기';
   static const String close = '닫기';
 }
