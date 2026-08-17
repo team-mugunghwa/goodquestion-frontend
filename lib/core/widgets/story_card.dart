@@ -70,16 +70,21 @@ class StoryCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Text(
-            title,
-            maxLines: titleMaxLines,
-            overflow: TextOverflow.ellipsis,
-            // 화면 제목 크기(kidTitle 32)를 카드 안에 그대로 쓰면 좁은 셀에서
-            // 제목이 잘립니다. 카드 제목은 버튼 급(22) 굵은 글씨면 충분합니다.
-            // kidButton 은 흰 글자라 카드에서는 잉크색으로 바꿉니다.
-            style: metrics
-                .text(AppTypography.kidButton)
-                .copyWith(color: AppColors.ink900),
+          // 제목은 남는 높이 안에서 접힙니다. 셀 높이를 아무리 정확히
+          // 계산해도 폰트·글자 확대 설정에 따라 몇 px 씩 어긋나는데,
+          // Flexible 이면 그 몇 px 때문에 넘치는 대신 줄 수가 줄어듭니다.
+          Flexible(
+            child: Text(
+              title,
+              maxLines: titleMaxLines,
+              overflow: TextOverflow.ellipsis,
+              // 화면 제목 크기(kidTitle 32)를 카드 안에 그대로 쓰면 좁은 셀에서
+              // 제목이 잘립니다. 카드 제목은 버튼 급(22) 굵은 글씨면 충분합니다.
+              // kidButton 은 흰 글자라 카드에서는 잉크색으로 바꿉니다.
+              style: metrics
+                  .text(AppTypography.kidButton)
+                  .copyWith(color: AppColors.ink900),
+            ),
           ),
           const SizedBox(height: AppSpacing.sm),
           // 칩은 **한 줄**입니다. 줄바꿈을 허용하면 좁은 셀에서만 두 줄이
