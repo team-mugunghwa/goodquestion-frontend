@@ -374,12 +374,39 @@ class _SentenceCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppRadius.xl),
           boxShadow: AppShadows.soft,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        // 카드 전체가 눌리지만, 그것만으로는 **눌리는 것인지 알 수 없습니다.**
+        // 아이는 버튼처럼 생긴 것을 찾지, 카드를 눌러 보지 않습니다.
+        // 오른쪽에 시작 버튼을 붙여 "여기를 누른다"를 눈에 보이게 합니다.
+        child: Row(
           children: <Widget>[
-            KidInfoChip(label: label, icon: AppIcons.speak, metrics: metrics),
-            const SizedBox(height: AppSpacing.md),
-            Text(sentence.text, style: metrics.text(AppTypography.kidBody)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  KidInfoChip(
+                    label: label,
+                    icon: AppIcons.speak,
+                    metrics: metrics,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    sentence.text,
+                    style: metrics.text(AppTypography.kidBody),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.lg),
+            // 카드가 이미 같은 곳으로 가므로 버튼은 표시만 합니다 —
+            // 탭을 두 번 받으면 문장이 두 번 열립니다.
+            IgnorePointer(
+              child: KidPrimaryButton(
+                icon: AppIcons.play,
+                label: SentencePracticeStrings.pickStart,
+                labelStyle: metrics.text(AppTypography.kidButton),
+                onPressed: onTap,
+              ),
+            ),
           ],
         ),
       ),
@@ -712,33 +739,47 @@ class _NotMatchedResult extends StatelessWidget {
             style: metrics.text(AppTypography.kidBody),
           ),
           const SizedBox(height: AppSpacing.lg),
-          Text(
-            SentencePracticeStrings.targetLabel,
-            style: metrics
-                .text(AppTypography.kidLabel)
-                .copyWith(color: AppColors.ink500),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          KidSpeechBubble(
-            child: Text(
-              result?.targetSentence ?? vm.targetSentence ?? '',
-              style: metrics.text(AppTypography.kidBody),
-            ),
+          // 이쪽은 캐릭터 말풍선이라 왼쪽에 붙습니다. 라벨도 왼쪽입니다.
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                SentencePracticeStrings.targetLabel,
+                style: metrics
+                    .text(AppTypography.kidLabel)
+                    .copyWith(color: AppColors.ink500),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              KidSpeechBubble(
+                child: Text(
+                  result?.targetSentence ?? vm.targetSentence ?? '',
+                  style: metrics.text(AppTypography.kidBody),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: AppSpacing.lg),
-          Text(
-            SentencePracticeStrings.spokenLabel,
-            style: metrics
-                .text(AppTypography.kidLabel)
-                .copyWith(color: AppColors.ink500),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          KidSpeechBubble(
-            speaker: KidSpeaker.child,
-            child: Text(
-              vm.spokenText ?? '',
-              style: metrics.text(AppTypography.kidBody),
-            ),
+          // 아이 말풍선은 **오른쪽**에 붙습니다. 라벨만 왼쪽 끝에 두면 둘이
+          // 화면 양끝으로 갈라져 서로 다른 것을 가리키는 것처럼 보입니다.
+          // 라벨을 말풍선 쪽으로 붙여 한 덩어리로 읽히게 합니다.
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: <Widget>[
+              Text(
+                SentencePracticeStrings.spokenLabel,
+                style: metrics
+                    .text(AppTypography.kidLabel)
+                    .copyWith(color: AppColors.ink500),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              KidSpeechBubble(
+                speaker: KidSpeaker.child,
+                child: Text(
+                  vm.spokenText ?? '',
+                  style: metrics.text(AppTypography.kidBody),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: AppSpacing.xl),
           Center(

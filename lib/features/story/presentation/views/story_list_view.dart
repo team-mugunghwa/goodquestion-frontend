@@ -72,7 +72,9 @@ class StoryListView extends StatelessWidget {
             // 내비 블록(위 여백 + 바 + 아래 여백) 높이만큼 올려 앉힙니다.
             const CosmicBackdrop(
               seed: 23,
-              planetCenterX: 0.22,
+              // 단어장과 같은 자리. 화면마다 달이 좌우로 튀면 탭을 옮길 때
+              // 배경이 흔들리는 것처럼 보입니다.
+              planetCenterX: 0.78,
               bottomInset: AppSizes.bottomNav + AppSpacing.lg,
             ),
             SafeArea(bottom: false, child: _layout(context, vm)),
