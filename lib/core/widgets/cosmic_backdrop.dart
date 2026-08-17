@@ -315,15 +315,25 @@ class _StarFieldPainter extends CustomPainter {
   List<_Star>? _stars;
   Size _starsFor = Size.zero;
 
-  /// 유성 두 줄기의 (시작 구간, 시작점, 이동 방향). 루프당 두 번 지나갑니다.
+  /// 유성들의 (시작 구간, 시작점, 이동 방향).
+  ///
+  /// 10초 루프에 두 줄기만 두니 "지금 애니메이션이 도는 중인가"를 한참
+  /// 지켜봐야 알 수 있었습니다. 여섯 줄기로 늘리고 시작 구간을 흩어서,
+  /// 화면에 들어온 지 2초 안에 하나는 지나가게 했습니다. 방향과 길이를
+  /// 제각각 두어 같은 별이 반복되는 것처럼 보이지 않게 합니다.
   static const List<(double, Offset, Offset)> _meteors =
       <(double, Offset, Offset)>[
-        (0.18, Offset(0.68, 0.06), Offset(-0.20, 0.13)),
-        (0.62, Offset(0.18, 0.10), Offset(0.22, 0.11)),
+        (0.04, Offset(0.72, 0.04), Offset(-0.22, 0.14)),
+        (0.20, Offset(0.16, 0.10), Offset(0.24, 0.12)),
+        (0.36, Offset(0.90, 0.14), Offset(-0.28, 0.10)),
+        (0.52, Offset(0.40, 0.03), Offset(0.18, 0.16)),
+        (0.68, Offset(0.06, 0.20), Offset(0.26, 0.09)),
+        (0.84, Offset(0.58, 0.08), Offset(-0.18, 0.15)),
       ];
 
   /// 유성 하나가 하늘을 가로지르는 데 쓰는 루프 구간.
-  static const double _meteorWindow = 0.12;
+  /// 시작 간격(0.16)보다 짧아야 여섯이 겹쳐 쏟아지지 않습니다.
+  static const double _meteorWindow = 0.13;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -419,22 +429,24 @@ class _StarFieldPainter extends CustomPainter {
         (from.dy + delta.dy * eased) * size.width,
       );
       final Offset direction = -delta / delta.distance;
-      final Offset tail = head + direction * (72 + 24 * fade);
+      // 꼬리가 짧으면 별이 그냥 깜빡인 것처럼 보입니다. 길게 끌어야
+      // "가로질렀다"가 읽힙니다.
+      final Offset tail = head + direction * (120 + 40 * fade);
 
       final Paint streak = Paint()
-        ..strokeWidth = 2.4
+        ..strokeWidth = 3
         ..strokeCap = StrokeCap.round
         ..shader = LinearGradient(
           colors: <Color>[
-            palette.meteorColor.withValues(alpha: 0.5 * fade),
+            palette.meteorColor.withValues(alpha: 0.75 * fade),
             palette.meteorColor.withValues(alpha: 0.0),
           ],
         ).createShader(Rect.fromPoints(head, tail));
       canvas.drawLine(head, tail, streak);
       canvas.drawCircle(
         head,
-        2.6,
-        Paint()..color = palette.meteorColor.withValues(alpha: 0.55 * fade),
+        3.2,
+        Paint()..color = palette.meteorColor.withValues(alpha: 0.85 * fade),
       );
     }
   }

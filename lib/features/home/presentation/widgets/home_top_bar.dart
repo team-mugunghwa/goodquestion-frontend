@@ -6,7 +6,6 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_shadows.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
-import '../../../../core/widgets/child_avatar.dart';
 import '../../../../core/widgets/press_scale.dart';
 import '../../../../core/widgets/screen_metrics.dart';
 import '../../../../core/widgets/skeleton_box.dart';
@@ -152,57 +151,52 @@ class _ProfileArea extends StatelessWidget {
       semanticLabel: profile == null
           ? HomeStrings.profileSemantics
           : '${profile.name} · ${HomeStrings.profileSemantics}',
+      // 아바타를 뗐습니다. 인사말이 이미 이름을 부르고 있어서 얼굴 그림이
+      // 같은 말을 한 번 더 하고, 왼쪽 구석에 원·이름·부제·화살표가 몰려
+      // 상단이 빽빽해 보였습니다. 남는 건 **인사말과 바꾸기 화살표**뿐입니다.
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            if (isLoading)
-              const SkeletonBox(
-                width: AppSizes.tapChildSecondary,
-                height: AppSizes.tapChildSecondary,
-              )
-            else
-              ChildAvatar(name: profile?.name, image: profile?.avatar),
-            const SizedBox(width: AppSpacing.sm),
-            if (isLoading)
-              const SkeletonBox(width: AppSizes.mic, height: AppSpacing.lg)
+        child: isLoading
+            ? const SkeletonBox(width: AppSizes.mic, height: AppSizes.iconChild)
             // 아이 프로필이 없으면 이름 자리를 비워 둡니다. 여기서 "이름을
             // 만들어"라고 부르면, 정작 불러오기에 실패한 경우에도 그렇게 보입니다.
-            else if (profile != null)
-              // 이름표 대신 인사말 두 줄. 홈이 아이에게 말을 거는 화면이
-              // 됩니다 — 캐릭터가 말한다는 문구 원칙 그대로입니다.
-              Flexible(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Text(
-                      HomeStrings.greeting(profile.name),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: metrics.text(AppTypography.kidTitle),
+            : profile == null
+            ? const SizedBox.shrink()
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Text(
+                          HomeStrings.greeting(profile.name),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: metrics.text(AppTypography.kidTitle),
+                        ),
+                        Text(
+                          HomeStrings.greetingSub,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: metrics
+                              .text(AppTypography.kidLabel)
+                              .copyWith(color: AppColors.ink500),
+                        ),
+                      ],
                     ),
-                    Text(
-                      HomeStrings.greetingSub,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: metrics
-                          .text(AppTypography.kidLabel)
-                          .copyWith(color: AppColors.ink500),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  // 이름 옆의 작은 화살표. 이름이 곧 라벨이라 아이콘은
+                  // "여기를 누르면 바뀐다"는 표시만 합니다.
+                  const Icon(
+                    AppIcons.switchChild,
+                    size: AppSizes.iconCaption,
+                    color: AppColors.ink500,
+                  ),
+                ],
               ),
-            const SizedBox(width: AppSpacing.sm),
-            // 아이콘 하나로 "바꾸기"를 알릴 수는 없지만, 이름이 곧 라벨입니다.
-            const Icon(
-              AppIcons.switchChild,
-              size: AppSizes.iconInline,
-              color: AppColors.ink500,
-            ),
-          ],
-        ),
       ),
     );
   }
