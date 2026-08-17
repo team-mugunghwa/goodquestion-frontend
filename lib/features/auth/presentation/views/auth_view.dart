@@ -99,7 +99,9 @@ class _AuthViewState extends State<AuthView> {
           fit: StackFit.expand,
           children: <Widget>[
             // 서비스의 첫 화면이자 "내 행성" 세계관의 예고편.
-            const CosmicBackdrop(seed: 3),
+            // 로그인 카드가 화면 가운데를 차지해서, 달이 가운데 있으면
+            // 카드에 가려 윗머리만 남습니다. 오른쪽으로 비켜 앉힙니다.
+            const CosmicBackdrop(seed: 3, planetCenterX: 0.82),
             SafeArea(
               child: Center(
                 child: ConstrainedBox(

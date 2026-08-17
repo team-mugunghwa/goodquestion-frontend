@@ -301,6 +301,10 @@ abstract final class SentencePracticeStrings {
 
   // ── 1단계 예문 고르기 ──
   static const String pickGuide = '어떤 문장을 따라 말해 볼까?';
+
+  /// 예문 카드 오른쪽의 시작 버튼. 카드 전체가 눌리지만, 아이는 **버튼이
+  /// 보여야** 누를 수 있다는 걸 압니다.
+  static const String pickStart = '시작';
   static const String typeStory = '이야기 예문';
   static const String typeDaily = '일상 예문';
   static const String typeAdvanced = '심화 예문';
@@ -510,6 +514,9 @@ abstract final class AuthStrings {
   static const String signIn = '로그인';
   static const String socialSignIn = '소셜 로그인';
   static const String emailSignIn = '이메일 로그인';
+
+  /// 소셜 버튼 아래 한 줄. 왜 이 경로를 먼저 권하는지 짧게 말해 줍니다.
+  static const String socialHint = '간편하고 안전하게 시작하세요';
   static const String kakaoSignIn = '카카오로 계속하기';
   static const String googleSignIn = '구글로 계속하기';
   static const String keepSignedIn = '로그인 유지';

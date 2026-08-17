@@ -19,7 +19,6 @@ import '../../../../core/widgets/kid_chips.dart';
 import '../../../../core/widgets/press_scale.dart';
 import '../../../../core/widgets/screen_metrics.dart';
 import '../../../../core/widgets/skeleton_box.dart';
-import '../../../../core/widgets/story_thumbnail.dart';
 import '../../domain/entities/saved_word.dart';
 import '../../domain/entities/word_group.dart';
 import '../../domain/usecases/get_word_book_use_case.dart';
@@ -430,22 +429,14 @@ class _GroupHeader extends StatelessWidget {
     final String? cover = group.storyImage;
     return Row(
       children: <Widget>[
-        // 표지가 있을 때만 그립니다. 없을 때 책 아이콘을 원에 박아 넣던
-        // 예전 폴백은 이야기마다 똑같은 그림이 반복돼 자리만 먹었습니다.
-        // 모서리는 원이 아니라 둥근 사각 — 표지는 얼굴이 아니라 그림입니다.
+        // 표지가 **실제로 그려질 때만** 자리를 냅니다.
+        //
+        // [StoryThumbnail] 을 쓰면 이미지가 없거나 실패했을 때 코드 표지로
+        // 떨어지고, 거기 책 글리프가 박힙니다. 이야기마다 똑같은 책이
+        // 반복되면 아무 정보도 아닌 장식이 되고 촌스럽습니다.
+        // 여기서는 실패하면 **아무것도 안 그립니다** — 제목만 남습니다.
         if (cover != null) ...<Widget>[
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-            child: SizedBox.square(
-              dimension: AppSizes.iconChild,
-              child: StoryThumbnail(
-                image: cover,
-                fallbackIcon: AppIcons.stories,
-                aspectRatio: StoryThumbnail.square,
-                iconSize: AppSizes.iconCaption,
-              ),
-            ),
-          ),
+          _GroupCover(path: cover),
           const SizedBox(width: AppSpacing.sm),
         ],
         // 화면 제목(32)과 같은 크기를 쓰면 묶음 이름이 화면의 주인처럼
@@ -470,6 +461,43 @@ class _GroupHeader extends StatelessWidget {
               .copyWith(color: AppColors.ink500),
         ),
       ],
+    );
+  }
+}
+
+/// 이야기 묶음 앞의 작은 표지.
+///
+/// 네트워크든 번들이든 **실패하면 사라집니다.** 폴백 그림을 두지 않는 것이
+/// 이 위젯의 요점입니다 — 제목만 남는 편이 낫습니다.
+class _GroupCover extends StatelessWidget {
+  const _GroupCover({required this.path});
+
+  final String path;
+
+  static const Widget _nothing = SizedBox.shrink();
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget image = path.startsWith('http')
+        ? Image.network(
+            path,
+            fit: BoxFit.cover,
+            excludeFromSemantics: true,
+            gaplessPlayback: true,
+            errorBuilder: (_, _, _) => _nothing,
+            loadingBuilder:
+                (BuildContext context, Widget child, ImageChunkEvent? p) =>
+                    p == null ? child : _nothing,
+          )
+        : Image.asset(
+            path,
+            fit: BoxFit.cover,
+            excludeFromSemantics: true,
+            errorBuilder: (_, _, _) => _nothing,
+          );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      child: SizedBox.square(dimension: AppSizes.iconChild, child: image),
     );
   }
 }
