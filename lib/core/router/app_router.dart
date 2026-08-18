@@ -5,6 +5,10 @@ import '../../features/auth/data/datasources/auth_token_store.dart';
 import '../../features/auth/presentation/views/account_recovery_view.dart';
 import '../../features/auth/presentation/views/auth_view.dart';
 import '../../features/auth/presentation/views/password_reset_view.dart';
+import '../../features/free_talk/domain/entities/free_talk.dart';
+import '../../features/free_talk/domain/repositories/free_talk_repository.dart';
+import '../../features/free_talk/presentation/views/free_talk_characters_view.dart';
+import '../../features/free_talk/presentation/views/free_talk_view.dart';
 import '../../features/helpdesk/presentation/views/guide_list_view.dart';
 import '../../features/helpdesk/presentation/views/inquiry_detail_view.dart';
 import '../../features/helpdesk/presentation/views/inquiry_list_view.dart';
@@ -113,7 +117,44 @@ GoRouter createAppRouter({
                 PlayRecapPage(
                   sessionId: state.pathParameters[AppRoutes.sessionIdParam]!,
                   repository: getIt<PlayRepository>(),
+                  // 완료 화면의 "○○와 더 이야기하기" 진입점이 쓰는 값.
+                  // 활동 API 가 이야기·인물을 안 내려줘서 재생 화면이
+                  // 실어 보냅니다. → [AppRoutes.playRecapOf]
+                  storyId: state.uri.queryParameters[AppRoutes.storyIdParam],
+                  lastCharacterName:
+                      state.uri.queryParameters[AppRoutes.characterNameParam],
                 ),
+          ),
+        ],
+      ),
+      // 후속 자유 대화 — 인물 고르기 → 대화.
+      //
+      // `/stories/:storyId` 아래 중첩하지 않습니다. 이야기 완료 화면에서
+      // `go` 로 들어오는데, 중첩하면 go_router 가 부모(이야기 상세)까지 함께
+      // 세워 보이지도 않는 화면이 서버를 한 번 더 부릅니다.
+      GoRoute(
+        path: AppRoutes.freeTalkPath,
+        builder: (BuildContext context, GoRouterState state) =>
+            FreeTalkCharactersPage(
+              storyId: state.pathParameters[AppRoutes.storyIdParam]!,
+              repository: getIt<FreeTalkRepository>(),
+            ),
+        routes: <RouteBase>[
+          GoRoute(
+            path: ':${AppRoutes.characterIdParam}',
+            builder: (BuildContext context, GoRouterState state) {
+              // 인물 고르기가 고른 인물을 extra 로 실어 보냅니다. 주소로 바로
+              // 들어오면(새로고침·딥링크) null 이고, 시작 응답이 이름을 채웁니다.
+              final Object? extra = state.extra;
+              return FreeTalkPage(
+                storyId: state.pathParameters[AppRoutes.storyIdParam]!,
+                characterId: state.pathParameters[AppRoutes.characterIdParam]!,
+                repository: getIt<FreeTalkRepository>(),
+                // STT·TTS 는 학습 대화와 같은 `/api/stt`·`/api/tts` 입니다.
+                voiceRepository: getIt<PlayRepository>(),
+                initialCharacter: extra is FreeTalkCharacter ? extra : null,
+              );
+            },
           ),
         ],
       ),

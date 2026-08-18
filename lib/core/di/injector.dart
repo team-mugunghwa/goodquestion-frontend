@@ -11,6 +11,9 @@ import '../../features/auth/data/datasources/oauth_code_provider.dart';
 import '../../features/auth/data/repositories/auth_repository_impl.dart';
 import '../../features/auth/domain/repositories/auth_repository.dart';
 import '../../features/auth/domain/usecases/auth_use_cases.dart';
+import '../../features/free_talk/data/datasources/free_talk_remote_data_source.dart';
+import '../../features/free_talk/data/repositories/free_talk_repository_impl.dart';
+import '../../features/free_talk/domain/repositories/free_talk_repository.dart';
 import '../../features/helpdesk/data/datasources/helpdesk_remote_data_source.dart';
 import '../../features/helpdesk/data/repositories/helpdesk_repository_impl.dart';
 import '../../features/helpdesk/domain/repositories/helpdesk_repository.dart';
@@ -196,6 +199,23 @@ Future<void> configureDependencies() async {
     ..registerLazySingleton<DialogueWordCapture>(
       () => RemoteDialogueWordCapture(
         getIt<DioClient>(),
+        getIt<ChildProfileRepository>(),
+      ),
+    );
+
+  // ---- free talk (후속 자유 대화) ----
+  //
+  // 목업 저장소가 없습니다. 이야기를 완주한 아이만 들어오는 화면이라
+  // 서버 없이 볼 수 있는 상태가 애초에 만들어지지 않습니다.
+  // ChildProfileRepository 는 아래 mypage 절에서 등록되지만, lazySingleton 은
+  // 첫 사용 시점에 만들어지므로 순서가 문제되지 않습니다.
+  getIt
+    ..registerLazySingleton<FreeTalkRemoteDataSource>(
+      () => FreeTalkRemoteDataSource(getIt<DioClient>()),
+    )
+    ..registerLazySingleton<FreeTalkRepository>(
+      () => FreeTalkRepositoryImpl(
+        getIt<FreeTalkRemoteDataSource>(),
         getIt<ChildProfileRepository>(),
       ),
     );

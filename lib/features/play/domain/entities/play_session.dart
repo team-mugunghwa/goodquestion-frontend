@@ -254,6 +254,7 @@ class PlaySessionSnapshot {
   const PlaySessionSnapshot({
     required this.phase,
     required this.currentScene,
+    this.storyId,
     this.openingText,
     this.openingAudioUrl,
     this.openingAudioTimings = const <PlayAudioTiming>[],
@@ -263,6 +264,15 @@ class PlaySessionSnapshot {
 
   final PlayPhase phase;
   final PlayScene? currentScene;
+
+  /// 이 세션이 어느 이야기인지. `SessionResponse.storyId` 에서 옵니다 —
+  /// 이어하기 응답에만 있고 **장면 전환 응답에는 없습니다**(`SceneAdvanceResponse`).
+  /// 그래서 장면이 넘어가면 `null` 이 되고, 화면이 처음 받은 값을 들고
+  /// 있어야 합니다. → `docs/API.md` `SessionResponse`
+  ///
+  /// 쓰는 곳은 하나뿐입니다 — 이야기가 끝난 뒤 완료 화면이 후속 자유 대화로
+  /// 넘어갈 때(`AppRoutes.freeTalkOf`).
+  final String? storyId;
   final String? openingText;
   final String? openingAudioUrl;
   final List<PlayAudioTiming> openingAudioTimings;

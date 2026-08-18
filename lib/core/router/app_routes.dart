@@ -26,6 +26,16 @@ abstract final class AppRoutes {
   /// 말하기 후 활동 (템플릿). 이동할 때는 [playRecapOf] 를 쓰세요.
   static const String playRecapPath = '/play/:sessionId/recap';
 
+  /// 후속 자유 대화 — 인물 고르기 (템플릿). 이동할 때는 [freeTalkOf] 를 쓰세요.
+  ///
+  /// `/stories/:storyId` 아래 중첩하지 않습니다. 이야기 완료 화면에서 `go` 로
+  /// 들어오는데, 중첩하면 go_router 가 부모(이야기 상세)까지 함께 세워
+  /// 보이지도 않는 화면이 서버를 한 번 더 부릅니다.
+  static const String freeTalkPath = '/free-talk/:storyId';
+
+  /// 후속 자유 대화 — 대화 화면 (템플릿). 이동할 때는 [freeTalkChatOf] 를 쓰세요.
+  static const String freeTalkChatPath = '/free-talk/:storyId/:characterId';
+
   /// 내 행성
   static const String planet = '/planet';
 
@@ -107,6 +117,7 @@ abstract final class AppRoutes {
   /// 경로 파라미터 이름. `state.pathParameters[AppRoutes.storyIdParam]`
   static const String storyIdParam = 'storyId';
   static const String sessionIdParam = 'sessionId';
+  static const String characterIdParam = 'characterId';
   static const String noticeIdParam = 'noticeId';
   static const String inquiryIdParam = 'inquiryId';
   static const String wordIdParam = 'wordId';
@@ -128,7 +139,35 @@ abstract final class AppRoutes {
   /// [playOf] 가 싣는 쿼리 파라미터 이름.
   static const String totalScenesParam = 'totalScenes';
 
-  static String playRecapOf(String sessionId) => '/play/$sessionId/recap';
+  /// 말하기 후 활동 주소.
+  ///
+  /// [storyId] · [characterName] 은 완료 화면의 "○○와 더 이야기하기" 진입점이
+  /// 쓰는 값입니다. 활동 API 는 세션만 알고 이야기·인물을 안 내려줘서,
+  /// 화면을 여는 재생 화면이 실어 보냅니다. `extra` 가 아니라 쿼리
+  /// 파라미터인 이유는 [playOf] 와 같습니다 - 새로고침·딥링크로 들어와도
+  /// 값이 살아남습니다. 없으면 진입점을 그리지 않습니다.
+  static String playRecapOf(
+    String sessionId, {
+    String? storyId,
+    String? characterName,
+  }) {
+    final Map<String, String> query = <String, String>{
+      if (storyId != null && storyId.isNotEmpty) storyIdParam: storyId,
+      if (characterName != null && characterName.isNotEmpty)
+        characterNameParam: characterName,
+    };
+    final String path = '/play/$sessionId/recap';
+    if (query.isEmpty) return path;
+    return Uri(path: path, queryParameters: query).toString();
+  }
+
+  /// [playRecapOf] 가 싣는 인물 이름 쿼리 파라미터.
+  static const String characterNameParam = 'characterName';
+
+  static String freeTalkOf(String storyId) => '/free-talk/$storyId';
+
+  static String freeTalkChatOf(String storyId, String characterId) =>
+      '/free-talk/$storyId/$characterId';
 
   static String wordPracticeOf(String wordId) => '/words/$wordId/practice';
 

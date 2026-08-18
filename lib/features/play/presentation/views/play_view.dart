@@ -207,6 +207,16 @@ class _PlayPageState extends State<PlayPage> {
   /// 지금 화면이 붙잡고 있는 장면. 장면이 바뀌는 순간을 [_activateSnapshot]
   /// 이 알아채고 이전 장면의 아이 발화를 지우는 데 씁니다.
   String? _activeSceneId;
+
+  /// 이 세션의 이야기. **이어하기 응답에만 실려 오고 장면 전환 응답에는
+  /// 없어서**, 한 번 받으면 들고 있습니다. 안 들고 있으면 장면이 하나만
+  /// 넘어가도 값이 사라져, 정작 필요한 마지막 순간(완료 화면의 후속 자유
+  /// 대화 진입점)에 비어 있습니다.
+  String? _storyId;
+
+  /// 마지막으로 말을 걸었던 인물. 완료 화면 버튼이 이 이름을 부릅니다.
+  /// 장면이 바뀔 때마다 갱신되므로 **끝날 때 값은 마지막 대화 상대**입니다.
+  String? _lastCharacterName;
   String? _resultImageUrl;
   DialogueCharacterManifest? _characterManifest;
   DialogueCharacterStateMachine? _character;
@@ -345,6 +355,7 @@ class _PlayPageState extends State<PlayPage> {
       if (!mounted) return;
       setState(() {
         _snapshot = snapshot;
+        _storyId ??= snapshot.storyId;
         _mission = recoveredMission;
         _characterReply = null;
         _fixedDialogue = false;
@@ -421,6 +432,10 @@ class _PlayPageState extends State<PlayPage> {
     // 말을 거는데 아직 하지도 않은 대답이 떠 있으면 안 됩니다. 같은 장면을
     // 다시 활성화하는 경우(이어하기 복원)에는 그대로 둡니다.
     final String? sceneId = snapshot.currentScene?.sceneId;
+    final String? characterName = snapshot.currentScene?.characterName;
+    if (characterName != null && characterName.isNotEmpty) {
+      _lastCharacterName = characterName;
+    }
     if (sceneId != _activeSceneId) {
       setState(() {
         _activeSceneId = sceneId;
@@ -508,7 +523,15 @@ class _PlayPageState extends State<PlayPage> {
     if (_recapHandoffDone || !mounted) return;
     _recapHandoffDone = true;
     _recapHandoffTimer?.cancel();
-    context.go(AppRoutes.playRecapOf(widget.sessionId));
+    context.go(
+      AppRoutes.playRecapOf(
+        widget.sessionId,
+        // 완료 화면의 "○○와 더 이야기하기" 진입점이 쓰는 값. 활동 API 가
+        // 이야기·인물을 안 내려줘서 여기서 실어 보냅니다.
+        storyId: _storyId,
+        characterName: _lastCharacterName,
+      ),
+    );
   }
 
   Future<void> _loadOpeningMessage() async {
@@ -2412,7 +2435,11 @@ class _StoryControls extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: <Widget>[
-        _ControlButton(label: '나가기', icon: AppIcons.close, onPressed: onExit),
+        DialogueControlButton(
+          label: '나가기',
+          icon: AppIcons.close,
+          onPressed: onExit,
+        ),
         const SizedBox(width: 12),
         Expanded(
           child: Semantics(
@@ -2441,64 +2468,25 @@ class _StoryControls extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        _ControlButton(
+        DialogueControlButton(
           label: '다시 듣기',
           icon: AppIcons.replay,
           onPressed: onReplay,
         ),
         const SizedBox(width: 8),
-        _ControlButton(
+        DialogueControlButton(
           label: soundOn ? '소리 끄기' : '소리 켜기',
           icon: soundOn ? AppIcons.soundOn : AppIcons.soundOff,
           onPressed: onSound,
         ),
         const SizedBox(width: 8),
-        _ControlButton(
+        DialogueControlButton(
           label: isPaused ? '계속 듣기' : '잠시 멈춤',
           icon: isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
           onPressed: onPause,
           emphasized: true,
         ),
       ],
-    );
-  }
-}
-
-class _ControlButton extends StatelessWidget {
-  const _ControlButton({
-    required this.label,
-    required this.icon,
-    required this.onPressed,
-    this.emphasized = false,
-  });
-
-  final String label;
-  final IconData icon;
-  final VoidCallback onPressed;
-  final bool emphasized;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: label,
-      child: Material(
-        color: emphasized ? const Color(0xFFFFD56A) : const Color(0xCC102B48),
-        shape: const CircleBorder(),
-        elevation: 4,
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onPressed,
-          child: SizedBox(
-            width: 52,
-            height: 52,
-            child: Icon(
-              icon,
-              size: 28,
-              color: emphasized ? const Color(0xFF17314A) : Colors.white,
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

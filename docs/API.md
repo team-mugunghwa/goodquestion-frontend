@@ -523,6 +523,32 @@ _(도메인별 코드는 기능 추가 시 여기에 계속 채웁니다)_
 | POST | `/start` | — | `PostActivityStartResponse` | ⛔ |
 | GET | ``| — |`PostActivityStatusResponse`| ⛔ | | POST |`/order`|`CardSubmitRequest`|`CardSubmitResponse`| ⛔ | | POST |`/retelling`|`RetellingRequest`|`RetellingResponse` | ⛔ |  |  |
 
+### 2.10-1 후속 자유 대화 — `/api/.../free-talk`
+
+이야기를 **완주한 아이만** 그 이야기의 인물과 이어서 대화합니다. 학습 대화와
+달리 목표 요소·미션·별가루가 없고, 리포트에도 반영되지 않습니다.
+→ 설계 문서 「후속 자유 대화」
+
+| 메서드 | 경로 | 요청 | 응답 | 상태 |
+| --- | --- | --- | --- | --- |
+| GET | `/api/children/{childId}/stories/{storyId}/free-talk/characters` | — | `List<FreeTalkCharacterResponse>` | ⛔ |
+| POST | `/api/children/{childId}/free-talk` | `{ storyId, characterId }` | `FreeTalkStartResponse` | ⛔ |
+| POST | `/api/free-talk/{freeTalkId}/messages` | `{ text }` + `Idempotency-Key` | `FreeTalkTurnResponse` | ⛔ |
+| POST | `/api/free-talk/{freeTalkId}/end` | — | `{ closing }` | ⛔ |
+
+- `FreeTalkCharacterResponse` — `characterId` · `name` · `characterKey` ·
+  `thumbnailUrl`(선택) · `lastTalkedAt`(선택)
+- `FreeTalkStartResponse` — `freeTalkId` · `character` · `opening{text,audioUrl,emotion}` · `maxTurns`
+- `FreeTalkTurnResponse` — `characterMessage{text,audioUrl,emotion}` · `turnCount` · `ended`
+- 완주하지 않은 이야기는 인물 목록에서 404. 화면은 에러가 아니라 안내로 돌려세웁니다.
+- **STT·TTS 는 학습 대화와 같은 `/api/stt` · `/api/tts` 를 씁니다.** 자유 대화
+  전용 음성 엔드포인트를 따로 두지 않습니다.
+- `maxTurns` 를 받지만 **화면에 그리지 않습니다**. 대화가 닫히는 판단은
+  `ended` 하나로 합니다 — 프런트가 세면 서버가 안전 사유로 일찍 닫은 대화를
+  계속 이어 가려 듭니다.
+- `opening.audioUrl` 이 있으면 대사를 **문장으로 쪼개지 않고 통째로** 띄웁니다.
+  문장별 실측 구간(`audioTimings`)이 없어서, 쪼개면 자막이 소리와 어긋납니다.
+
 ### 2.11 리포트
 
 | 메서드 | 경로 | 요청 | 응답 | 상태 |

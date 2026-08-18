@@ -930,3 +930,47 @@ class DialogueMicButton extends StatelessWidget {
     );
   }
 }
+
+/// 대화 화면 상단의 동그란 조작 버튼(나가기 · 다시 듣기 · 소리 · 멈춤).
+///
+/// 학습 대화와 자유 대화가 같은 자리에 같은 모양의 버튼을 둡니다 — 아이가
+/// 화면마다 다른 버튼을 새로 익히지 않게. 무엇을 놓을지는 화면이 정합니다.
+class DialogueControlButton extends StatelessWidget {
+  const DialogueControlButton({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.emphasized = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: label,
+      child: Material(
+        color: emphasized ? const Color(0xFFFFD56A) : const Color(0xCC102B48),
+        shape: const CircleBorder(),
+        elevation: 4,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onPressed,
+          child: SizedBox(
+            width: 52,
+            height: 52,
+            child: Icon(
+              icon,
+              size: 28,
+              color: emphasized ? const Color(0xFF17314A) : Colors.white,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

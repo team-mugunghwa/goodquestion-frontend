@@ -111,6 +111,8 @@ lib/
 | `/stories/:storyId` | 이야기 상세 | `features/story/.../story_detail_view.dart` |
 | `/play/:sessionId` | 장면 진행 | `features/play/.../play_view.dart` |
 | `/play/:sessionId/recap` | 말하기 후 활동 | `features/play/.../play_recap_view.dart` |
+| `/free-talk/:storyId` | 후속 자유 대화 — 인물 고르기 | `features/free_talk/.../free_talk_characters_view.dart` |
+| `/free-talk/:storyId/:characterId` | 후속 자유 대화 | `features/free_talk/.../free_talk_view.dart` |
 | `/planet` | 내 행성 | `features/planet/.../planet_view.dart` |
 | `/words` | 단어장 | `features/word/.../word_list_view.dart` |
 | `/mypage` | 마이페이지 | `features/mypage/.../my_page_view.dart` |

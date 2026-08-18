@@ -68,6 +68,26 @@ class DialogueCharacterManifest {
     return null;
   }
 
+  /// 인물 식별자로 그 인물이 서 있는 장면을 찾는다.
+  ///
+  /// 자유 대화는 장면이 아니라 **인물**로 들어온다 - 매니페스트는 장면 단위지만
+  /// 장면마다 `characterId`가 적혀 있어 되짚을 수 있다. 시드를 다시 심어 UUID가
+  /// 갈리면 이름으로 한 번 더 찾는다(같은 이야기 안에서 이름은 유일하다).
+  /// 둘 다 못 찾으면 null - 호출부가 서버 썸네일 한 장짜리 화면으로 되돌아간다.
+  DialogueSceneStates? sceneForCharacter({String? characterId, String? name}) {
+    if (characterId != null && characterId.isNotEmpty) {
+      for (final DialogueSceneStates scene in _scenes.values) {
+        if (scene.characterId == characterId) return scene;
+      }
+    }
+    if (name != null && name.isNotEmpty) {
+      for (final DialogueSceneStates scene in _scenes.values) {
+        if (scene.characterName == name) return scene;
+      }
+    }
+    return null;
+  }
+
   /// 서버 `analysis.utteranceValidity`가 당황 표정으로 바꿔야 하는 값인지.
   bool isConfusedValidity(String? validity) =>
       validity != null && _confusedValidity.contains(validity);
@@ -79,6 +99,7 @@ class DialogueSceneStates {
     required this.sceneOrder,
     required this.label,
     required this.characterName,
+    required this.characterId,
     required this.dir,
     required this.background,
     required this.openingState,
@@ -109,6 +130,7 @@ class DialogueSceneStates {
       sceneOrder: (json['sceneOrder'] as num).toInt(),
       label: json['label'] as String? ?? '',
       characterName: json['characterName'] as String? ?? '',
+      characterId: json['characterId'] as String? ?? '',
       dir: json['dir'] as String,
       background: json['background'] as String,
       openingState: json['openingState'] as String,
@@ -127,6 +149,11 @@ class DialogueSceneStates {
   final int sceneOrder;
   final String label;
   final String characterName;
+
+  /// 이 장면에 서는 인물의 DB 식별자. 자유 대화가 인물로 표정 에셋을 찾는
+  /// 유일한 열쇠다. 매니페스트에 안 적혀 있으면 빈 문자열.
+  final String characterId;
+
   final String dir;
   final String background;
   final String openingState;
