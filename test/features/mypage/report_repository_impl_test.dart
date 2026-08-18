@@ -77,31 +77,36 @@ void main() {
     expect(list.reports.last.playCount, 1);
   });
 
-  test('상세 응답은 내부 태그를 숨긴 어휘·표현·논리 리포트가 된다', () async {
+  test('상세 응답은 내부 태그를 숨긴 어휘·역량 카드가 된다', () async {
     final ReportRepositoryImpl repository = ReportRepositoryImpl(
       _Remote(
         detail: ReportDetailResponseDto(
           sessionId: 'session-uuid',
           storyTitle: '방귀 뀌는 며느리',
           summary: '상대의 마음을 헤아리고 자기 생각을 잘 말했어요.',
-          strengths: const <ReportItemResponseDto>[
-            ReportItemResponseDto(
-              element: 'PERSPECTIVE',
-              comment: '다른 사람의 마음을 먼저 생각했어요.',
+          vocabulary: const VocabularyResponseDto(
+            mainWords: <String>['며느리', '참다'],
+            askedWords: <String>['며느리'],
+            repeatedExpressions: <String>[],
+            feedback: '이야기에 나온 낱말을 스스로 물어보고 자기 문장에 담아 봤어요.',
+          ),
+          competencies: const <CompetencyResponseDto>[
+            CompetencyResponseDto(
+              name: '관점과 공감',
+              finding: '다른 사람의 마음을 먼저 생각했어요.',
+              evidenceUtterance: '가족이니까 이해해 줄 거예요.',
+              strength: '인물의 마음을 헤아려 말했어요.',
+              nextFocus: '다음에는 이유를 덧붙이면 더 잘 전해져요.',
             ),
           ],
-          nextFocus: const <ReportItemResponseDto>[
-            ReportItemResponseDto(
-              element: 'REASON',
-              comment: '왜 그렇게 생각했는지 덧붙이면 더 잘 전해져요.',
-            ),
-          ],
-          representativeUtterances: const <RepresentativeUtteranceResponseDto>[
-            RepresentativeUtteranceResponseDto(
-              text: '가족이니까 이해해 줄 거예요.',
-              element: 'PERSPECTIVE',
-            ),
-          ],
+          representativeUtterance: const RepresentativeUtteranceResponseDto(
+            text: '가족이니까 이해해 줄 거예요.',
+            reason: '인물의 마음을 헤아리고 자기 말로 풀어서 표현했어요.',
+          ),
+          homeGuide: const HomeGuideResponseDto(
+            storyQuestions: <String>['며느리가 계속 참았으면 어떻게 됐을까?'],
+            dailyLifeQuestions: <String>['너도 참았던 것 때문에 힘들었던 적 있어?'],
+          ),
           createdAt: DateTime(2026, 8, 15),
         ),
       ),
@@ -114,11 +119,11 @@ void main() {
 
     expect(report.skills.map((SkillReport skill) => skill.name), <String>[
       '어휘',
-      '표현',
-      '논리',
+      '관점과 공감',
     ]);
     expect(report.highlight.utterance, '가족이니까 이해해 줄 거예요.');
     expect(report.questionGroups, hasLength(2));
+    expect(report.questionGroups.first.questions, hasLength(1));
     final String visibleText = <String>[
       report.summary,
       report.highlight.reason,
