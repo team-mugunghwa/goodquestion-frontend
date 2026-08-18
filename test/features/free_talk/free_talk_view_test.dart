@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:goodquestion/core/error/failure.dart';
 import 'package:goodquestion/core/router/app_routes.dart';
+import 'package:goodquestion/core/theme/app_spacing.dart';
 import 'package:goodquestion/core/theme/app_theme.dart';
+import 'package:goodquestion/core/widgets/kid_button.dart';
 import 'package:goodquestion/features/free_talk/domain/entities/free_talk.dart';
 import 'package:goodquestion/features/free_talk/presentation/views/free_talk_view.dart';
 import 'package:goodquestion/features/free_talk/presentation/widgets/free_talk_farewell.dart';
@@ -16,6 +20,10 @@ const FreeTalkCharacter _character = FreeTalkCharacter(
   name: '방귀쟁이 며느리',
   characterKey: 'daughter_in_law',
 );
+
+/// 확인 카드가 내놓는 세 갈래. 순서까지 이 순서여야 합니다 — 되돌아가는 쪽이
+/// 맨 위입니다.
+const List<String> _exitOptions = <String>['더 이야기하기', '인사하고 나가기', '바로 나가기'];
 
 const FreeTalkTurn _endingTurn = FreeTalkTurn(
   characterMessage: FreeTalkSpeech(
@@ -53,6 +61,55 @@ void main() {
         ),
       ),
     );
+    await tester.pump();
+  }
+
+  /// 진짜 [GoRouter] 위에 띄웁니다.
+  ///
+  /// "홈으로 갔다"를 확인하려면 라우터가 있어야 합니다 — 없으면 화면이
+  /// `maybePop` 으로 조용히 제자리에 남아서, 안 나간 것을 못 나간 것으로도
+  /// 잘 나간 것으로도 읽을 수 없습니다.
+  Future<void> pumpTalkOnRouter(
+    WidgetTester tester, {
+    required FakeFreeTalkRepository repository,
+  }) async {
+    tester.view.physicalSize = const Size(1280, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final GoRouter router = GoRouter(
+      initialLocation: AppRoutes.freeTalkChatOf('story-1', 'c-1'),
+      routes: <RouteBase>[
+        GoRoute(
+          path: AppRoutes.home,
+          builder: (_, __) => const Scaffold(body: Text('홈 화면')),
+        ),
+        GoRoute(
+          path: AppRoutes.freeTalkChatPath,
+          builder: (_, GoRouterState state) => FreeTalkPage(
+            storyId: state.pathParameters[AppRoutes.storyIdParam]!,
+            characterId: state.pathParameters[AppRoutes.characterIdParam]!,
+            repository: repository,
+            voiceRepository: FakeVoicePlayRepository(),
+            initialCharacter: _character,
+            voiceRecorder: const FakeVoiceRecorder(),
+            audioPlayer: const FakeAudioPlayer(),
+          ),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp.router(theme: AppTheme.light, routerConfig: router),
+    );
+    await tester.pump();
+  }
+
+  /// 확인 카드를 띄웁니다.
+  Future<void> openExitPrompt(WidgetTester tester) async {
+    await tester.tap(find.byTooltip('나가기'));
     await tester.pump();
   }
 
@@ -187,7 +244,71 @@ void main() {
     expect(repository.endCalls, 0);
   });
 
-  testWidgets('나가기는 한 번 묻고, 인사를 받아 온 뒤 끝낸다', (WidgetTester tester) async {
+  testWidgets('나가기를 누르면 고를 수 있는 길이 셋이다', (WidgetTester tester) async {
+    await pumpTalk(tester, repository: FakeFreeTalkRepository());
+    await settleTurn(tester);
+
+    // 대조군 — 카드를 열기 전에는 셋 다 화면에 없습니다. 이걸 안 보면 아래
+    // 검사가 "원래부터 있던 글자"를 보고 통과할 수 있습니다.
+    for (final String label in _exitOptions) {
+      expect(find.text(label), findsNothing);
+    }
+
+    await openExitPrompt(tester);
+
+    expect(find.text('이야기를 그만할까?'), findsOneWidget);
+    for (final String label in _exitOptions) {
+      expect(find.text(label), findsOneWidget);
+    }
+    // 인사가 이제 고르는 것이 됐으니, 본문이 "인사하고 보내 준다"고 단정하면
+    // 한쪽 갈래에 대해 거짓말이 됩니다.
+    expect(find.text('인사를 듣고 가도 되고, 바로 나가도 돼.'), findsOneWidget);
+    expect(find.text('인사하고 끝내기'), findsNothing);
+  });
+
+  testWidgets('선택지가 셋이 되어도 아이 손가락 크기를 지킨다', (WidgetTester tester) async {
+    // 세로로 쌓았으니 좁아지는 것이 아니라 카드가 길어져야 합니다.
+    await pumpTalk(tester, repository: FakeFreeTalkRepository());
+    await settleTurn(tester);
+    await openExitPrompt(tester);
+
+    final Size keep = tester.getSize(
+      find.widgetWithText(KidPrimaryButton, _exitOptions[0]),
+    );
+    expect(keep.height, AppSizes.tapChildPrimary);
+    // 카드 안쪽 340 에서 좌우 여백 24 를 두 번 뺀 값. 여백을 빼먹으면 여기가
+    // 340 으로 잡혀 실제보다 넓다고 착각합니다.
+    expect(keep.width, 340 - AppSpacing.lg * 2);
+
+    for (final String label in _exitOptions.sublist(1)) {
+      final Size option = tester.getSize(
+        find.widgetWithText(KidSecondaryButton, label),
+      );
+      expect(option.height, AppSizes.tapChildSecondary);
+      expect(option.width, keep.width);
+    }
+  });
+
+  testWidgets('가로로 누운 작은 화면에서도 카드가 넘치지 않는다', (WidgetTester tester) async {
+    // 선택지가 늘어 카드가 길어졌습니다. 세로가 모자란 화면에서 잘려 버리면
+    // 마지막 갈래가 아예 없는 것과 같습니다 — 밀려서 스크롤돼야 합니다.
+    await pumpTalk(
+      tester,
+      repository: FakeFreeTalkRepository(),
+      size: const Size(640, 360),
+    );
+    await settleTurn(tester);
+    await openExitPrompt(tester);
+
+    for (final String label in _exitOptions) {
+      expect(find.text(label), findsOneWidget);
+    }
+    // RenderFlex 오버플로는 예외로 올라옵니다. 눈으로 안 보고도 잡히는
+    // 유일한 신호라 여기서 받습니다.
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('"인사하고 나가기"는 인사를 받아 온 뒤 끝낸다', (WidgetTester tester) async {
     final FakeFreeTalkRepository repository = FakeFreeTalkRepository(
       closing: const FreeTalkSpeech(
         text: '벌써 가려고? 잘 가, 또 놀러 와!',
@@ -197,8 +318,7 @@ void main() {
     await pumpTalk(tester, repository: repository);
     await settleTurn(tester);
 
-    await tester.tap(find.byTooltip('나가기'));
-    await tester.pump();
+    await openExitPrompt(tester);
     expect(find.text('이야기를 그만할까?'), findsOneWidget);
 
     // 잘못 눌렀으면 되돌아옵니다.
@@ -207,13 +327,15 @@ void main() {
     expect(find.text('이야기를 그만할까?'), findsNothing);
     expect(repository.endCalls, 0);
 
-    await tester.tap(find.byTooltip('나가기'));
-    await tester.pump();
-    await tester.tap(find.text('인사하고 끝내기'));
+    await openExitPrompt(tester);
+    await tester.tap(find.text('인사하고 나가기'));
     await settleTurn(tester);
     await settleTurn(tester);
 
     expect(repository.endCalls, 1);
+    // 이쪽은 닫기만 하는 경로를 타지 않습니다 — 인사를 지어 오는 요청 안에
+    // 대화를 닫는 일까지 들어 있습니다.
+    expect(repository.leaveCalls, 0);
     expect(find.text('또 만나자!'), findsOneWidget);
     // 인사는 말풍선에서도 한 번 읽히므로 엔드카드 안에서 찾습니다.
     expect(
@@ -223,6 +345,51 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('"바로 나가기"는 인사도 기다림도 없이 홈으로 간다', (WidgetTester tester) async {
+    // 닫기 요청을 **끝나지 않게** 붙잡아 둡니다. 응답을 기다리는 구현이라면
+    // 홈이 뜨지 않으므로, "기다리지 않는다"가 여기서 실제로 검사됩니다.
+    final Completer<void> gate = Completer<void>();
+    final FakeFreeTalkRepository repository = FakeFreeTalkRepository(
+      leaveGate: gate,
+    );
+    await pumpTalkOnRouter(tester, repository: repository);
+    await settleTurn(tester);
+
+    await openExitPrompt(tester);
+    await tester.tap(find.text('바로 나가기'));
+    await tester.pumpAndSettle();
+
+    expect(repository.leaveCalls, 1);
+    // 인사를 지어 오는 경로는 타지 않습니다 — 그게 이 갈래의 존재 이유입니다.
+    expect(repository.endCalls, 0);
+    expect(find.text('또 만나자!'), findsNothing);
+    expect(find.text('홈 화면'), findsOneWidget);
+
+    // 붙잡아 둔 요청을 풀어 줍니다. 이 시점의 화면은 이미 홈입니다.
+    gate.complete();
+    await tester.pump();
+    expect(find.text('홈 화면'), findsOneWidget);
+  });
+
+  testWidgets('닫기 요청이 실패해도 아이는 홈으로 나간다', (WidgetTester tester) async {
+    final FakeFreeTalkRepository repository = FakeFreeTalkRepository(
+      leaveError: const ServerFailure(message: '서버 오류', code: 'UNKNOWN'),
+    );
+    await pumpTalkOnRouter(tester, repository: repository);
+    await settleTurn(tester);
+
+    await openExitPrompt(tester);
+    await tester.tap(find.text('바로 나가기'));
+    await tester.pumpAndSettle();
+
+    // 부르기는 불렀습니다. 안 부르고 나가면 대화가 열린 채로 남습니다.
+    expect(repository.leaveCalls, 1);
+    expect(find.text('홈 화면'), findsOneWidget);
+    // 실패는 아이에게 보이지 않습니다 — 테스트 밖으로 새어 나오지도 않아야
+    // 합니다(삼키지 않으면 여기서 잡힙니다).
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('시작에 실패하면 다시 시도할 수 있다', (WidgetTester tester) async {
@@ -260,38 +427,11 @@ void main() {
   });
 
   testWidgets('"또 만나자" 에서 홈으로 나갈 수 있다', (WidgetTester tester) async {
-    tester.view.physicalSize = const Size(1280, 720);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    final GoRouter router = GoRouter(
-      initialLocation: AppRoutes.freeTalkChatOf('story-1', 'c-1'),
-      routes: <RouteBase>[
-        GoRoute(
-          path: AppRoutes.home,
-          builder: (_, __) => const Scaffold(body: Text('홈 화면')),
-        ),
-        GoRoute(
-          path: AppRoutes.freeTalkChatPath,
-          builder: (_, GoRouterState state) => FreeTalkPage(
-            storyId: state.pathParameters[AppRoutes.storyIdParam]!,
-            characterId: state.pathParameters[AppRoutes.characterIdParam]!,
-            repository: FakeFreeTalkRepository(
-              turns: const <FreeTalkTurn>[_endingTurn],
-            ),
-            voiceRepository: FakeVoicePlayRepository(),
-            initialCharacter: _character,
-            voiceRecorder: const FakeVoiceRecorder(),
-            audioPlayer: const FakeAudioPlayer(),
-          ),
-        ),
-      ],
-    );
-    addTearDown(router.dispose);
-
-    await tester.pumpWidget(
-      MaterialApp.router(theme: AppTheme.light, routerConfig: router),
+    await pumpTalkOnRouter(
+      tester,
+      repository: FakeFreeTalkRepository(
+        turns: const <FreeTalkTurn>[_endingTurn],
+      ),
     );
     await settleTurn(tester);
     await speakAndConfirm(tester);

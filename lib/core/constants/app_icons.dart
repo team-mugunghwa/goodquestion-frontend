@@ -39,6 +39,10 @@ abstract final class AppIcons {
   /// 캐릭터가 말하는 중.
   static const IconData characterSpeaking = Icons.record_voice_over_rounded;
 
+  /// 작별 인사. 손을 흔드는 그림이라 글자를 아직 못 읽는 아이도 "인사"로
+  /// 읽습니다 — 나가는 두 갈래를 아이콘만으로도 가르는 자리입니다.
+  static const IconData farewell = Icons.waving_hand_rounded;
+
   /// 다시 듣기.
   static const IconData replay = Icons.replay_rounded;
 

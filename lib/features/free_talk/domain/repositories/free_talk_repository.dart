@@ -36,4 +36,12 @@ abstract interface class FreeTalkRepository {
   /// 서버가 [FreeTalkTurn.ended] 로 이미 닫은 대화에는 **부르지 않습니다** —
   /// 그때는 마지막 대사가 곧 인사라, 또 부르면 작별 인사를 두 번 합니다.
   Future<FreeTalkSpeech> end(String freeTalkId);
+
+  /// 인사 없이 대화만 닫습니다. 아이가 "바로 나가기"를 골랐을 때.
+  ///
+  /// [end] 와 달리 **돌려주는 것이 없습니다** — 작별 대사를 짓지 않기
+  /// 때문입니다. 화면은 이 future 를 기다리지 않고 곧장 떠나므로 실패도
+  /// 아이에게 보이지 않습니다. 그런데도 굳이 부르는 이유는, 안 닫으면 그
+  /// 대화가 `ended_at` 없이 영영 열린 채로 남기 때문입니다.
+  Future<void> leave(String freeTalkId);
 }

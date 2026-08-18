@@ -37,14 +37,20 @@ import '../widgets/free_talk_farewell.dart';
 /// - 남은 턴 수 — 세는 순간 대화가 과제가 됩니다(설계 결정).
 /// - 단어 담기 — 단어장은 학습 자산이라 여기서 담게 하지 않습니다.
 ///
-/// ## 끝나는 길은 둘입니다
+/// ## 끝나는 길은 셋입니다
 ///
 /// 1. 서버가 [FreeTalkTurn.ended] 로 닫습니다. 그 마지막 대사가 곧 작별
 ///    인사라, 다 읽어 준 뒤 "또 만나자" 화면으로 넘어갑니다.
 ///    **`end` 를 부르지 않습니다** — 부르면 인사를 두 번 합니다.
-/// 2. 아이가 나가기를 누릅니다. 이때만 `end` 를 불러 인사를 받아 옵니다.
-///    말없이 화면을 닫지 않는 이유는, 정 붙은 친구와 인사도 없이 헤어지는
-///    경험을 남기지 않으려는 것이 이 기능의 존재 이유이기 때문입니다.
+/// 2. 아이가 "인사하고 나가기"를 고릅니다. 이때만 `end` 를 불러 인사를 받아
+///    옵니다. 말없이 화면을 닫지 않는 이유는, 정 붙은 친구와 인사도 없이
+///    헤어지는 경험을 남기지 않으려는 것이 이 기능의 존재 이유이기 때문입니다.
+/// 3. 아이가 "바로 나가기"를 고릅니다. `leave` 로 대화를 닫기만 하고 인사
+///    없이 곧장 홈으로 갑니다. 2번만 두었더니 나가려는 아이가 낭독이 끝나기를
+///    기다려야 했고, 그 몇 초가 그대로 지루함이 됐습니다(2026-08-18 팀
+///    피드백). **닫기 응답을 기다리지 않습니다** — 나가는 길에 서버를 세워
+///    두면 아이는 아무 일도 안 일어나는 화면을 보게 되고, 실패하면 아예
+///    못 나갑니다.
 class FreeTalkPage extends StatefulWidget {
   const FreeTalkPage({
     required this.storyId,
@@ -131,8 +137,15 @@ class _FreeTalkPageState extends State<FreeTalkPage> {
   /// 마무리 인사. 값이 있으면 "또 만나자" 화면이 화면을 통째로 덮습니다.
   FreeTalkSpeech? _farewell;
 
-  /// 인사를 받아 오는 중(나가기 경로). 두 번 누르는 것을 막습니다.
+  /// 인사를 받아 오는 중("인사하고 나가기" 경로). 두 번 누르는 것을 막습니다.
   bool _ending = false;
+
+  /// 인사 없이 떠나는 중("바로 나가기" 경로).
+  ///
+  /// [_ending] 과 달리 화면에 그리는 것이 없어 [setState] 를 걸지 않습니다 —
+  /// 이 값이 서는 순간 화면 자체가 사라지기 때문입니다. 두 번 눌러 닫기
+  /// 요청이 두 번 나가는 것만 막습니다.
+  bool _leaving = false;
 
   bool get _isListening => _phase == DialoguePhase.listening;
 
@@ -598,7 +611,7 @@ class _FreeTalkPageState extends State<FreeTalkPage> {
     setState(() => _exitPrompt = true);
   }
 
-  /// 아이가 "인사하고 끝내기"를 골랐습니다. 서버에서 마무리 인사를 받아
+  /// 아이가 "인사하고 나가기"를 골랐습니다. 서버에서 마무리 인사를 받아
   /// 들려준 뒤 "또 만나자" 화면으로 넘어갑니다.
   ///
   /// 인사를 못 받아 와도 **화면은 넘어갑니다.** 나가려는 아이를 에러 화면에
@@ -636,6 +649,54 @@ class _FreeTalkPageState extends State<FreeTalkPage> {
     await _speak(closing);
     if (!mounted) return;
     _showFarewell(closing);
+  }
+
+  /// 아이가 "바로 나가기"를 골랐습니다. 인사 없이 즉시 홈으로 갑니다.
+  ///
+  /// **`await` 가 하나도 없습니다.** 닫기 요청을 띄워만 놓고 같은 프레임에
+  /// 화면을 떠납니다 — 기다리면 나가려는 아이를 서버 왕복만큼 붙잡아 두게
+  /// 되고, 그게 이 갈래를 만든 이유(기다리기 싫다)를 그대로 되돌립니다.
+  /// 요청이 실패해도 아이는 이미 나갔고, 실패는 화면에 뜨지 않습니다.
+  ///
+  /// 그래도 요청을 보내는 이유는 안 보내면 그 대화가 `ended_at` 없이 열린
+  /// 채 남기 때문입니다. 녹음기·타이머를 여기서 직접 끄는 것도 같은 이유로,
+  /// [dispose] 의 `recorder.dispose()` 는 `cancel()` 과 달라 켜져 있던 마이크
+  /// 스트림 구독을 정리하지 않습니다.
+  void _leaveNow() {
+    final FreeTalkSession? session = _session;
+    _speechToken++;
+    _listeningTimer?.cancel();
+    _speechTimer?.cancel();
+    _confirmTimer?.cancel();
+    _releaseSpeechWait();
+    if (_recordingVoice) unawaited(_voiceRecorder.cancel());
+    // 한 번만 막는 것은 **닫기 요청**이고, 화면을 떠나는 시도는 누를 때마다
+    // 다시 합니다. [_leave] 에는 라우터가 없어 제자리에 남는 길이 있어서,
+    // 함수 전체를 막으면 그 자리에서 버튼이 죽습니다.
+    if (session != null && !_leaving) {
+      _leaving = true;
+      // 저장소를 **먼저 붙잡습니다.** 아래 [_goHome] 이 이 위젯을 걷어내므로,
+      // 그 뒤에 `widget` 을 다시 읽는 코드는 남기지 않습니다.
+      final FreeTalkRepository repository = widget.repository;
+      unawaited(_closeQuietly(repository, session.freeTalkId));
+    }
+    _goHome();
+  }
+
+  /// 대화를 닫기만 하고 결과를 버립니다.
+  ///
+  /// 화면이 이미 사라진 뒤에 끝나는 요청이라 [State] 를 건드리지 않습니다.
+  /// 실패를 삼키는 것이 이 함수의 일입니다 — 아이가 홈에 도착한 뒤에 뜨는
+  /// 에러는 아이가 할 수 있는 것이 없는 에러입니다.
+  static Future<void> _closeQuietly(
+    FreeTalkRepository repository,
+    String freeTalkId,
+  ) async {
+    try {
+      await repository.leave(freeTalkId);
+    } on Object {
+      // 나가는 길을 막지 않습니다.
+    }
   }
 
   void _showFarewell(FreeTalkSpeech closing) {
@@ -680,7 +741,12 @@ class _FreeTalkPageState extends State<FreeTalkPage> {
   /// 새로 켜지면 아이가 하던 말을 잃습니다.
   void _replay() {
     final FreeTalkSpeech? last = _lastSpeech;
-    if (last == null || _farewell != null) return;
+    // 인사를 받아 오는 중에는 받지 않습니다. 여기서 [_speak] 를 새로 걸면
+    // `_speechToken` 이 올라가 [_endTalk] 가 기다리던 낭독이 조용히 취소되고,
+    // 그 뒤의 [_showFarewell] 이 곧바로 불려 **작별 인사가 중간에 잘린 채**
+    // 엔드카드가 떠 버립니다. (화면이 멈추지는 않습니다 - `_speak` 첫머리의
+    // `_audioPlayer.stop()` 이 기다리던 completer 를 풀어 주기 때문입니다.)
+    if (last == null || _farewell != null || _ending) return;
     final bool wasListening = _isListening;
     unawaited(_speak(last, onComplete: wasListening ? null : _startListening));
   }
@@ -772,7 +838,8 @@ class _FreeTalkPageState extends State<FreeTalkPage> {
               if (_exitPrompt)
                 FreeTalkExitPrompt(
                   onKeep: () => setState(() => _exitPrompt = false),
-                  onLeave: () => unawaited(_endTalk()),
+                  onFarewell: () => unawaited(_endTalk()),
+                  onLeaveNow: _leaveNow,
                 ),
               // 맨 위에서 화면을 **불투명하게** 덮습니다. 대화가 끝난 뒤에는
               // 아래에 더 누를 것이 없고, 남아 있는 마이크 안내("이제 말할
