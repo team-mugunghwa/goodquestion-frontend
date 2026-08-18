@@ -26,6 +26,9 @@ class WordRepositoryMock implements WordRepository {
   /// wordId → 좋아요. 더미 값 위에 덮어씁니다.
   final Map<String, bool> _likeOverrides = <String, bool>{};
 
+  /// 지운 단어. 서버가 없으니 더미 목록에서 걸러 내는 걸로 흉내 냅니다.
+  final Set<String> _deletedIds = <String>{};
+
   /// 별가루를 받은 문장(`wordId/종류`). 목업 채점의 "문장당 1회" 흉내입니다.
   final Set<String> _rewardedSentences = <String>{};
   int _stardustBalance = 10;
@@ -35,13 +38,19 @@ class WordRepositoryMock implements WordRepository {
     await Future<void>.delayed(latency);
     try {
       final WordBook book = (await _localDataSource.fetchWordBook()).toEntity();
-      if (_likeOverrides.isEmpty) return book;
+      if (_likeOverrides.isEmpty && _deletedIds.isEmpty) return book;
       return _applyOverrides(book);
     } on AppException catch (e) {
       throw Failure.fromException(e);
     } on Object catch (e) {
       throw Failure.fromException(ParseException('$e'));
     }
+  }
+
+  @override
+  Future<void> deleteWord(String wordId) async {
+    await Future<void>.delayed(latency);
+    _deletedIds.add(wordId);
   }
 
   @override
@@ -113,17 +122,15 @@ class WordRepositoryMock implements WordRepository {
     return '따라 말해 본 문장이에요';
   }
 
-  WordBook _applyOverrides(WordBook book) => WordBook(
-    totalCount: book.totalCount,
-    childName: book.childName,
-    childAvatar: book.childAvatar,
-    groups: book.groups
+  WordBook _applyOverrides(WordBook book) {
+    final List<WordGroup> groups = book.groups
         .map(
           (WordGroup group) => WordGroup(
             storyId: group.storyId,
             storyTitle: group.storyTitle,
             storyImage: group.storyImage,
             words: group.words
+                .where((SavedWord word) => !_deletedIds.contains(word.wordId))
                 .map(
                   (SavedWord word) => _likeOverrides.containsKey(word.wordId)
                       ? word.copyWith(liked: _likeOverrides[word.wordId])
@@ -132,6 +139,17 @@ class WordRepositoryMock implements WordRepository {
                 .toList(growable: false),
           ),
         )
-        .toList(growable: false),
-  );
+        // 지워서 빈 묶음은 통째로 뺍니다 - 제목만 남은 헤더는 고장으로 보입니다.
+        .where((WordGroup group) => group.words.isNotEmpty)
+        .toList(growable: false);
+    return WordBook(
+      totalCount: groups.fold(
+        0,
+        (int sum, WordGroup g) => sum + g.words.length,
+      ),
+      childName: book.childName,
+      childAvatar: book.childAvatar,
+      groups: groups,
+    );
+  }
 }

@@ -55,6 +55,12 @@ class WordRepositoryImpl implements WordRepository {
   });
 
   @override
+  Future<void> deleteWord(String wordId) => _guard(() async {
+    final MyPageChild child = await _selectedChild();
+    await _remote.deleteWord(child.childId, wordId);
+  });
+
+  @override
   Future<SentencePracticeResult> practiceSentence({
     required String wordId,
     required SentenceType sentenceType,

@@ -47,6 +47,7 @@ import '../../features/story/domain/usecases/start_story_session_use_case.dart';
 import '../../features/word/data/datasources/word_remote_data_source.dart';
 import '../../features/word/data/repositories/word_repository_impl.dart';
 import '../../features/word/domain/repositories/word_repository.dart';
+import '../../features/word/domain/usecases/delete_word_use_case.dart';
 import '../../features/word/domain/usecases/get_word_book_use_case.dart';
 import '../../features/word/domain/usecases/toggle_word_like_use_case.dart';
 import '../network/dio_client.dart';
@@ -218,6 +219,9 @@ Future<void> configureDependencies() async {
     )
     ..registerLazySingleton<ToggleWordLikeUseCase>(
       () => ToggleWordLikeUseCase(getIt<WordRepository>()),
+    )
+    ..registerLazySingleton<DeleteWordUseCase>(
+      () => DeleteWordUseCase(getIt<WordRepository>()),
     );
 
   // ---- helpdesk (공지 · 이용 안내 · 문의 · 알림) ----

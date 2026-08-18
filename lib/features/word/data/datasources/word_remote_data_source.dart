@@ -41,6 +41,10 @@ class WordRemoteDataSource {
         },
       );
 
+  /// 단어를 영구히 지웁니다. 성공하면 본문 없이 204.
+  Future<void> deleteWord(String childId, String wordId) =>
+      _client.delete('/children/$childId/words/$wordId');
+
   /// 따라 말한 문장 채점. → `docs/API.md` 2.13
   Future<SentencePracticeResultDto> practiceSentence(
     String childId,

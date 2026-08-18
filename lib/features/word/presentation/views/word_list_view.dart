@@ -21,10 +21,12 @@ import '../../../../core/widgets/screen_metrics.dart';
 import '../../../../core/widgets/skeleton_box.dart';
 import '../../domain/entities/saved_word.dart';
 import '../../domain/entities/word_group.dart';
+import '../../domain/usecases/delete_word_use_case.dart';
 import '../../domain/usecases/get_word_book_use_case.dart';
 import '../../domain/usecases/toggle_word_like_use_case.dart';
 import '../viewmodels/word_list_view_model.dart';
 import '../widgets/word_card.dart';
+import '../widgets/word_delete_sheet.dart';
 import '../widgets/word_detail_sheet.dart';
 
 /// 단어장 — 이야기 속에서 담아 둔 단어를 다시 만나는 화면.
@@ -52,6 +54,7 @@ class WordListPage extends StatelessWidget {
       create: (_) => WordListViewModel(
         getIt<GetWordBookUseCase>(),
         getIt<ToggleWordLikeUseCase>(),
+        getIt<DeleteWordUseCase>(),
       )..load(),
       child: const WordListView(),
     );
@@ -389,6 +392,7 @@ class _GroupList extends StatelessWidget {
                           metrics: metrics,
                           onTap: () => _openDetail(context, word),
                           onToggleLike: () => vm.toggleLike(word.wordId),
+                          onDelete: () => _confirmDelete(context, word),
                         ),
                       ),
                   ],
@@ -415,6 +419,15 @@ class _GroupList extends StatelessWidget {
         extra: vm.wordOf(word.wordId) ?? word,
       ),
     );
+  }
+
+  Future<void> _confirmDelete(BuildContext context, SavedWord word) async {
+    final bool confirmed = await showDeleteWordSheet(
+      context,
+      word: word,
+      metrics: metrics,
+    );
+    if (confirmed) await vm.deleteWord(word.wordId);
   }
 }
 

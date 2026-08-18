@@ -16,6 +16,10 @@ abstract class WordRepository {
   /// 사라져 아이가 자기가 지운 줄 압니다. → `docs/API.md` 2.12
   Future<bool> toggleLike(String wordId);
 
+  /// 단어를 영구히 지웁니다. **되돌릴 수 없습니다** — 호출부가 확인을
+  /// 받은 뒤에만 불러야 합니다.
+  Future<void> deleteWord(String wordId);
+
   /// 아이가 따라 말한 문장을 서버에 채점받습니다.
   ///
   /// 해당 종류의 예문이 없는 단어면 `ServerFailure` 코드

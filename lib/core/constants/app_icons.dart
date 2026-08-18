@@ -147,4 +147,5 @@ abstract final class AppIcons {
   static const IconData done = Icons.check_circle_rounded;
   static const IconData add = Icons.add_rounded;
   static const IconData edit = Icons.edit_rounded;
+  static const IconData delete = Icons.delete_outline_rounded;
 }

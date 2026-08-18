@@ -2,18 +2,20 @@ import '../../../../core/presentation/base_view_model.dart';
 import '../../domain/entities/saved_word.dart';
 import '../../domain/entities/word_book.dart';
 import '../../domain/entities/word_group.dart';
+import '../../domain/usecases/delete_word_use_case.dart';
 import '../../domain/usecases/get_word_book_use_case.dart';
 import '../../domain/usecases/toggle_word_like_use_case.dart';
 
 /// 단어장의 상태. 데이터 하나 + 선택된 이야기 하나.
 class WordListViewModel extends BaseViewModel {
-  WordListViewModel(this._getWordBook, this._toggleLike);
+  WordListViewModel(this._getWordBook, this._toggleLike, this._deleteWord);
 
   /// 이야기 필터의 "전체". 서버 ID 는 UUID 라 이 값과 겹치지 않습니다.
   static const String allStoryId = '*';
 
   final GetWordBookUseCase _getWordBook;
   final ToggleWordLikeUseCase _toggleLike;
+  final DeleteWordUseCase _deleteWord;
 
   WordBook? _book;
   String _selectedStoryId = allStoryId;
@@ -114,6 +116,41 @@ class WordListViewModel extends BaseViewModel {
             ),
           )
           .toList(growable: false),
+    );
+    safeNotify();
+  }
+
+  /// 단어를 지웁니다. **되돌릴 수 없습니다** — 호출부(카드의 X 버튼)가
+  /// 확인 시트를 거친 뒤에만 불러야 합니다.
+  ///
+  /// [toggleLike] 와 같은 이유로 다시 불러오지 않고 손에 있는 값만
+  /// 갈아 끼웁니다. 지워서 빈 묶음은 통째로 뺍니다 - 제목만 남은 이야기
+  /// 헤더는 고장으로 보입니다.
+  Future<void> deleteWord(String wordId) async {
+    await _deleteWord(wordId);
+    final WordBook? current = _book;
+    if (current == null) return;
+    final List<WordGroup> groups = current.groups
+        .map(
+          (WordGroup group) => WordGroup(
+            storyId: group.storyId,
+            storyTitle: group.storyTitle,
+            storyImage: group.storyImage,
+            words: group.words
+                .where((SavedWord word) => word.wordId != wordId)
+                .toList(growable: false),
+          ),
+        )
+        .where((WordGroup group) => group.words.isNotEmpty)
+        .toList(growable: false);
+    _book = WordBook(
+      totalCount: groups.fold(
+        0,
+        (int sum, WordGroup g) => sum + g.words.length,
+      ),
+      childName: current.childName,
+      childAvatar: current.childAvatar,
+      groups: groups,
     );
     safeNotify();
   }
