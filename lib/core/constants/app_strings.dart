@@ -667,3 +667,62 @@ abstract final class AuthRecoveryStrings {
   static const String changePassword = '비밀번호 변경하기';
   static const String passwordChanged = '비밀번호가 변경되었습니다.';
 }
+
+/// 후속 자유 대화(`/free-talk/...`) 전용 문구.
+///
+/// **학습이라는 말을 쓰지 않습니다.** 이 화면은 요소도 점수도 없는 놀이이고,
+/// "잘했어" 같은 평가어가 한 줄이라도 들어가면 아이는 여기서도 채점받는다고
+/// 느낍니다. 남은 턴 수도 어디에도 적지 않습니다(설계 결정).
+abstract final class FreeTalkStrings {
+  // ── 이야기 완료 화면의 진입점 ──
+
+  /// 완료 화면 버튼. 방금 이야기한 인물 이름을 알면 그 이름을 부릅니다 —
+  /// "이야기 친구"보다 아이가 훨씬 빨리 알아봅니다.
+  static String entryAction(String? characterName) {
+    final String? name = characterName?.trim();
+    if (name == null || name.isEmpty) return '이야기 친구와 더 이야기하기';
+    return '$name${_withParticle(name)} 더 이야기하기';
+  }
+
+  /// 받침이 있으면 '과', 없으면 '와'. 한글이 아닌 이름(숫자·영문)은 '와'로
+  /// 둡니다 - 틀린 조사를 붙이는 것보다 낫습니다.
+  static String _withParticle(String name) {
+    final int code = name.runes.last;
+    if (code < 0xAC00 || code > 0xD7A3) return '와';
+    return (code - 0xAC00) % 28 == 0 ? '와' : '과';
+  }
+
+  // ── 인물 고르기 ──
+  static const String pickTitle = '누구랑 더 이야기해볼까?';
+  static const String pickBack = '뒤로';
+
+  /// 카드 아래 한 줄. 한 번도 안 걸었으면 아예 그리지 않습니다 - "없음"이라고
+  /// 적으면 안 한 것이 못 한 것처럼 보입니다.
+  static String lastTalked(int daysAgo) => switch (daysAgo) {
+    0 => '오늘 이야기했어',
+    1 => '어제 이야기했어',
+    _ => '$daysAgo일 전에 이야기했어',
+  };
+
+  /// 완주하지 않은 이야기로 들어왔을 때(404·403). 잘못했다고 하지 않습니다.
+  static const String notCompleted = '이야기를 끝까지 들으면 친구들이 기다리고 있을 거야!';
+
+  /// 인물이 한 명도 없을 때. 콘텐츠 문제라 아이가 풀 수 있는 것이 없습니다.
+  static const String noCharacters = '지금은 이야기할 친구가 없어. 다른 이야기를 들어 볼까?';
+
+  static const String pickFailed = '친구들을 부르지 못했어. 다시 해볼까?';
+
+  // ── 자유 대화 ──
+  /// 시작 실패. 다시 누르면 된다는 것을 함께 말합니다.
+  static const String startFailed = '지금은 이야기를 시작하지 못했어. 다시 해볼까?';
+
+  static const String exitTitle = '이야기를 그만할까?';
+  static const String exitMessage = '친구가 인사하고 보내 줄 거야.';
+  static const String exitKeep = '더 이야기하기';
+  static const String exitLeave = '인사하고 끝내기';
+
+  // ── 또 만나자 ──
+  static const String farewellTitle = '또 만나자!';
+  static const String farewellHome = '홈으로';
+  static const String farewellStory = '이야기 보기';
+}

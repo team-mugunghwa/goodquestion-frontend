@@ -33,6 +33,8 @@ void main() {
     List<RecapSceneCard>? cards,
     List<String>? keywords,
     double textScale = 1,
+    String? storyId,
+    String? lastCharacterName,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -45,6 +47,8 @@ void main() {
           data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
           child: PlayRecapPage(
             sessionId: 'recap-test',
+            storyId: storyId,
+            lastCharacterName: lastCharacterName,
             sceneCards: cards ?? _defaults.sceneCards,
             keywords: keywords ?? _defaults.keywords,
           ),
@@ -311,6 +315,44 @@ void main() {
     await tester.pump(const Duration(milliseconds: 800));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('이야기를 멋지게 들려줬어!'), findsOneWidget);
+  });
+
+  // ── 후속 자유 대화 진입점 ──────────────────────────────
+
+  /// 순서 맞추기 → 다시 말하기 → 완료까지 한 번에 밀어 줍니다.
+  Future<void> goToCompleted(WidgetTester tester) async {
+    await goToRetell(tester);
+    await tester.tap(find.text('말하기'));
+    await tester.pump();
+    await tester.tap(find.text('다 했어'));
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pump(const Duration(milliseconds: 400));
+  }
+
+  testWidgets('완료 화면에 "○○와 더 이야기하기" 진입점이 뜬다', (WidgetTester tester) async {
+    await pumpRecap(tester, storyId: 'story-1', lastCharacterName: '시아버지');
+    await goToCompleted(tester);
+
+    // '지' 는 받침이 없어 '와' 입니다. (받침이 있으면 '과')
+    expect(find.text('시아버지와 더 이야기하기'), findsOneWidget);
+    // 마치기도 함께 남습니다 - 오늘 그만하고 싶은 아이의 문입니다.
+    expect(find.text(RecapStrings.completedAction), findsOneWidget);
+  });
+
+  testWidgets('인물 이름을 모르면 일반 문구로 부른다', (WidgetTester tester) async {
+    await pumpRecap(tester, storyId: 'story-1');
+    await goToCompleted(tester);
+
+    expect(find.text('이야기 친구와 더 이야기하기'), findsOneWidget);
+  });
+
+  testWidgets('이야기를 모르면 진입점을 아예 그리지 않는다', (WidgetTester tester) async {
+    // 눌러 놓고 빈 화면을 보여 주는 것이 더 나쁩니다.
+    await pumpRecap(tester);
+    await goToCompleted(tester);
+
+    expect(find.textContaining('더 이야기하기'), findsNothing);
+    expect(find.text(RecapStrings.completedAction), findsOneWidget);
   });
 
   // ── 개수 가변 ────────────────────────────────────────────

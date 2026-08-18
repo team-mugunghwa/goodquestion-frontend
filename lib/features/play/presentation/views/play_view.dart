@@ -31,6 +31,8 @@ import '../character/dialogue_character_stage.dart';
 import '../character/dialogue_character_state_machine.dart';
 import '../voice/mission_voice_recorder.dart';
 import '../voice/story_audio_player.dart';
+import '../widgets/dialogue_backdrop.dart';
+import '../widgets/dialogue_canvas.dart';
 import '../widgets/mission_overlay.dart';
 import '../widgets/stt_choice_panel.dart';
 
@@ -82,11 +84,9 @@ class PlayPage extends StatefulWidget {
   State<PlayPage> createState() => _PlayPageState();
 }
 
-enum _DialoguePhase { characterSpeaking, listening, paused }
-
 class _PlayPageState extends State<PlayPage> {
-  _DialoguePhase _phase = _DialoguePhase.characterSpeaking;
-  _DialoguePhase _phaseBeforePause = _DialoguePhase.characterSpeaking;
+  DialoguePhase _phase = DialoguePhase.characterSpeaking;
+  DialoguePhase _phaseBeforePause = DialoguePhase.characterSpeaking;
   Timer? _questionTimer;
   Timer? _listeningTimer;
   Timer? _storyTimer;
@@ -207,6 +207,16 @@ class _PlayPageState extends State<PlayPage> {
   /// 지금 화면이 붙잡고 있는 장면. 장면이 바뀌는 순간을 [_activateSnapshot]
   /// 이 알아채고 이전 장면의 아이 발화를 지우는 데 씁니다.
   String? _activeSceneId;
+
+  /// 이 세션의 이야기. **이어하기 응답에만 실려 오고 장면 전환 응답에는
+  /// 없어서**, 한 번 받으면 들고 있습니다. 안 들고 있으면 장면이 하나만
+  /// 넘어가도 값이 사라져, 정작 필요한 마지막 순간(완료 화면의 후속 자유
+  /// 대화 진입점)에 비어 있습니다.
+  String? _storyId;
+
+  /// 마지막으로 말을 걸었던 인물. 완료 화면 버튼이 이 이름을 부릅니다.
+  /// 장면이 바뀔 때마다 갱신되므로 **끝날 때 값은 마지막 대화 상대**입니다.
+  String? _lastCharacterName;
   String? _resultImageUrl;
   DialogueCharacterManifest? _characterManifest;
   DialogueCharacterStateMachine? _character;
@@ -228,15 +238,15 @@ class _PlayPageState extends State<PlayPage> {
   /// 다음 발화는 새 키를 받게 하기 위해서입니다. → `docs/이야기_전개_가이드.md` 3.4
   String? _pendingIdempotencyKey;
 
-  bool get _isListening => _phase == _DialoguePhase.listening;
+  bool get _isListening => _phase == DialoguePhase.listening;
 
   /// 캐릭터가 지금 무엇을 하고 있는지. 표정과 별개로 모션만 바꾼다.
   DialogueActivity get _activity {
-    if (_phase == _DialoguePhase.paused) return DialogueActivity.idle;
+    if (_phase == DialoguePhase.paused) return DialogueActivity.idle;
     if (_submittingUtterance || _transcribingVoice) {
       return DialogueActivity.thinking;
     }
-    if (_phase == _DialoguePhase.listening) return DialogueActivity.listening;
+    if (_phase == DialoguePhase.listening) return DialogueActivity.listening;
     return DialogueActivity.speaking;
   }
 
@@ -345,6 +355,7 @@ class _PlayPageState extends State<PlayPage> {
       if (!mounted) return;
       setState(() {
         _snapshot = snapshot;
+        _storyId ??= snapshot.storyId;
         _mission = recoveredMission;
         _characterReply = null;
         _fixedDialogue = false;
@@ -421,6 +432,10 @@ class _PlayPageState extends State<PlayPage> {
     // 말을 거는데 아직 하지도 않은 대답이 떠 있으면 안 됩니다. 같은 장면을
     // 다시 활성화하는 경우(이어하기 복원)에는 그대로 둡니다.
     final String? sceneId = snapshot.currentScene?.sceneId;
+    final String? characterName = snapshot.currentScene?.characterName;
+    if (characterName != null && characterName.isNotEmpty) {
+      _lastCharacterName = characterName;
+    }
     if (sceneId != _activeSceneId) {
       setState(() {
         _activeSceneId = sceneId;
@@ -491,7 +506,7 @@ class _PlayPageState extends State<PlayPage> {
       _handingOffToRecap = true;
       // 이제 말하는 쪽은 캐릭터입니다. 안 바꾸면 오버레이 뒤에서 마이크가
       // "듣는 중" 모양으로 남아, 넘어가기 직전까지 아이 차례처럼 보입니다.
-      _phase = _DialoguePhase.characterSpeaking;
+      _phase = DialoguePhase.characterSpeaking;
       _recordingVoice = false;
       _transcribingVoice = false;
       _pendingTranscription = null;
@@ -508,7 +523,15 @@ class _PlayPageState extends State<PlayPage> {
     if (_recapHandoffDone || !mounted) return;
     _recapHandoffDone = true;
     _recapHandoffTimer?.cancel();
-    context.go(AppRoutes.playRecapOf(widget.sessionId));
+    context.go(
+      AppRoutes.playRecapOf(
+        widget.sessionId,
+        // 완료 화면의 "○○와 더 이야기하기" 진입점이 쓰는 값. 활동 API 가
+        // 이야기·인물을 안 내려줘서 여기서 실어 보냅니다.
+        storyId: _storyId,
+        characterName: _lastCharacterName,
+      ),
+    );
   }
 
   Future<void> _loadOpeningMessage() async {
@@ -650,7 +673,7 @@ class _PlayPageState extends State<PlayPage> {
     _listeningTimer?.cancel();
     setState(() {
       _submittingUtterance = true;
-      _phase = _DialoguePhase.characterSpeaking;
+      _phase = DialoguePhase.characterSpeaking;
       _loadError = null;
       _sttHint = null;
       _lastChildText = normalized;
@@ -692,7 +715,7 @@ class _PlayPageState extends State<PlayPage> {
         setState(() {
           _submittingUtterance = false;
           _transcribingVoice = false;
-          _phase = _DialoguePhase.listening;
+          _phase = DialoguePhase.listening;
           _sttHint = voiceHint;
         });
         return;
@@ -1489,7 +1512,7 @@ class _PlayPageState extends State<PlayPage> {
       return;
     }
     setState(() {
-      _phase = _DialoguePhase.characterSpeaking;
+      _phase = DialoguePhase.characterSpeaking;
       _characterSentences = sentences;
       _characterSentenceIndex = 0;
       _listeningSeconds = 0;
@@ -1662,7 +1685,7 @@ class _PlayPageState extends State<PlayPage> {
                 )).audioUrl;
           // 내레이션과 같은 규칙입니다 - 합성을 기다리는 사이에 일시정지를
           // 눌렀으면 틀지 않습니다(멈춘 뒤에 소리가 새로 나오면 안 됩니다).
-          if (source.isNotEmpty && _phase != _DialoguePhase.paused) {
+          if (source.isNotEmpty && _phase != DialoguePhase.paused) {
             await _audioPlayer.playUrl(_resolveMediaUrl(source));
             played = true;
           }
@@ -1674,14 +1697,14 @@ class _PlayPageState extends State<PlayPage> {
       // 있습니다(예: 나가기가 부르는 stop). 그대로 두면 일시정지 중인데
       // 무음 타이머가 돕니다 - 아래 index-- 로 표시해 두고 문 앞에서
       // 기다립니다.
-      if (!played && _phase != _DialoguePhase.paused) {
+      if (!played && _phase != DialoguePhase.paused) {
         final int milliseconds = widget.repository == null
             ? 2000
             : (1200 + sentences[index].length * 55).clamp(1800, 5200).toInt();
         await _waitForSpeech(Duration(milliseconds: milliseconds));
       }
       if (!mounted || token != _speechToken) return;
-      if (_phase == _DialoguePhase.paused) {
+      if (_phase == DialoguePhase.paused) {
         // 이 문장을 읽는 도중에 멈췄습니다. 다시 재생하면 같은 문장을
         // 처음부터 들려줍니다 - 반쯤 들은 문장을 건너뛰면 말이 끊깁니다.
         index--;
@@ -1692,9 +1715,7 @@ class _PlayPageState extends State<PlayPage> {
   /// 일시정지 중이면 여기서 잡혀 있다가 "계속 듣기"에 깨어납니다.
   /// 발화 루프를 버리지 않고 재우는 것이 이 화면의 이어 재생 방식입니다.
   Future<void> _awaitResume(int token) async {
-    while (mounted &&
-        token == _speechToken &&
-        _phase == _DialoguePhase.paused) {
+    while (mounted && token == _speechToken && _phase == DialoguePhase.paused) {
       await (_pauseGate ??= Completer<void>()).future;
     }
   }
@@ -1736,9 +1757,9 @@ class _PlayPageState extends State<PlayPage> {
   /// 남겨 두는 게 맞지만(무엇에 대한 답인지 보여야 합니다), 새 차례가
   /// 시작됐는데도 남아 있으면 아이가 이번에 한 말로 오해합니다.
   void _startListening() {
-    if (!mounted || _phase == _DialoguePhase.paused) return;
+    if (!mounted || _phase == DialoguePhase.paused) return;
     setState(() {
-      _phase = _DialoguePhase.listening;
+      _phase = DialoguePhase.listening;
       _listeningSeconds = 0;
       _recordingVoice = false;
       _transcribingVoice = false;
@@ -1752,7 +1773,7 @@ class _PlayPageState extends State<PlayPage> {
     });
     _listeningTimer?.cancel();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _phase == _DialoguePhase.listening && !_recordingVoice) {
+      if (mounted && _phase == DialoguePhase.listening && !_recordingVoice) {
         unawaited(_toggleVoiceAnswer());
       }
     });
@@ -1767,10 +1788,10 @@ class _PlayPageState extends State<PlayPage> {
   /// 전개 화면의 [_toggleStoryPause] 와 같은 방식입니다.
   void _togglePause() {
     _exitPrompt = false;
-    if (_phase == _DialoguePhase.paused) {
+    if (_phase == DialoguePhase.paused) {
       setState(() => _phase = _phaseBeforePause);
       _openPauseGate();
-      if (_phase == _DialoguePhase.characterSpeaking) {
+      if (_phase == DialoguePhase.characterSpeaking) {
         // 멈춰 둔 오디오가 남아 있으면 그 지점부터 이어 갑니다. 루프는
         // playUrl 안에서 그대로 기다리고 있어 다시 부를 것이 없습니다.
         if (_audioPlayer.canResume) {
@@ -1800,7 +1821,7 @@ class _PlayPageState extends State<PlayPage> {
     setState(() {
       _recordingVoice = false;
       _transcribingVoice = false;
-      _phase = _DialoguePhase.paused;
+      _phase = DialoguePhase.paused;
     });
   }
 
@@ -1824,7 +1845,7 @@ class _PlayPageState extends State<PlayPage> {
   void _requestExit() {
     if (_snapshot?.phase == PlayPhase.story) {
       if (!_storyPaused) _toggleStoryPause();
-    } else if (_phase != _DialoguePhase.paused) {
+    } else if (_phase != DialoguePhase.paused) {
       _togglePause();
     }
     // 멈춘 뒤에 세웁니다 - 위 토글이 이 표시를 지웁니다.
@@ -1931,13 +1952,13 @@ class _PlayPageState extends State<PlayPage> {
                 videoUrl: _character == null ? dialogueScene?.videoUrl : null,
                 loop: true,
               ),
-              const _BackdropShade(),
+              const DialogueBackdropShade(),
               SafeArea(
                 minimum: EdgeInsets.all(compact ? 12 : 22),
                 child: Column(
                   children: <Widget>[
                     _StoryControls(
-                      isPaused: _phase == _DialoguePhase.paused,
+                      isPaused: _phase == DialoguePhase.paused,
                       soundOn: _soundOn,
                       sceneOrder: dialogueScene?.sceneOrder,
                       totalScenes: widget.totalScenes,
@@ -1947,7 +1968,7 @@ class _PlayPageState extends State<PlayPage> {
                       onSound: _toggleSound,
                     ),
                     Expanded(
-                      child: _DialogueCanvas(
+                      child: DialogueCanvas(
                         character: _character,
                         activity: _activity,
                         characterAsset: widget.characterAsset,
@@ -2011,7 +2032,7 @@ class _PlayPageState extends State<PlayPage> {
                   ],
                 ),
               ),
-              if (_phase == _DialoguePhase.paused)
+              if (_phase == DialoguePhase.paused)
                 (_exitPrompt
                     ? _PauseOverlay.exit(
                         onResume: _togglePause,
@@ -2130,7 +2151,7 @@ class _StorySceneView extends StatelessWidget {
             videoUrl: scene.videoUrl,
             loop: true,
           ),
-          const _BackdropShade(),
+          const DialogueBackdropShade(),
           SafeArea(
             minimum: const EdgeInsets.all(22),
             child: Column(
@@ -2230,7 +2251,7 @@ class _SceneBackdrop extends StatelessWidget {
   Widget build(BuildContext context) {
     final String? url = videoUrl;
     if (url == null || url.isEmpty) {
-      return _StoryBackdrop(asset: imageAsset);
+      return DialogueBackdrop(asset: imageAsset);
     }
     return _SceneVideoBackdrop(
       videoUrl: url,
@@ -2358,7 +2379,7 @@ class _SceneVideoBackdropState extends State<_SceneVideoBackdrop> {
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
-        _StoryBackdrop(asset: widget.imageAsset),
+        DialogueBackdrop(asset: widget.imageAsset),
         if (showVideo)
           FittedBox(
             fit: BoxFit.cover,
@@ -2370,76 +2391,6 @@ class _SceneVideoBackdropState extends State<_SceneVideoBackdrop> {
             ),
           ),
       ],
-    );
-  }
-}
-
-class _StoryBackdrop extends StatelessWidget {
-  const _StoryBackdrop({this.asset});
-
-  final String? asset;
-
-  @override
-  Widget build(BuildContext context) {
-    if (asset != null) {
-      final String resolvedAsset = asset!.startsWith('/')
-          ? Uri.parse(AppConfig.apiBaseUrl).resolve(asset!).toString()
-          : asset!;
-      final Uri? uri = Uri.tryParse(resolvedAsset);
-      if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
-        return Image.network(
-          resolvedAsset,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => const _FallbackStoryBackdrop(),
-        );
-      }
-      return Image.asset(
-        resolvedAsset,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => const _FallbackStoryBackdrop(),
-      );
-    }
-    return const _FallbackStoryBackdrop();
-  }
-}
-
-class _FallbackStoryBackdrop extends StatelessWidget {
-  const _FallbackStoryBackdrop();
-
-  @override
-  Widget build(BuildContext context) => const DecoratedBox(
-    decoration: BoxDecoration(
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: <Color>[
-          Color(0xFF356B8A),
-          Color(0xFF244A73),
-          Color(0xFF172E50),
-        ],
-      ),
-    ),
-    child: CustomPaint(painter: _BackdropPainter()),
-  );
-}
-
-class _BackdropShade extends StatelessWidget {
-  const _BackdropShade();
-
-  @override
-  Widget build(BuildContext context) {
-    return const DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[
-            Color(0x33071425),
-            Color(0x00071425),
-            Color(0x66071425),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -2484,7 +2435,11 @@ class _StoryControls extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: <Widget>[
-        _ControlButton(label: '나가기', icon: AppIcons.close, onPressed: onExit),
+        DialogueControlButton(
+          label: '나가기',
+          icon: AppIcons.close,
+          onPressed: onExit,
+        ),
         const SizedBox(width: 12),
         Expanded(
           child: Semantics(
@@ -2513,909 +2468,25 @@ class _StoryControls extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        _ControlButton(
+        DialogueControlButton(
           label: '다시 듣기',
           icon: AppIcons.replay,
           onPressed: onReplay,
         ),
         const SizedBox(width: 8),
-        _ControlButton(
+        DialogueControlButton(
           label: soundOn ? '소리 끄기' : '소리 켜기',
           icon: soundOn ? AppIcons.soundOn : AppIcons.soundOff,
           onPressed: onSound,
         ),
         const SizedBox(width: 8),
-        _ControlButton(
+        DialogueControlButton(
           label: isPaused ? '계속 듣기' : '잠시 멈춤',
           icon: isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
           onPressed: onPause,
           emphasized: true,
         ),
       ],
-    );
-  }
-}
-
-class _ControlButton extends StatelessWidget {
-  const _ControlButton({
-    required this.label,
-    required this.icon,
-    required this.onPressed,
-    this.emphasized = false,
-  });
-
-  final String label;
-  final IconData icon;
-  final VoidCallback onPressed;
-  final bool emphasized;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: label,
-      child: Material(
-        color: emphasized ? const Color(0xFFFFD56A) : const Color(0xCC102B48),
-        shape: const CircleBorder(),
-        elevation: 4,
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onPressed,
-          child: SizedBox(
-            width: 52,
-            height: 52,
-            child: Icon(
-              icon,
-              size: 28,
-              color: emphasized ? const Color(0xFF17314A) : Colors.white,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DialogueCanvas extends StatelessWidget {
-  const _DialogueCanvas({
-    required this.character,
-    required this.activity,
-    required this.characterAsset,
-    required this.characterName,
-    required this.question,
-    required this.phase,
-    required this.listeningSeconds,
-    required this.recording,
-    required this.transcribing,
-    required this.compact,
-    required this.onMicTap,
-    required this.submitting,
-    required this.lastChildText,
-    required this.lastSttLowConfidence,
-    this.guideSpeaking = false,
-    this.micNeedsTap = false,
-    this.sttHint,
-    this.choicePanel,
-    this.pendingTranscription,
-    this.onConfirmTranscription,
-    this.onRetryTranscription,
-    this.onWordTap,
-    this.pendingWord,
-    this.savingWord = false,
-    this.wordNotice,
-    this.onConfirmWord,
-    this.onCancelWord,
-  });
-
-  /// 제작한 표정 에셋이 있는 장면에서만 값이 있다. null이면 [characterAsset] 한 장으로 그린다.
-  final DialogueCharacterStateMachine? character;
-  final DialogueActivity activity;
-  final String? characterAsset;
-  final String characterName;
-  final String question;
-  final _DialoguePhase phase;
-  final int listeningSeconds;
-  final bool recording;
-  final bool transcribing;
-  final bool compact;
-  final VoidCallback? onMicTap;
-
-  /// 캐릭터가 다시 물어보는 안내 음성이 나오는 중. 이때 마이크는 "준비됨"이
-  /// 아니라 "듣는 중" 모양이어야 한다 - 눌러도 안 되는 버튼이 켜져 보이면
-  /// 아이는 고장 났다고 여긴다.
-  final bool guideSpeaking;
-
-  /// 마이크가 저절로 켜지지 않고 아이가 눌러 줘야 하는 상태(못 알아들어서 다시
-  /// 말해야 할 때·선택지가 떠 있을 때). 턴을 새로 시작할 때는 화면이 알아서
-  /// 녹음을 켜지만, 다시 말하는 자리에서는 안내 음성 꼬리가 녹음되지 않도록
-  /// 아이가 직접 누르게 두기 때문이다.
-  final bool micNeedsTap;
-
-  /// 아이의 확인을 기다리는 변환 결과. 값이 있으면 말풍선이 확인 화면으로 바뀐다.
-  final PlayTranscription? pendingTranscription;
-  final VoidCallback? onConfirmTranscription;
-  final VoidCallback? onRetryTranscription;
-
-  final bool submitting;
-  final String? lastChildText;
-  final bool lastSttLowConfidence;
-
-  /// 무음/인식 실패로 다시 말해야 할 때만 값이 있다. [lastSttLowConfidence]
-  /// 와 달리 화면을 안 바꾸고 마이크 옆에만 짧게 띄운다.
-  final String? sttHint;
-
-  /// 세 번 이어서 못 알아들었을 때만 값이 있다. 캐릭터 말풍선 자리를 대신
-  /// 쓰고, 아이 말풍선(마이크)은 제자리에 그대로 둔다.
-  final Widget? choicePanel;
-
-  /// 고정 대사일 때만 값이 있다. null 이면 말풍선은 지금처럼 통짜 글로
-  /// 그려지고 단어를 누를 수 없다(동적 대사).
-  final void Function(String token)? onWordTap;
-  final String? pendingWord;
-  final bool savingWord;
-  final String? wordNotice;
-  final VoidCallback? onConfirmWord;
-  final VoidCallback? onCancelWord;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        // 제작 캐릭터는 정면 전신이고 표정이 전부다. 말풍선이 얼굴을 가리면 이 화면의 의미가
-        // 없어지므로 인물은 왼쪽에 세우고 말풍선은 오른쪽으로 몰아 둔다.
-        final bool hasStage = character != null;
-        final double stageWidth = constraints.maxWidth * (compact ? .56 : .40);
-
-        return Stack(
-          clipBehavior: Clip.none,
-          children: <Widget>[
-            if (hasStage)
-              Positioned(
-                left: compact ? -constraints.maxWidth * .06 : 8,
-                width: stageWidth,
-                top: compact ? 120 : 4,
-                bottom: 0,
-                child: DialogueCharacterStage(
-                  scene: character!.scene,
-                  state: character!.current,
-                  activity: activity,
-                ),
-              )
-            else if (characterAsset != null && !compact)
-              Positioned(
-                left: 18,
-                top: 30,
-                bottom: 0,
-                width: constraints.maxWidth * .29,
-                child: Semantics(
-                  image: true,
-                  label: '$characterName 캐릭터',
-                  child: Image.asset(
-                    characterAsset!,
-                    fit: BoxFit.contain,
-                    alignment: Alignment.bottomLeft,
-                  ),
-                ),
-              ),
-            Positioned(
-              left: compact
-                  ? 10
-                  : (hasStage ? stageWidth + 24 : constraints.maxWidth * .23),
-              right: compact ? 10 : 20,
-              top: compact ? 18 : 44,
-              // 선택지 판은 아이 말풍선 바로 위까지 내려와 카드 3장을 크게
-              // 폅니다. 말풍선은 내용만큼만 차지하므로 bottom 을 주지 않습니다.
-              bottom: choicePanel == null ? null : (compact ? 154.0 : 190.0),
-              child:
-                  choicePanel ??
-                  _QuestionBubble(
-                    characterName: characterName,
-                    question: question,
-                    compact: compact,
-                    onWordTap: onWordTap,
-                    pendingWord: pendingWord,
-                    savingWord: savingWord,
-                    wordNotice: wordNotice,
-                    onConfirmWord: onConfirmWord,
-                    onCancelWord: onCancelWord,
-                    // 아이 말풍선(아래)과 서로 밀어내지 않도록 위아래로 나눠
-                    // 씁니다. 좁은 폭에서 대사가 길어져도 잘리는 대신 이 안에서
-                    // 굴러갑니다.
-                    maxHeight:
-                        constraints.maxHeight -
-                        (compact ? 18 : 44) -
-                        (compact ? 160 : 190),
-                  ),
-            ),
-            // 이름 배지는 인물 발밑에 겹치고, 말풍선이 이미 "○○의 질문"으로 화자를 밝힌다.
-            if (!compact && !hasStage)
-              Positioned(
-                left: 20,
-                bottom: 22,
-                child: _CharacterNameBadge(name: characterName),
-              ),
-            Positioned(
-              right: compact ? 10 : 0,
-              bottom: compact ? 10 : 20,
-              width: compact
-                  ? constraints.maxWidth - 20
-                  : constraints.maxWidth * .52,
-              child: _ChildVoiceBubble(
-                phase: phase,
-                seconds: listeningSeconds,
-                recording: recording,
-                transcribing: transcribing,
-                submitting: submitting,
-                guideSpeaking: guideSpeaking,
-                micNeedsTap: micNeedsTap,
-                onMicTap: onMicTap,
-                lastChildText: lastChildText,
-                lowConfidence: lastSttLowConfidence,
-                sttHint: sttHint,
-                compact: compact,
-                pending: pendingTranscription,
-                onConfirm: onConfirmTranscription,
-                onRetry: onRetryTranscription,
-                maxHeight: constraints.maxHeight * (compact ? .42 : .5),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _CharacterNameBadge extends StatelessWidget {
-  const _CharacterNameBadge({required this.name});
-
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xDD173A5D),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white70),
-      ),
-      child: Text(
-        name,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 18,
-          fontWeight: FontWeight.w900,
-        ),
-      ),
-    );
-  }
-}
-
-/// 캐릭터 대사 말풍선.
-///
-/// **대사는 어떤 폭에서도 잘리지 않습니다.** 아이가 글을 다 못 읽는 채로
-/// 대답해야 하는 상황을 만들면 이 화면이 성립하지 않습니다. 그래서 문장이
-/// 길면 (1) 글자를 한 단계씩 줄이고, (2) 그래도 넘치면 말풍선 안에서
-/// 스크롤합니다 - 말줄임표로 끊지 않습니다.
-class _QuestionBubble extends StatelessWidget {
-  const _QuestionBubble({
-    required this.characterName,
-    required this.question,
-    required this.compact,
-    required this.maxHeight,
-    this.onWordTap,
-    this.pendingWord,
-    this.savingWord = false,
-    this.wordNotice,
-    this.onConfirmWord,
-    this.onCancelWord,
-  });
-
-  /// 말풍선이 차지해도 되는 최대 높이. 아이 말풍선을 밀어내지 않도록
-  /// [_DialogueCanvas] 가 화면 높이에서 계산해 넘깁니다.
-  final double maxHeight;
-
-  TextStyle get _questionStyle => TextStyle(
-    color: const Color(0xFF172A3E),
-    fontSize: _fontSize,
-    height: 1.35,
-    fontWeight: FontWeight.w900,
-    letterSpacing: -.5,
-  );
-
-  /// 길이에 따라 한 단계씩 줄어드는 글자 크기. 자르는 대신 줄입니다.
-  double get _fontSize {
-    final int length = question.characters.length;
-    if (compact) return length > 90 ? 21 : (length > 55 ? 24 : 27);
-    return length > 90 ? 27 : (length > 55 ? 30 : 34);
-  }
-
-  final String characterName;
-  final String question;
-  final bool compact;
-
-  /// 값이 있으면 대사가 단어 단위로 눌리는 고정 대사다. → [_TappableDialogue]
-  final void Function(String token)? onWordTap;
-  final String? pendingWord;
-  final bool savingWord;
-  final String? wordNotice;
-  final VoidCallback? onConfirmWord;
-  final VoidCallback? onCancelWord;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: <Widget>[
-        Positioned(
-          left: -17,
-          top: 62,
-          child: Transform.rotate(
-            angle: .78,
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFFCF3),
-                border: Border.all(color: const Color(0xFFFFD66B), width: 2),
-              ),
-            ),
-          ),
-        ),
-        Container(
-          constraints: BoxConstraints(
-            minHeight: compact ? 138 : 176,
-            maxHeight: max(maxHeight, compact ? 138.0 : 176.0),
-          ),
-          padding: EdgeInsets.symmetric(
-            horizontal: compact ? 22 : 34,
-            vertical: compact ? 19 : 25,
-          ),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFFCF3),
-            borderRadius: BorderRadius.circular(compact ? 24 : 32),
-            border: Border.all(color: const Color(0xFFFFD66B), width: 3),
-            boxShadow: const <BoxShadow>[
-              BoxShadow(
-                color: Color(0x55081729),
-                blurRadius: 28,
-                offset: Offset(0, 12),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            // 최대 높이가 생겼으니 min 이어야 합니다 - 기본값(max)이면 대사가
-            // 짧아도 말풍선이 허용 높이까지 늘어납니다.
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Row(
-                children: <Widget>[
-                  const Icon(
-                    Icons.check_circle_rounded,
-                    color: Color(0xFF4EA883),
-                    size: 25,
-                  ),
-                  const SizedBox(width: 9),
-                  Text(
-                    '$characterName의 질문',
-                    style: const TextStyle(
-                      color: Color(0xFF496179),
-                      fontSize: 17,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              // 자르지 않습니다 - 줄이고, 그래도 넘치면 말풍선 안에서 굴립니다.
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Semantics(
-                    liveRegion: true,
-                    label: question,
-                    child: onWordTap == null
-                        ? Text(question, style: _questionStyle)
-                        : _TappableDialogue(
-                            text: question,
-                            style: _questionStyle,
-                            selectedWord: pendingWord,
-                            onWordTap: onWordTap!,
-                          ),
-                  ),
-                ),
-              ),
-              if (pendingWord != null) ...<Widget>[
-                const SizedBox(height: 12),
-                _WordSaveBar(
-                  word: pendingWord!,
-                  saving: savingWord,
-                  compact: compact,
-                  onSave: onConfirmWord,
-                  onCancel: onCancelWord,
-                ),
-              ] else if (wordNotice != null) ...<Widget>[
-                const SizedBox(height: 10),
-                Text(
-                  wordNotice!,
-                  style: const TextStyle(
-                    color: Color(0xFF4EA883),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// 고정 대사를 단어 단위로 눌리게 그린다.
-///
-/// RichText + TapGestureRecognizer 대신 Wrap을 쓴다 - recognizer는 dispose
-/// 관리가 필요해 StatefulWidget이 되고, Wrap이면 토큰마다 위젯이라 테스트에서
-/// find.text('단어')로 바로 잡힌다. 줄바꿈은 어차피 공백 단위라 결과가 같다.
-class _TappableDialogue extends StatelessWidget {
-  const _TappableDialogue({
-    required this.text,
-    required this.style,
-    required this.onWordTap,
-    this.selectedWord,
-  });
-
-  final String text;
-  final TextStyle style;
-  final void Function(String token) onWordTap;
-  final String? selectedWord;
-
-  @override
-  Widget build(BuildContext context) {
-    final List<String> tokens = text
-        .split(RegExp(r'\s+'))
-        .where((String token) => token.isNotEmpty)
-        .toList(growable: false);
-    return Wrap(
-      spacing: (style.fontSize ?? 27) * .26,
-      runSpacing: 6,
-      children: <Widget>[
-        for (final String token in tokens)
-          GestureDetector(
-            onTap: () => onWordTap(token),
-            behavior: HitTestBehavior.opaque,
-            child: Text(
-              token,
-              style: _isSelected(token)
-                  ? style.copyWith(
-                      color: const Color(0xFF1C6BC8),
-                      decoration: TextDecoration.underline,
-                      decorationColor: const Color(0xFF1C6BC8),
-                      decorationThickness: 2.5,
-                    )
-                  : style,
-            ),
-          ),
-      ],
-    );
-  }
-
-  /// 구두점을 걷어낸 뒤 비교한다 - "기왓장이" 토큰을 눌러 "기왓장이"가
-  /// 선택돼도, 토큰 끝 물음표 등으로 어긋나지 않게.
-  bool _isSelected(String token) {
-    final String? selected = selectedWord;
-    if (selected == null) return false;
-    return token == selected || token.startsWith(selected);
-  }
-}
-
-/// "이 단어를 담을까요?" 확인 줄. 시험이 아니라 담기이므로 버튼은 둘뿐이고
-/// 어느 쪽을 골라도 이야기는 그대로 이어진다.
-class _WordSaveBar extends StatelessWidget {
-  const _WordSaveBar({
-    required this.word,
-    required this.saving,
-    required this.compact,
-    required this.onSave,
-    required this.onCancel,
-  });
-
-  final String word;
-  final bool saving;
-  final bool compact;
-  final VoidCallback? onSave;
-  final VoidCallback? onCancel;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: compact ? 12 : 16,
-        vertical: compact ? 8 : 10,
-      ),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEFF6FF),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF9CC4EE), width: 2),
-      ),
-      child: Row(
-        children: <Widget>[
-          Expanded(
-            child: Text(
-              "'$word' 단어장에 담을까요?",
-              style: const TextStyle(
-                color: Color(0xFF1C4F86),
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          _WordSaveButton(
-            label: saving ? '담는 중...' : '담기',
-            emphasized: true,
-            onTap: saving ? null : onSave,
-          ),
-          const SizedBox(width: 8),
-          _WordSaveButton(
-            label: '그냥 둘게요',
-            emphasized: false,
-            onTap: saving ? null : onCancel,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _WordSaveButton extends StatelessWidget {
-  const _WordSaveButton({
-    required this.label,
-    required this.emphasized,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool emphasized;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        // 초등 저학년 손가락 기준 최소 44 - 텍스트가 작아도 판은 크게.
-        constraints: const BoxConstraints(minHeight: 44),
-        alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: BoxDecoration(
-          color: emphasized ? const Color(0xFF2E7CD6) : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: emphasized
-              ? null
-              : Border.all(color: const Color(0xFF9CC4EE), width: 1.5),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: emphasized ? Colors.white : const Color(0xFF1C4F86),
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ChildVoiceBubble extends StatelessWidget {
-  const _ChildVoiceBubble({
-    required this.phase,
-    required this.seconds,
-    required this.recording,
-    required this.transcribing,
-    required this.submitting,
-    required this.onMicTap,
-    required this.lastChildText,
-    required this.lowConfidence,
-    required this.compact,
-    required this.maxHeight,
-    this.guideSpeaking = false,
-    this.micNeedsTap = false,
-    this.sttHint,
-    this.pending,
-    this.onConfirm,
-    this.onRetry,
-  });
-
-  /// 말풍선이 차지해도 되는 최대 높이. 아이가 길게 말했어도 잘라내지 않고
-  /// 이 안에서 굴립니다. → [_QuestionBubble]
-  final double maxHeight;
-
-  final _DialoguePhase phase;
-  final int seconds;
-  final bool recording;
-  final bool transcribing;
-  final bool submitting;
-  final VoidCallback? onMicTap;
-  final String? lastChildText;
-  final bool lowConfidence;
-  final bool compact;
-
-  /// 캐릭터가 다시 물어보는 중. 마이크는 잠겨 있다. → [_DialogueCanvas]
-  final bool guideSpeaking;
-
-  /// 마이크를 아이가 눌러 줘야 하는 자리. → [_DialogueCanvas.micNeedsTap]
-  final bool micNeedsTap;
-
-  final String? sttHint;
-
-  /// 아이의 확인을 기다리는 변환 결과. 값이 있으면 확인 화면을 그린다.
-  final PlayTranscription? pending;
-  final VoidCallback? onConfirm;
-  final VoidCallback? onRetry;
-
-  bool get listening => phase == _DialoguePhase.listening;
-
-  /// 안내 음성이 나오는 동안에는 "말할 차례"가 아니다. 마이크를 켜진 모양으로
-  /// 두면 눌렀다가 아무 일도 안 일어난다.
-  bool get micReady => listening && !guideSpeaking;
-
-  @override
-  Widget build(BuildContext context) {
-    if (pending != null) return _buildConfirmView();
-    final String status = transcribing
-        ? '목소리를 글로 바꾸고 있어요'
-        : submitting
-        ? '이야기 친구가 답을 준비하고 있어요'
-        : recording
-        ? '잘 듣고 있어요 · $seconds초'
-        : guideSpeaking
-        ? '이야기 친구가 다시 물어보고 있어요'
-        : listening
-        // 다시 말하는 자리에서는 마이크가 저절로 켜지지 않는다. "이제 말할
-        // 차례예요"라고 두면 아이가 누르지 않고 기다린다.
-        ? (micNeedsTap ? '다시 말할 수 있어요' : '이제 말할 차례예요')
-        : '질문을 듣고 있어요';
-    final String body = lastChildText?.trim().isNotEmpty == true
-        ? lastChildText!.trim()
-        : recording
-        ? '나는 이렇게 생각해요…'
-        : transcribing
-        ? '말한 내용을 잠깐 확인하고 있어요.'
-        : guideSpeaking
-        ? '친구 말이 끝나면 말할 수 있어요.'
-        : listening
-        ? (micNeedsTap ? '마이크를 누르고 말해 주세요.' : '마이크가 자동으로 켜졌어요.')
-        : '질문이 끝나면 마이크가 켜져요.';
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      constraints: BoxConstraints(
-        minHeight: compact ? 128 : 154,
-        maxHeight: max(maxHeight, compact ? 128.0 : 154.0),
-      ),
-      padding: EdgeInsets.all(compact ? 15 : 20),
-      decoration: BoxDecoration(
-        color: const Color(0xF2123252),
-        borderRadius: BorderRadius.circular(compact ? 22 : 28),
-        border: Border.all(
-          color: listening ? const Color(0xFF77E0C4) : Colors.white38,
-          width: listening ? 3 : 1.5,
-        ),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(
-            color: Color(0x66000000),
-            blurRadius: 24,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Row(
-        children: <Widget>[
-          _ListeningMic(
-            ready: micReady,
-            recording: recording,
-            busy: transcribing || submitting,
-            onTap: onMicTap,
-          ),
-          const SizedBox(width: 18),
-          Expanded(
-            child: Semantics(
-              liveRegion: true,
-              label: lastChildText == null ? status : '내가 한 말: $lastChildText',
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    status,
-                    style: const TextStyle(
-                      color: Color(0xFF8DE7CF),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 9),
-                  // 아이가 한 말도 자르지 않습니다 - 자기가 한 말이 반쯤
-                  // 잘려 보이면 다시 말해야 하는지 알 수 없습니다.
-                  Flexible(
-                    child: SingleChildScrollView(
-                      child: Text(
-                        body,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: compact ? 20 : 23,
-                          height: 1.35,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (sttHint != null) ...<Widget>[
-                    const SizedBox(height: 6),
-                    Text(
-                      sttHint!,
-                      style: const TextStyle(
-                        color: Color(0xFFFFD56A),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ] else if (lowConfidence &&
-                      lastChildText != null) ...<Widget>[
-                    const SizedBox(height: 6),
-                    const Text(
-                      '잘 들었는지 한 번 더 확인해 주세요.',
-                      style: TextStyle(
-                        color: Color(0xFFFFD56A),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 변환 결과 확인 화면. "맞아요"를 눌러야 턴이 제출된다.
-  ///
-  /// 글을 못 읽는 아이도 있으므로 문구에만 기대지 않는다 - 버튼을 크게 두 개만
-  /// 두고 색과 아이콘(체크/새로고침)으로 "보내기"와 "다시 말하기"를 구분한다.
-  /// 저신뢰면 테두리와 제목을 노란색 계열로 바꿔 "확실하지 않다"는 신호를 준다.
-  ///
-  /// 아이가 한 말은 자르지 않는다. 길게 말했으면 [maxHeight] 안에서 굴리고,
-  /// 버튼 두 개는 어떤 경우에도 화면에 남는다 - 잘린 말과 사라진 버튼은
-  /// 아이에게 "여기서 뭘 해야 하는지"를 통째로 숨긴다.
-  Widget _buildConfirmView() {
-    final PlayTranscription result = pending!;
-    final Color accent = result.lowConfidence
-        ? const Color(0xFFFFD56A)
-        : const Color(0xFF77E0C4);
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      constraints: BoxConstraints(
-        minHeight: compact ? 128 : 154,
-        maxHeight: maxHeight,
-      ),
-      padding: EdgeInsets.all(compact ? 15 : 20),
-      decoration: BoxDecoration(
-        color: const Color(0xF2123252),
-        borderRadius: BorderRadius.circular(compact ? 22 : 28),
-        border: Border.all(color: accent, width: 3),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(
-            color: Color(0x66000000),
-            blurRadius: 24,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Semantics(
-        liveRegion: true,
-        label: '이렇게 들었어요: ${result.text}. 맞으면 맞아요를 누르세요.',
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              result.lowConfidence ? '이렇게 들었는데, 맞을까요?' : '이렇게 들었어요',
-              style: TextStyle(
-                color: accent,
-                fontSize: 16,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 9),
-            Flexible(
-              child: SingleChildScrollView(
-                child: Text(
-                  result.text,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: compact ? 20 : 23,
-                    height: 1.35,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ),
-            if (result.lowConfidence) ...<Widget>[
-              const SizedBox(height: 6),
-              const Text(
-                '잘 못 알아들었을 수도 있어요.',
-                style: TextStyle(
-                  color: Color(0xFFFFD56A),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-            SizedBox(height: compact ? 12 : 16),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: SizedBox(
-                    height: compact ? 48 : 54,
-                    child: FilledButton.icon(
-                      onPressed: submitting ? null : onConfirm,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF72D6B7),
-                        foregroundColor: const Color(0xFF10314A),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      icon: const Icon(Icons.check_rounded, size: 26),
-                      label: const Text(
-                        '맞아요',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: SizedBox(
-                    height: compact ? 48 : 54,
-                    child: OutlinedButton.icon(
-                      onPressed: submitting ? null : onRetry,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFFFFD56A),
-                        side: const BorderSide(
-                          color: Color(0xFFFFD56A),
-                          width: 2,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      icon: const Icon(Icons.refresh_rounded, size: 26),
-                      label: const Text(
-                        '다시 말할래요',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -3445,9 +2516,9 @@ class _CharacterSlot extends StatelessWidget {
           fit: StackFit.expand,
           children: <Widget>[
             if (asset != null)
-              _StoryBackdrop(asset: asset)
+              DialogueBackdrop(asset: asset)
             else
-              const _FallbackStoryBackdrop(),
+              const DialogueBackdropFallback(),
             const DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -3517,7 +2588,7 @@ class _DialoguePanel extends StatelessWidget {
 
   final String characterName;
   final String question;
-  final _DialoguePhase phase;
+  final DialoguePhase phase;
   final int seconds;
   final bool recording;
   final bool transcribing;
@@ -3527,7 +2598,7 @@ class _DialoguePanel extends StatelessWidget {
   final bool lastSttLowConfidence;
   final bool compact;
 
-  bool get listening => phase == _DialoguePhase.listening;
+  bool get listening => phase == DialoguePhase.listening;
 
   @override
   Widget build(BuildContext context) {
@@ -3685,7 +2756,7 @@ class _ChildBubble extends StatelessWidget {
     this.compact = false,
   });
 
-  final _DialoguePhase phase;
+  final DialoguePhase phase;
   final int seconds;
   final bool recording;
   final bool transcribing;
@@ -3693,7 +2764,7 @@ class _ChildBubble extends StatelessWidget {
   final bool submitting;
   final bool compact;
 
-  bool get listening => phase == _DialoguePhase.listening;
+  bool get listening => phase == DialoguePhase.listening;
 
   @override
   Widget build(BuildContext context) {
@@ -3720,7 +2791,7 @@ class _ChildBubble extends StatelessWidget {
         ),
         child: Row(
           children: <Widget>[
-            _ListeningMic(
+            DialogueMicButton(
               ready: listening,
               recording: recording,
               busy: transcribing || submitting,
@@ -3783,66 +2854,6 @@ class _ChildBubble extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ListeningMic extends StatelessWidget {
-  const _ListeningMic({
-    required this.ready,
-    required this.recording,
-    required this.busy,
-    required this.onTap,
-  });
-
-  final bool ready;
-  final bool recording;
-  final bool busy;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: recording
-          ? '마이크 켜짐'
-          : ready
-          ? '마이크 준비됨'
-          : '마이크 준비 중',
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        width: 96,
-        height: 96,
-        decoration: BoxDecoration(
-          color: recording
-              ? const Color(0xFFFF7B68)
-              : ready
-              ? const Color(0xFF77E0C4)
-              : const Color(0xFF6D8094),
-          shape: BoxShape.circle,
-          boxShadow: recording
-              ? const <BoxShadow>[
-                  BoxShadow(
-                    color: Color(0x88FF7B68),
-                    blurRadius: 18,
-                    spreadRadius: 4,
-                  ),
-                ]
-              : null,
-        ),
-        child: IconButton(
-          tooltip: recording
-              ? '말하기 완료'
-              : ready
-              ? '눌러서 말하기'
-              : '질문을 듣는 중이에요',
-          onPressed: busy ? null : onTap,
-          icon: busy
-              ? const CircularProgressIndicator(strokeWidth: 3)
-              : Icon(recording ? Icons.stop_rounded : AppIcons.speak),
-          iconSize: 44,
-          color: const Color(0xFF123252),
         ),
       ),
     );
@@ -4619,7 +3630,7 @@ class _ResultSceneOverlay extends StatelessWidget {
                 SizedBox(
                   width: 1060,
                   height: 620,
-                  child: _StoryBackdrop(asset: imageUrl),
+                  child: DialogueBackdrop(asset: imageUrl),
                 ),
                 Container(
                   width: double.infinity,
@@ -4660,33 +3671,6 @@ class _RightTailPainter extends CustomPainter {
         ..lineTo(size.width - 5, 68)
         ..close(),
       Paint()..color = color,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _BackdropPainter extends CustomPainter {
-  const _BackdropPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final Paint paint = Paint()..color = const Color(0x1677E0C4);
-    canvas.drawCircle(
-      Offset(size.width * .15, size.height * .22),
-      size.width * .16,
-      paint,
-    );
-    canvas.drawCircle(
-      Offset(size.width * .82, size.height * .28),
-      size.width * .22,
-      paint,
-    );
-    canvas.drawCircle(
-      Offset(size.width * .62, size.height * .9),
-      size.width * .26,
-      paint,
     );
   }
 

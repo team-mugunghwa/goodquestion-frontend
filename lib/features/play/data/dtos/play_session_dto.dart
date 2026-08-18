@@ -12,6 +12,9 @@ class PlaySessionDto {
     return PlaySessionSnapshot(
       phase: _phase(sessionValue['phase']),
       currentScene: _scene(json['currentScene']),
+      // 장면 전환 응답에는 없는 값입니다. 없으면 null 로 두고 화면이 처음
+      // 받은 값을 들고 갑니다. → PlaySessionSnapshot.storyId
+      storyId: sessionValue['storyId']?.toString(),
       openingText: _messageText(json['lastCharacterMessage']),
       openingAudioUrl: _messageAudioUrl(json['lastCharacterMessage']),
       openingAudioTimings: _messageAudioTimings(json['lastCharacterMessage']),

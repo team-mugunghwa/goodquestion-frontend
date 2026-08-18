@@ -76,6 +76,8 @@ class PlayRecapPage extends StatefulWidget {
   const PlayRecapPage({
     required this.sessionId,
     this.storyTitle = '오늘의 이야기',
+    this.storyId,
+    this.lastCharacterName,
     this.repository,
     this.voiceRecorder,
     this.sceneCards = _defaultCards,
@@ -85,6 +87,19 @@ class PlayRecapPage extends StatefulWidget {
 
   final String sessionId;
   final String storyTitle;
+
+  /// 방금 끝낸 이야기. **완료 화면의 "○○와 더 이야기하기" 진입점에만**
+  /// 씁니다. 활동 API 는 세션만 알고 이야기를 안 내려줘서, 화면을 여는
+  /// 재생 화면이 주소에 실어 보냅니다. → `AppRoutes.playRecapOf`
+  ///
+  /// `null` 이면 진입점을 **그리지 않습니다**. 이야기를 모르면 인물 목록을
+  /// 부를 수 없는데, 눌러 놓고 빈 화면을 보여 주는 것이 더 나쁩니다.
+  final String? storyId;
+
+  /// 마지막 대화 장면의 인물 이름. 진입점 버튼이 이 이름을 부릅니다 —
+  /// "이야기 친구"보다 아이가 훨씬 빨리 알아봅니다. 없으면 일반 문구로
+  /// 되돌아갑니다.
+  final String? lastCharacterName;
 
   /// 서버와 이어 주는 통로. **null 이면 데모 모드**입니다 - 아래 고정값으로
   /// 화면만 돌려 봅니다(`lib/main_recap_preview.dart` · 위젯 테스트).
@@ -682,13 +697,17 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
         onMic: () => unawaited(_toggleListening()),
         onComplete: () => unawaited(_completeActivity()),
       ),
-      _RecapStep.completed => AppKidMessageView(
+      _RecapStep.completed => _CompletedStep(
         key: const ValueKey<String>('completed'),
+        metrics: metrics,
         message: _completedMessage,
-        messageStyle: metrics.text(AppTypography.kidTitle),
-        actionIcon: AppIcons.home,
-        actionLabel: RecapStrings.completedAction,
-        onAction: _goHome,
+        // 완주한 이야기에만 진입점이 뜹니다. 이 화면 자체가 완주의 끝이라
+        // 완주 여부를 따로 물을 필요가 없고, 이야기를 알 때만 그립니다.
+        freeTalkLabel: widget.storyId == null
+            ? null
+            : FreeTalkStrings.entryAction(widget.lastCharacterName),
+        onFreeTalk: _goFreeTalk,
+        onHome: _goHome,
       ),
     };
   }
@@ -720,6 +739,18 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
     router.go(AppRoutes.home);
   }
 
+  /// "○○와 더 이야기하기" — 인물 고르기로 넘깁니다.
+  ///
+  /// **pop 이 아니라 go 입니다.** [_goHome] 과 같은 이유로, 이 화면은 재생
+  /// 화면 아래 중첩 라우트라 pop 하면 방금 끝낸 재생 화면으로 돌아갑니다.
+  void _goFreeTalk() {
+    final String? storyId = widget.storyId;
+    if (storyId == null) return;
+    final GoRouter? router = GoRouter.maybeOf(context);
+    if (router == null) return;
+    router.go(AppRoutes.freeTalkOf(storyId));
+  }
+
   /// 완료 화면 문구. 별가루와 해금 아이템은 **서버 응답에서** 옵니다.
   String get _completedMessage {
     final PlayRetellingResult? result = _result;
@@ -731,6 +762,90 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
       if (result != null && result.unlockedItems.isNotEmpty)
         RecapStrings.completedUnlocked(result.unlockedItems.length),
     ].join('\n');
+  }
+}
+
+/// 저장이 끝난 뒤의 마지막 화면.
+///
+/// 원래는 [AppKidMessageView] 하나(축하 문구 + "마치기")였습니다. 여기에
+/// **후속 자유 대화 진입점**이 붙으면서 나가는 문이 둘이 됐습니다.
+///
+/// 아이 화면은 보통 선택지를 하나만 둡니다 — "취소"가 막다른 길이 되기
+/// 때문입니다. 여기는 다릅니다. 둘 다 앞으로 가는 길이고, 하나는 오늘을
+/// 끝내는 길, 하나는 정 붙은 친구와 더 이야기하는 길입니다.
+///
+/// [freeTalkLabel] 이 `null` 이면 예전 그대로 "마치기" 하나만 그립니다.
+class _CompletedStep extends StatelessWidget {
+  const _CompletedStep({
+    required this.metrics,
+    required this.message,
+    required this.freeTalkLabel,
+    required this.onFreeTalk,
+    required this.onHome,
+    super.key,
+  });
+
+  final ScreenMetrics metrics;
+  final String message;
+  final String? freeTalkLabel;
+  final VoidCallback onFreeTalk;
+  final VoidCallback onHome;
+
+  @override
+  Widget build(BuildContext context) {
+    final String? label = freeTalkLabel;
+    if (label == null) {
+      return AppKidMessageView(
+        message: message,
+        messageStyle: metrics.text(AppTypography.kidTitle),
+        actionIcon: AppIcons.home,
+        actionLabel: RecapStrings.completedAction,
+        onAction: onHome,
+      );
+    }
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Image.asset(
+              AppAssets.logoMark,
+              width: AppSizes.illustration,
+              height: AppSizes.illustration,
+              fit: BoxFit.contain,
+              excludeFromSemantics: true,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: AppSizes.bubbleMaxWidth,
+              ),
+              child: Text(
+                message,
+                textAlign: TextAlign.center,
+                style: metrics.text(AppTypography.kidTitle),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            // 이야기가 끝났다고 헤어질 필요는 없다 - 그래서 이쪽이 주 버튼이다.
+            KidPrimaryButton(
+              icon: AppIcons.characterSpeaking,
+              label: label,
+              labelStyle: metrics.text(AppTypography.kidButton),
+              onPressed: onFreeTalk,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            KidSecondaryButton(
+              icon: AppIcons.home,
+              label: RecapStrings.completedAction,
+              labelStyle: metrics.text(AppTypography.kidButton),
+              onPressed: onHome,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
