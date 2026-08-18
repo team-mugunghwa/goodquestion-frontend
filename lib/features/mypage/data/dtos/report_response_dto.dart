@@ -166,6 +166,40 @@ class HomeGuideResponseDto {
   final List<String> dailyLifeQuestions;
 }
 
+/// 6각 그래프 축 하나. `GET /sessions/{id}/report/axis-scores` 응답 —
+/// [ReportDetailResponseDto]와 별도 API다 (D6 0-1절: 그래프는 서버
+/// 결정론적 집계 전용, LLM 미사용이라 응답 자체가 분리돼 있다).
+class AxisScoreResponseDto {
+  const AxisScoreResponseDto({
+    required this.label,
+    required this.description,
+    required this.active,
+    this.score,
+    this.previousScore,
+    this.evidence,
+  });
+
+  factory AxisScoreResponseDto.fromJson(Map<String, dynamic> json) =>
+      AxisScoreResponseDto(
+        label: json['label'] as String? ?? '',
+        description: json['description'] as String? ?? '',
+        active: json['active'] as bool? ?? false,
+        score: json['score'] as int?,
+        previousScore: json['previousScore'] as int?,
+        evidence: json['evidence'] as String?,
+      );
+
+  final String label;
+  final String description;
+  final bool active;
+  final int? score;
+  final int? previousScore;
+  final String? evidence;
+}
+
+List<AxisScoreResponseDto> _axisScores(Object? raw) =>
+    _objects(raw).map(AxisScoreResponseDto.fromJson).toList(growable: false);
+
 List<Map<String, dynamic>> _objects(Object? raw) =>
     (raw as List<dynamic>? ?? <dynamic>[])
         .whereType<Map<String, dynamic>>()
