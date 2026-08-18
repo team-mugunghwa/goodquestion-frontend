@@ -17,6 +17,7 @@ import '../../../../core/widgets/story_thumbnail.dart';
 import '../../domain/entities/report_detail.dart';
 import '../../domain/usecases/my_page_use_cases.dart';
 import '../viewmodels/report_detail_view_model.dart';
+import '../widgets/axis_radar_section.dart';
 import '../widgets/skill_card.dart';
 
 /// 보호자 리포트 상세 — 서비스의 교육적 결과물을 보호자가 처음 만나는 화면.
@@ -126,6 +127,17 @@ class _Content extends StatelessWidget {
         // "아이가 잘했다"는 인상을 먼저 받아야 합니다.
         _SummaryBand(report: report),
         const SizedBox(height: AppSpacing.xl),
+        // 6각 그래프 — 서버가 axisScores를 아직 안 주면(실서버 경로)
+        // 빈 목록이 내려와 섹션 자체가 조용히 사라집니다.
+        if (report.axisScores.isNotEmpty) ...<Widget>[
+          AxisRadarSection(
+            axes: report.axisScores,
+            hasPreviousSession: report.axisScores.any(
+              (AxisScore axis) => axis.previousScore != null,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xl),
+        ],
         Text(ReportDetailStrings.skills, style: text.titleLarge),
         const SizedBox(height: AppSpacing.md),
         SkillTabs(skills: report.skills),

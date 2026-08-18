@@ -478,6 +478,23 @@ abstract final class ReportDetailStrings {
   static const String pending = '리포트를 만들고 있어요.\n잠시 후 다시 확인해 주세요.';
 
   static const String loadFailed = '리포트를 불러오지 못했어요.';
+
+  // ── 6각 그래프 (D6) ──────────────────────────────────────
+  static const String axisChartTitle = '오늘 말하기에서 드러난 여섯 가지 생각';
+  static const String axisChartSubtitle =
+      '아이가 실제로 한 말에서 확인된 근거로만 계산했어요. 발음이나 목소리는 보지 않아요.';
+
+  /// 이번 이야기의 목표 사고 요소가 아니어서 측정하지 않은 축. **0점이 아닙니다.**
+  static const String axisNotMeasured = '이번 이야기의 목표 요소가 아니어서 측정하지 않았어요.';
+  static const String axisNotMeasuredShort = '측정 안 함';
+
+  /// "{축 이름} " 뒤에 붙는 문구. 가장 낮은 축을 짚어 줄 때 씁니다.
+  static const String axisLowestSuffix =
+      '축이 이번에 가장 낮게 나왔어요. 아래 대화 주제로 편하게 이어가 보세요.';
+
+  static const String legendCurrent = '이번 회차';
+  static const String legendPrevious = '지난 회차 평균';
+  static const String legendInactive = '이번 이야기 목표 아님';
 }
 
 /// 설정(`/settings`) 전용 문구.

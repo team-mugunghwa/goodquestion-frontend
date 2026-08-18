@@ -14,6 +14,7 @@ class ReportDetail {
     required this.skills,
     required this.highlight,
     required this.questionGroups,
+    this.axisScores = const <AxisScore>[],
     this.storyImage,
     this.completedAt,
   });
@@ -28,17 +29,67 @@ class ReportDetail {
   /// 끝까지 안 내려도 "아이가 잘했다"는 인상을 먼저 받아야 합니다.
   final String summary;
 
-  /// 어휘 · 표현 · 논리 세 영역.
+  /// 어휘 카드 1개 + 역량 카드 5개(관점과 공감·감정 표현·상호작용·생각과 이유·
+  /// 결과와 해결) = 총 6개. 역량명은 서버가 이미 보호자용 한글로 다듬어서
+  /// 내려주므로 여기서 이름을 다시 짓지 않습니다.
   final List<SkillReport> skills;
 
   final ReportHighlight highlight;
 
   /// 이야기 이어가기 / 일상 연결.
   final List<QuestionGroup> questionGroups;
+
+  /// 6각 그래프용 축 점수. 정확히 6개, 고정 순서
+  /// (이유대기·결과예측·판단력·해결력·관점이해·감정표현).
+  ///
+  /// [skills]의 역량 5종과는 축 그룹핑이 다릅니다 — 이 그래프는 숫자·시각
+  /// 비교 전용(서버 결정론적 집계, LLM 미사용), [skills]는 서술형 강점/보완
+  /// 카드 전용(LLM 생성)이라 용도를 분리했습니다.
+  /// → 기획 문서: claude/보호자리포트_6축그래프_설계안_D6.md (D6, 0-1절)
+  ///
+  /// 서버 DTO(`ReportDetailResponseDto`)에는 아직 없는 필드라 기본값은
+  /// 빈 목록입니다 — 화면은 비어 있으면 그래프 섹션 자체를 숨깁니다.
+  /// 지금은 [ReportRepositoryMock] 경로에서만 채워집니다.
+  final List<AxisScore> axisScores;
 }
 
-/// 역량 카드 하나. **5단 순서를 재배열하지 마세요** —
-/// 역량명 → 이번 활동의 특징 → 근거 발화 → 잘한 점 → 보완할 부분.
+/// 6각 그래프의 축 하나.
+///
+/// **엔진 태그(REASON 등)를 담지 않습니다** — [label]은 이미 보호자용
+/// 한글 표현으로 바뀐 값입니다. (PRD F-09, 내부 태그 미노출 규칙)
+class AxisScore {
+  const AxisScore({
+    required this.label,
+    required this.description,
+    required this.active,
+    this.score,
+    this.previousScore,
+    this.evidence,
+  });
+
+  final String label;
+
+  /// 축 설명 한 줄.
+  final String description;
+
+  /// 이번 이야기의 목표 사고 요소가 아니면 false.
+  ///
+  /// **0점이 아니라 "측정 안 함"으로 표시합니다** — 0으로 찍으면 "못한
+  /// 축"으로 오독됩니다. (D7 관련 — 1회차 리포트에서 특히 중요)
+  final bool active;
+
+  /// 0~100. [active]가 false면 항상 null.
+  final int? score;
+
+  /// 지난 회차 평균. 1회차이거나 [active]가 false면 null.
+  final int? previousScore;
+
+  /// 근거가 되는 아이 발화 원문 1건.
+  final String? evidence;
+}
+
+/// 어휘 또는 역량 카드 하나. **5단 순서를 재배열하지 마세요** —
+/// 이름 → 이번 활동의 특징 → 근거 발화 → 잘한 점 → 보완할 부분.
 class SkillReport {
   const SkillReport({
     required this.name,
@@ -49,7 +100,7 @@ class SkillReport {
     required this.askedWords,
   });
 
-  /// "어휘" · "표현" · "논리"
+  /// "어휘" 또는 역량명("관점과 공감" 등, 서버가 이미 한글로 내려줌).
   final String name;
 
   /// 이번 활동의 특징 2~3문장.
