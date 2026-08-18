@@ -25,6 +25,7 @@ import '../../features/mypage/data/datasources/report_remote_data_source.dart';
 import '../../features/mypage/data/datasources/settings_remote_data_source.dart';
 import '../../features/mypage/data/repositories/my_page_repository_impl.dart';
 import '../../features/mypage/data/repositories/report_repository_impl.dart';
+import '../../features/mypage/data/repositories/report_repository_mock.dart';
 import '../../features/mypage/data/repositories/settings_repository_impl.dart';
 import '../../features/mypage/domain/guardian_gate.dart';
 import '../../features/mypage/domain/repositories/my_page_repository.dart';
@@ -308,10 +309,14 @@ Future<void> configureDependencies() async {
   final ReportRemoteDataSource reportRemote = ReportRemoteDataSource(
     getIt<DioClient>(),
   );
-  final ReportRepositoryImpl reportRepository = ReportRepositoryImpl(
-    reportRemote,
-    myPageRepository,
-  );
+  // 6각 그래프 축 점수는 서버 DTO에 아직 없어서, 목업일 때만
+  // ReportRepositoryMock을 씁니다. 실서버 연동(`_useMockRepository = false`)에서는
+  // 지금까지와 동일하게 ReportRepositoryImpl이 그대로 쓰이고, 그 경로에서는
+  // axisScores가 빈 목록이라 리포트 화면이 그래프 섹션만 조용히 숨깁니다.
+  // → claude/보호자리포트_6축그래프_설계안_D6.md
+  final ReportRepository reportRepository = _useMockRepository
+      ? ReportRepositoryMock()
+      : ReportRepositoryImpl(reportRemote, myPageRepository);
   getIt
     ..registerLazySingleton<GuardianGate>(GuardianGate.new)
     ..registerSingleton<ChildProfileRemoteDataSource>(childProfileRemote)
