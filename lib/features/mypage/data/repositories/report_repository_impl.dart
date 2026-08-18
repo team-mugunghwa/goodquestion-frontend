@@ -141,29 +141,23 @@ class ReportRepositoryImpl implements ReportRepository {
 
   /// 역량 카드는 서버가 이미 5단 순서(이름→특징→근거→잘한 점→보완)로 내려주므로
   /// 그대로 옮긴다.
-  SkillReport _competencySkill(CompetencyResponseDto competency) =>
-      SkillReport(
-        name: competency.name,
-        feature: competency.finding,
-        evidence: competency.evidenceUtterance.isEmpty
-            ? const <String>[]
-            : <String>[competency.evidenceUtterance],
-        strength: competency.strength,
-        improvement: competency.nextFocus,
-        askedWords: const <String>[],
-      );
+  SkillReport _competencySkill(CompetencyResponseDto competency) => SkillReport(
+    name: competency.name,
+    feature: competency.finding,
+    evidence: competency.evidenceUtterance.isEmpty
+        ? const <String>[]
+        : <String>[competency.evidenceUtterance],
+    strength: competency.strength,
+    improvement: competency.nextFocus,
+    askedWords: const <String>[],
+  );
 
-  List<QuestionGroup> _questionGroups(HomeGuideResponseDto homeGuide) =>
-      <QuestionGroup>[
-        QuestionGroup(
-          title: '이야기 주제 이어가기',
-          questions: homeGuide.storyQuestions,
-        ),
-        QuestionGroup(
-          title: '일상생활로 연결하기',
-          questions: homeGuide.dailyLifeQuestions,
-        ),
-      ];
+  List<QuestionGroup> _questionGroups(
+    HomeGuideResponseDto homeGuide,
+  ) => <QuestionGroup>[
+    QuestionGroup(title: '이야기 주제 이어가기', questions: homeGuide.storyQuestions),
+    QuestionGroup(title: '일상생활로 연결하기', questions: homeGuide.dailyLifeQuestions),
+  ];
 
   Future<T> _guard<T>(Future<T> Function() action) async {
     try {

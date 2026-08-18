@@ -53,19 +53,18 @@ final ReportDetail _session4 = ReportDetail(
   skills: <SkillReport>[
     const SkillReport(
       name: '어휘',
-      feature: '이야기에 나온 낯선 낱말을 그냥 넘기지 않고 세 번 물어봤어요. '
+      feature:
+          '이야기에 나온 낯선 낱말을 그냥 넘기지 않고 세 번 물어봤어요. '
           '뜻을 들은 뒤에는 자기 문장 안에서 다시 써 보려고 했어요.',
-      evidence: <String>[
-        '며느리가 뭐예요? 아들이랑 결혼한 사람이에요?',
-        '참으면 배가 아프니까 뀌는 게 맞아요',
-      ],
+      evidence: <String>['며느리가 뭐예요? 아들이랑 결혼한 사람이에요?', '참으면 배가 아프니까 뀌는 게 맞아요'],
       strength: '모르는 낱말을 그냥 지나치지 않고 물어봤어요.',
       improvement: '새로 배운 낱말을 다음 문장에서 한 번 더 써 보면 오래 기억에 남아요.',
       askedWords: <String>['며느리', '참다', '소문'],
     ),
     const SkillReport(
       name: '표현',
-      feature: '등장인물의 기분을 자기 말로 옮겨 말했어요. 상대가 어떻게 느꼈을지 '
+      feature:
+          '등장인물의 기분을 자기 말로 옮겨 말했어요. 상대가 어떻게 느꼈을지 '
           '먼저 떠올린 뒤에 자기 의견을 붙이는 순서로 이야기했어요.',
       evidence: <String>['며느리도 창피해서 말을 못 했을 거예요. 그래서 계속 참았나 봐요.'],
       strength: '인물의 마음을 자기 경험에 빗대어 말했어요.',
@@ -74,12 +73,10 @@ final ReportDetail _session4 = ReportDetail(
     ),
     const SkillReport(
       name: '논리',
-      feature: '의견을 말할 때 이유를 함께 붙이는 문장이 여러 번 나왔어요. '
+      feature:
+          '의견을 말할 때 이유를 함께 붙이는 문장이 여러 번 나왔어요. '
           '이유를 물어보기 전에 스스로 덧붙인 경우도 있었어요.',
-      evidence: <String>[
-        '며느리를 내보내는 건 잘못한 거예요',
-        '문을 조금 열어놓고 뀌면 괜찮을 것 같아요',
-      ],
+      evidence: <String>['며느리를 내보내는 건 잘못한 거예요', '문을 조금 열어놓고 뀌면 괜찮을 것 같아요'],
       strength: '생각과 이유를 이어서 말했어요.',
       improvement: '그다음엔 어떻게 될지도 함께 말해 보면 생각이 더 단단해져요.',
       askedWords: <String>[],
@@ -99,7 +96,10 @@ final ReportDetail _session4 = ReportDetail(
     ),
     const QuestionGroup(
       title: '일상생활로 연결하기',
-      questions: <String>['너도 부끄러워서 하고 싶은 말을 못 한 적 있어?', '참았던 것 때문에 힘들었던 적 있어?'],
+      questions: <String>[
+        '너도 부끄러워서 하고 싶은 말을 못 한 적 있어?',
+        '참았던 것 때문에 힘들었던 적 있어?',
+      ],
     ),
   ],
   axisScores: <AxisScore>[

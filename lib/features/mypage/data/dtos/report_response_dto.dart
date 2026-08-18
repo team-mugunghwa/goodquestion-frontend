@@ -171,10 +171,9 @@ List<Map<String, dynamic>> _objects(Object? raw) =>
         .whereType<Map<String, dynamic>>()
         .toList(growable: false);
 
-List<String> _strings(Object? raw) =>
-    (raw as List<dynamic>? ?? <dynamic>[])
-        .whereType<String>()
-        .toList(growable: false);
+List<String> _strings(Object? raw) => (raw as List<dynamic>? ?? <dynamic>[])
+    .whereType<String>()
+    .toList(growable: false);
 
 DateTime? _date(Object? raw) =>
     raw is String ? DateTime.tryParse(raw)?.toLocal() : null;
