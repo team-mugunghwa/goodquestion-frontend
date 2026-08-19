@@ -197,9 +197,6 @@ class AxisScoreResponseDto {
   final String? evidence;
 }
 
-List<AxisScoreResponseDto> _axisScores(Object? raw) =>
-    _objects(raw).map(AxisScoreResponseDto.fromJson).toList(growable: false);
-
 List<Map<String, dynamic>> _objects(Object? raw) =>
     (raw as List<dynamic>? ?? <dynamic>[])
         .whereType<Map<String, dynamic>>()
