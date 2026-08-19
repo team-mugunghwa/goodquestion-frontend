@@ -21,6 +21,7 @@ import '../../../../core/widgets/app_state_views.dart';
 import '../../../../core/widgets/kid_button.dart';
 import '../../../../core/widgets/kid_speech_bubble.dart';
 import '../../../../core/widgets/screen_metrics.dart';
+import '../../../story/domain/repositories/story_repository.dart';
 import '../../data/dialogue_word_capture.dart';
 import '../../data/stt_choice_catalog.dart';
 import '../../data/stt_choice_selector.dart';
@@ -50,6 +51,7 @@ class PlayPage extends StatefulWidget {
     this.characterName = '이야기 친구',
     this.question = '이럴 때는 어떻게 하면 좋을까?',
     this.repository,
+    this.storyRepository,
     this.voiceRecorder,
     this.audioPlayer,
     this.wordCapture,
@@ -73,6 +75,14 @@ class PlayPage extends StatefulWidget {
   final String characterName;
   final String question;
   final PlayRepository? repository;
+
+  /// "처음부터 다시하기"가 새 세션을 만드는 통로. 세션이 생기는 **유일한
+  /// 지점**이 이 저장소의 `startSession` 이라, 재생 화면도 그리로 갑니다.
+  ///
+  /// null 이면(미리보기·테스트) 멈춤 화면에 "처음부터 다시하기"가 뜨지
+  /// 않습니다 - 누를 수 없는 버튼을 보여 주는 것보다 없는 편이 낫습니다.
+  final StoryRepository? storyRepository;
+
   final MissionVoiceRecorder? voiceRecorder;
   final StoryAudioPlayer? audioPlayer;
 
@@ -232,6 +242,19 @@ class _PlayPageState extends State<PlayPage> {
   /// 멈춤 화면이 **나가기(X)로 떴는가.** 멈춤 버튼으로 뜬 것과 카드는 같고
   /// 묻는 말만 다릅니다. → [_PauseOverlay.exit]
   bool _exitPrompt = false;
+
+  /// 멈춤 화면에서 **"처음부터 다시하기"를 눌러 한 번 더 묻는 중인가.**
+  /// 되돌릴 수 없는 행동이라(듣던 세션이 STOPPED 로 끝납니다) 확인을
+  /// 한 번 끼웁니다. → [_PauseOverlay.restart]
+  bool _restartPrompt = false;
+
+  /// 처음부터 다시하기를 실제로 처리하는 중인가(세션 끝내기 → 새 세션).
+  /// 네트워크를 두 번 타므로 그동안 버튼을 잠급니다.
+  bool _restarting = false;
+
+  /// 처음부터 다시하기가 실패했을 때 확인 카드에 띄울 한 줄. 성공하면
+  /// 화면이 통째로 바뀌므로 이 값이 남을 일이 없습니다.
+  String? _restartError;
 
   /// 지금 화면이 붙잡고 있는 장면. 장면이 바뀌는 순간을 [_activateSnapshot]
   /// 이 알아채고 이전 장면의 아이 발화를 지우는 데 씁니다.
@@ -1463,6 +1486,7 @@ class _PlayPageState extends State<PlayPage> {
   /// 처음부터 다시 읽는 것은 "다시 듣기" 버튼의 몫입니다.
   void _toggleStoryPause() {
     _exitPrompt = false;
+    _restartPrompt = false;
     _storyTimer?.cancel();
     if (!_storyPaused) {
       // 멈추는 쪽입니다. **[_speechToken] 을 올리지 않습니다** - 올리면
@@ -1859,6 +1883,7 @@ class _PlayPageState extends State<PlayPage> {
   /// 전개 화면의 [_toggleStoryPause] 와 같은 방식입니다.
   void _togglePause() {
     _exitPrompt = false;
+    _restartPrompt = false;
     if (_phase == DialoguePhase.paused) {
       setState(() => _phase = _phaseBeforePause);
       _openPauseGate();
@@ -1920,7 +1945,10 @@ class _PlayPageState extends State<PlayPage> {
       _togglePause();
     }
     // 멈춘 뒤에 세웁니다 - 위 토글이 이 표시를 지웁니다.
-    setState(() => _exitPrompt = true);
+    setState(() {
+      _exitPrompt = true;
+      _restartPrompt = false;
+    });
   }
 
   /// 일시정지 화면의 "이야기 나가기". **다시 묻지 않습니다** - 멈춤 화면에서
@@ -1938,6 +1966,87 @@ class _PlayPageState extends State<PlayPage> {
     // `context.go` 로 들어와 되돌아갈 화면이 스택에 없습니다 - maybePop 은
     // 조용히 아무 일도 안 하고, 아이는 나가기를 눌러도 그대로 남습니다.
     context.go(AppRoutes.home);
+  }
+
+  /// 처음부터 다시하기를 지금 보여 줄 수 있는가.
+  ///
+  /// 새 세션을 만들려면 **어느 이야기인지**([_storyId])와 **만들 통로**
+  /// ([PlayPage.storyRepository])가 둘 다 있어야 합니다. 미리보기처럼 둘 중
+  /// 하나라도 없으면 버튼을 아예 감춥니다.
+  bool get _canRestart =>
+      _storyId != null &&
+      widget.storyRepository != null &&
+      widget.repository != null;
+
+  /// 멈춤 화면의 "처음부터 다시하기". **여기서는 아직 아무것도 하지
+  /// 않습니다** - 확인 카드로 바꿔 한 번 더 묻습니다. 듣던 이야기가 통째로
+  /// 사라지는 행동이라, 잘못 눌렀을 때 되돌릴 틈이 있어야 합니다.
+  void _requestRestart() {
+    setState(() {
+      _restartPrompt = true;
+      _exitPrompt = false;
+      _restartError = null;
+    });
+  }
+
+  /// 확인 카드의 "네, 처음부터". 듣던 세션을 끝내고 같은 이야기로 새 세션을
+  /// 만들어 그 화면으로 갑니다.
+  ///
+  /// 순서가 중요합니다 - **끝내기가 먼저입니다.** 새 세션부터 만들면 홈의
+  /// 이어하기 카드가 방금 버린 세션을 계속 가리킬 수 있습니다(홈은 진행 중
+  /// 세션을 하나만 줍니다). 다만 끝내기가 실패했다고 되돌리지는 않습니다 -
+  /// 세션이 하나 더 남는 것보다, 아이가 처음부터 다시 못 하는 쪽이 나쁩니다.
+  Future<void> _restartStory() async {
+    final String? storyId = _storyId;
+    final StoryRepository? stories = widget.storyRepository;
+    if (storyId == null || stories == null || _restarting) return;
+    setState(() {
+      _restarting = true;
+      _restartError = null;
+    });
+    // 새 화면이 뜰 때까지 옛 이야기가 계속 들리면 안 됩니다.
+    _stopSpeaking();
+    try {
+      await widget.repository?.stop(widget.sessionId);
+    } on Failure {
+      // 무시합니다 - 위 주석대로 여기서 멈추지 않습니다.
+    }
+    try {
+      final String sessionId = await stories.startSession(storyId);
+      if (!mounted) return;
+      // **pop 이 아니라 go 입니다** - [_leaveStory] 와 같은 이유입니다.
+      // 전체 장면 수는 같은 이야기라 그대로 실어 보냅니다.
+      context.go(AppRoutes.playOf(sessionId, totalScenes: widget.totalScenes));
+    } on Failure catch (failure) {
+      if (!mounted) return;
+      // 멈춘 자리에 그대로 서 있습니다. "계속 듣기"로 돌아가면 듣던 곳부터
+      // 이어집니다 - 아직 아무 장면도 갈아엎지 않았습니다.
+      setState(() {
+        _restarting = false;
+        _restartError = failure.message;
+      });
+    }
+  }
+
+  /// 멈춤 화면에 지금 띄울 카드. 전개 화면과 대화 화면이 **같은 카드**를
+  /// 쓰므로 고르는 곳도 한 군데입니다. 확인을 묻는 카드가 늘 위에 옵니다.
+  Widget _pauseCard({required VoidCallback onResume}) {
+    if (_restartPrompt) {
+      return _PauseOverlay.restart(
+        onResume: onResume,
+        onConfirm: () => unawaited(_restartStory()),
+        busy: _restarting,
+        errorText: _restartError,
+      );
+    }
+    if (_exitPrompt) {
+      return _PauseOverlay.exit(onResume: onResume, onExit: _leaveStory);
+    }
+    return _PauseOverlay(
+      onResume: onResume,
+      onExit: _leaveStory,
+      onRestart: _canRestart ? _requestRestart : null,
+    );
   }
 
   /// 지금 나오고 있는 말과 예약된 다음 문장을 모두 끊습니다.
@@ -1983,9 +2092,8 @@ class _PlayPageState extends State<PlayPage> {
           soundOn: _soundOn,
           totalScenes: widget.totalScenes,
           onExit: _requestExit,
-          onLeave: _leaveStory,
-          exitPrompt: _exitPrompt,
           onPause: _toggleStoryPause,
+          pauseOverlay: _pauseCard(onResume: _toggleStoryPause),
           // "다시 듣기"는 지금처럼 장면 처음부터입니다. 이어 재생은
           // 일시정지 버튼의 몫이라 둘을 섞지 않습니다.
           onReplay: () {
@@ -2104,15 +2212,7 @@ class _PlayPageState extends State<PlayPage> {
                 ),
               ),
               if (_phase == DialoguePhase.paused)
-                (_exitPrompt
-                    ? _PauseOverlay.exit(
-                        onResume: _togglePause,
-                        onExit: _leaveStory,
-                      )
-                    : _PauseOverlay(
-                        onResume: _togglePause,
-                        onExit: _leaveStory,
-                      )),
+                _pauseCard(onResume: _togglePause),
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 430),
                 reverseDuration: const Duration(milliseconds: 320),
@@ -2194,9 +2294,8 @@ class _StorySceneView extends StatelessWidget {
     required this.soundOn,
     required this.totalScenes,
     required this.onExit,
-    required this.onLeave,
-    required this.exitPrompt,
     required this.onPause,
+    required this.pauseOverlay,
     required this.onReplay,
     required this.onSound,
   });
@@ -2210,13 +2309,11 @@ class _StorySceneView extends StatelessWidget {
 
   /// 상단 X. 멈춤 화면을 띄웁니다.
   final VoidCallback onExit;
-
-  /// 멈춤 화면의 "이야기 나가기". 곧장 나갑니다.
-  final VoidCallback onLeave;
-
-  /// 멈춤 화면이 나가기(X)로 떴는가. 카드는 같고 문구만 다릅니다.
-  final bool exitPrompt;
   final VoidCallback onPause;
+
+  /// 멈춰 있을 때 덮는 카드. 어떤 카드인지는 화면을 여는 쪽이 고릅니다
+  /// (멈춤 · 나가기 확인 · 처음부터 확인) → [_PlayPageState._pauseCard]
+  final Widget pauseOverlay;
   final VoidCallback onReplay;
   final VoidCallback onSound;
 
@@ -2311,10 +2408,7 @@ class _StorySceneView extends StatelessWidget {
               ],
             ),
           ),
-          if (isPaused)
-            exitPrompt
-                ? _PauseOverlay.exit(onResume: onPause, onExit: onLeave)
-                : _PauseOverlay(onResume: onPause, onExit: onLeave),
+          if (isPaused) pauseOverlay,
         ],
       ),
     );
@@ -2951,30 +3045,82 @@ class _ChildBubble extends StatelessWidget {
   }
 }
 
-/// 이야기를 멈춰 세운 카드. **멈춤 버튼과 나가기(X)가 같은 카드를 씁니다** -
-/// 생김새가 다른 창을 하나 더 두면 아이가 방금 본 화면과 왜 다른지부터
-/// 헷갈립니다. 다른 것은 묻는 말과 버튼 이름뿐입니다.
+/// 이야기를 멈춰 세운 카드. **멈춤 버튼·나가기(X)·처음부터 다시하기가 같은
+/// 카드를 씁니다** - 생김새가 다른 창을 하나 더 두면 아이가 방금 본 화면과 왜
+/// 다른지부터 헷갈립니다. 다른 것은 묻는 말과 버튼 이름뿐입니다.
 class _PauseOverlay extends StatelessWidget {
-  const _PauseOverlay({required this.onResume, required this.onExit})
-    : title = '이야기를 잠시 멈췄어요',
-      message = null,
-      exitLabel = '이야기 나가기';
+  /// 멈춤 버튼으로 뜬 카드. [onRestart] 가 있으면 "처음부터 다시하기"가 한 줄
+  /// 더 붙습니다 - 어느 이야기인지 모르는 화면(미리보기)에서는 없습니다.
+  const _PauseOverlay({
+    required this.onResume,
+    required VoidCallback onExit,
+    this.onRestart,
+  }) : icon = Icons.pause_circle_rounded,
+       title = '이야기를 잠시 멈췄어요',
+       message = null,
+       resumeLabel = '계속 듣기',
+       confirmLabel = '이야기 나가기',
+       onConfirm = onExit,
+       busy = false,
+       errorText = null;
 
   /// 나가기(X)로 뜬 변형. 이야기를 멈춰 두는 것은 같고 **나갈지 묻습니다.**
   /// 듣던 자리가 남는다는 것을 함께 말해 줍니다 - 겁주는 문구로 나가기를
   /// 막지 않되, 잘못 눌렀을 때 되돌릴 틈은 있어야 합니다.
-  const _PauseOverlay.exit({required this.onResume, required this.onExit})
-    : title = '이야기에서 나갈까요?',
-      message = '여기까지 들은 곳을 기억해 둘게요. 홈에서 이어 들을 수 있어요.',
-      exitLabel = '나가기';
+  const _PauseOverlay.exit({
+    required this.onResume,
+    required VoidCallback onExit,
+  }) : icon = Icons.pause_circle_rounded,
+       title = '이야기에서 나갈까요?',
+       message = '여기까지 들은 곳을 기억해 둘게요. 홈에서 이어 들을 수 있어요.',
+       resumeLabel = '계속 듣기',
+       confirmLabel = '나가기',
+       onConfirm = onExit,
+       onRestart = null,
+       busy = false,
+       errorText = null;
 
+  /// "처음부터 다시하기"를 누른 뒤 한 번 더 묻는 변형.
+  ///
+  /// **여기만 되돌릴 수 없습니다** - 듣던 세션이 끝나고 첫 장면부터 새로
+  /// 시작합니다. 그래서 큰 버튼은 안전한 쪽("계속 들을래요")에 두고, 처음부터
+  /// 가는 길은 아래 작은 버튼에 둡니다. 잃는 것을 말로도 한 줄 알려 줍니다.
+  const _PauseOverlay.restart({
+    required this.onResume,
+    required this.onConfirm,
+    required this.busy,
+    required this.errorText,
+  }) : icon = Icons.replay_circle_filled_rounded,
+       title = '처음부터 다시 할까요?',
+       message = '지금까지 들은 이야기는 사라지고, 첫 장면부터 새로 시작해요.',
+       resumeLabel = '아니요, 계속 들을래요',
+       confirmLabel = '네, 처음부터',
+       onRestart = null;
+
+  final IconData icon;
   final String title;
 
   /// 제목 아래 한 줄. 멈춤에는 없습니다 - 멈춘 것만으로는 덧붙일 말이 없습니다.
   final String? message;
-  final String exitLabel;
+
+  /// 큰 버튼. **늘 이야기로 돌아가는 쪽입니다** - 아무 생각 없이 큰 버튼을
+  /// 눌러도 잃는 것이 없어야 합니다.
+  final String resumeLabel;
   final VoidCallback onResume;
-  final VoidCallback onExit;
+
+  /// 아래 작은 버튼(나가기 · 네, 처음부터).
+  final String confirmLabel;
+  final VoidCallback onConfirm;
+
+  /// 가운데 한 줄로 붙는 "처음부터 다시하기". null 이면 안 그립니다.
+  final VoidCallback? onRestart;
+
+  /// 처음부터 다시하기를 처리하는 중. 버튼을 잠그고 기다린다고 말해 줍니다 -
+  /// 세션을 끝내고 새로 만드는 사이에 두 번 눌리면 세션이 두 개 생깁니다.
+  final bool busy;
+
+  /// 실패했을 때 버튼 위에 뜨는 한 줄.
+  final String? errorText;
 
   @override
   Widget build(BuildContext context) {
@@ -2997,11 +3143,7 @@ class _PauseOverlay extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  const Icon(
-                    Icons.pause_circle_rounded,
-                    color: Color(0xFF4B8EC2),
-                    size: 48,
-                  ),
+                  Icon(icon, color: const Color(0xFF4B8EC2), size: 48),
                   const SizedBox(height: 10),
                   Text(
                     title,
@@ -3023,14 +3165,53 @@ class _PauseOverlay extends StatelessWidget {
                       ),
                     ),
                   ],
+                  if (errorText != null) ...<Widget>[
+                    const SizedBox(height: 10),
+                    Text(
+                      errorText!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        height: 1.4,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFC2453F),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 18),
                   FilledButton.icon(
-                    onPressed: onResume,
+                    onPressed: busy ? null : onResume,
                     icon: const Icon(Icons.play_arrow_rounded),
-                    label: const Text('계속 듣기'),
+                    label: Text(resumeLabel),
                   ),
+                  if (onRestart != null) ...<Widget>[
+                    const SizedBox(height: 4),
+                    TextButton.icon(
+                      onPressed: onRestart,
+                      icon: const Icon(Icons.replay_rounded, size: 20),
+                      label: const Text('처음부터 다시하기'),
+                    ),
+                  ],
                   const SizedBox(height: 4),
-                  TextButton(onPressed: onExit, child: Text(exitLabel)),
+                  TextButton(
+                    onPressed: busy ? null : onConfirm,
+                    child: busy
+                        ? const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                              SizedBox(width: 8),
+                              Text('처음부터 준비하고 있어요…'),
+                            ],
+                          )
+                        : Text(confirmLabel),
+                  ),
                 ],
               ),
             ),

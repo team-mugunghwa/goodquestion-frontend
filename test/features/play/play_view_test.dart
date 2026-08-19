@@ -12,6 +12,9 @@ import 'package:goodquestion/features/play/domain/repositories/play_repository.d
 import 'package:goodquestion/features/play/presentation/views/play_view.dart';
 import 'package:goodquestion/features/play/presentation/voice/mission_voice_recorder.dart';
 import 'package:goodquestion/features/play/presentation/voice/story_audio_player.dart';
+import 'package:goodquestion/features/story/domain/entities/story_catalog.dart';
+import 'package:goodquestion/features/story/domain/entities/story_detail.dart';
+import 'package:goodquestion/features/story/domain/repositories/story_repository.dart';
 
 void main() {
   Future<void> pumpPlay(
@@ -56,6 +59,8 @@ void main() {
   Future<void> pumpPlayInRouter(
     WidgetTester tester, {
     required PlayRepository repository,
+    StoryRepository? storyRepository,
+    bool settle = true,
   }) async {
     tester.view.physicalSize = const Size(1280, 720);
     tester.view.devicePixelRatio = 1;
@@ -71,19 +76,36 @@ void main() {
         ),
         GoRoute(
           path: AppRoutes.playPath,
-          builder: (_, GoRouterState state) => PlayPage(
-            sessionId: state.pathParameters[AppRoutes.sessionIdParam]!,
-            repository: repository,
-            voiceRecorder: const _FakeVoiceRecorder(),
-            audioPlayer: const _FakeAudioPlayer(),
-          ),
+          builder: (_, GoRouterState state) {
+            final String sessionId =
+                state.pathParameters[AppRoutes.sessionIdParam]!;
+            return PlayPage(
+              // 진짜 라우터와 같은 모양입니다 - 세션 id 를 키로 달아야
+              // 처음부터 다시하기로 새 세션에 들어올 때 화면이 새로 섭니다.
+              // → app_router.dart
+              key: ValueKey<String>(sessionId),
+              sessionId: sessionId,
+              repository: repository,
+              storyRepository: storyRepository,
+              voiceRecorder: const _FakeVoiceRecorder(),
+              audioPlayer: const _FakeAudioPlayer(),
+            );
+          },
         ),
       ],
     );
     addTearDown(router.dispose);
 
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
-    await tester.pumpAndSettle();
+    // 전개(내레이션) 화면은 스스로 다음 장면을 계속 부르는 반복 흐름이라
+    // pumpAndSettle 이 끝나지 않습니다 - 그때는 settle: false 로 받습니다.
+    if (settle) {
+      await tester.pumpAndSettle();
+    } else {
+      for (int i = 0; i < 5; i++) {
+        await tester.pump();
+      }
+    }
   }
 
   testWidgets('좌측 캐릭터와 머리 우측의 한 문장 질문을 보여준다', (WidgetTester tester) async {
@@ -200,6 +222,174 @@ void main() {
 
     expect(find.byType(PlayPage), findsNothing);
     expect(find.text('홈 화면'), findsOneWidget);
+  });
+
+  testWidgets('멈춤 카드의 처음부터 다시하기는 바로 갈아엎지 않고 한 번 더 묻는다', (
+    WidgetTester tester,
+  ) async {
+    // 듣던 이야기가 통째로 사라지는 행동이라, 잘못 눌렀을 때 되돌릴 틈이
+    // 있어야 합니다.
+    final _StopSpyRepository repository = _StopSpyRepository();
+    final _RestartStorySpyRepository stories = _RestartStorySpyRepository();
+    await pumpPlayInRouter(
+      tester,
+      repository: repository,
+      storyRepository: stories,
+    );
+
+    await tester.tap(find.byTooltip('잠시 멈춤'));
+    await tester.pumpAndSettle();
+    expect(find.text('처음부터 다시하기'), findsOneWidget);
+
+    await tester.tap(find.text('처음부터 다시하기'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('처음부터 다시 할까요?'), findsOneWidget);
+    expect(find.text('지금까지 들은 이야기는 사라지고, 첫 장면부터 새로 시작해요.'), findsOneWidget);
+    expect(
+      repository.stoppedSessionId,
+      isNull,
+      reason: '묻기만 한 단계입니다 - 아직 아무것도 끝내면 안 됩니다',
+    );
+    expect(stories.startedStoryIds, isEmpty);
+  });
+
+  testWidgets('처음부터 다시하기를 확정하면 듣던 세션을 끝내고 새 세션으로 들어간다', (
+    WidgetTester tester,
+  ) async {
+    final _StopSpyRepository repository = _StopSpyRepository();
+    final _RestartStorySpyRepository stories = _RestartStorySpyRepository();
+    await pumpPlayInRouter(
+      tester,
+      repository: repository,
+      storyRepository: stories,
+    );
+
+    await tester.tap(find.byTooltip('잠시 멈춤'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('처음부터 다시하기'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('네, 처음부터'));
+    await tester.pumpAndSettle();
+
+    expect(
+      repository.stoppedSessionId,
+      'preview-session',
+      reason: '안 끝내면 방금 버린 이야기가 홈 이어하기 카드에 그대로 남습니다',
+    );
+    expect(stories.startedStoryIds, <String>['story-1']);
+    expect(
+      tester.widget<PlayPage>(find.byType(PlayPage)).sessionId,
+      'restarted-session',
+    );
+    expect(
+      repository.resumedSessionIds.last,
+      'restarted-session',
+      reason:
+          '주소만 바뀌고 화면 상태가 그대로 살아남으면 옛 세션 장면이 그대로 남습니다 - '
+          '새 세션을 실제로 불러와야 합니다',
+    );
+  });
+
+  testWidgets('확인 카드에서 계속 듣기를 고르면 아무것도 갈아엎지 않는다', (
+    WidgetTester tester,
+  ) async {
+    final _StopSpyRepository repository = _StopSpyRepository();
+    final _RestartStorySpyRepository stories = _RestartStorySpyRepository();
+    await pumpPlayInRouter(
+      tester,
+      repository: repository,
+      storyRepository: stories,
+    );
+
+    await tester.tap(find.byTooltip('잠시 멈춤'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('처음부터 다시하기'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('아니요, 계속 들을래요'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('처음부터 다시 할까요?'), findsNothing);
+    expect(find.text('이야기를 잠시 멈췄어요'), findsNothing);
+    expect(repository.stoppedSessionId, isNull);
+    expect(stories.startedStoryIds, isEmpty);
+  });
+
+  testWidgets('새 세션을 못 만들면 멈춘 자리를 지키고 이유만 알려 준다', (
+    WidgetTester tester,
+  ) async {
+    final _StopSpyRepository repository = _StopSpyRepository();
+    final _RestartStorySpyRepository stories = _RestartStorySpyRepository(
+      failure: const NetworkFailure(),
+    );
+    await pumpPlayInRouter(
+      tester,
+      repository: repository,
+      storyRepository: stories,
+    );
+
+    await tester.tap(find.byTooltip('잠시 멈춤'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('처음부터 다시하기'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('네, 처음부터'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('네트워크에 연결할 수 없습니다.'), findsOneWidget);
+    expect(
+      find.byType(PlayPage),
+      findsOneWidget,
+      reason: '멈춘 자리에 그대로 있어야 합니다',
+    );
+    // 계속 듣기로 돌아가면 듣던 곳부터 이어집니다.
+    await tester.tap(find.text('아니요, 계속 들을래요'));
+    await tester.pumpAndSettle();
+    expect(find.text('처음부터 다시 할까요?'), findsNothing);
+  });
+
+  testWidgets('이야기를 만들 통로가 없으면 처음부터 다시하기를 아예 안 보여 준다', (
+    WidgetTester tester,
+  ) async {
+    // 누를 수 없는 버튼을 보여 주는 것보다 없는 편이 낫습니다.
+    await pumpPlayInRouter(tester, repository: _StopSpyRepository());
+
+    await tester.tap(find.byTooltip('잠시 멈춤'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('이야기 나가기'), findsOneWidget);
+    expect(find.text('처음부터 다시하기'), findsNothing);
+  });
+
+  testWidgets('전개 장면에서 멈춰도 처음부터 다시하기가 있다', (WidgetTester tester) async {
+    // 아이가 이야기를 멈추는 자리는 대부분 여기(내레이션)입니다.
+    final _StoryNarrationSpyRepository repository =
+        _StoryNarrationSpyRepository()
+          ..initialSnapshot = const PlaySessionSnapshot(
+            phase: PlayPhase.story,
+            storyId: 'story-1',
+            currentScene: PlayScene(
+              sceneId: 'scene-1',
+              sceneOrder: 1,
+              sceneType: PlaySceneType.story,
+              narrationSentences: <String>['첫 문장이에요.'],
+            ),
+          );
+    await pumpPlayInRouter(
+      tester,
+      repository: repository,
+      storyRepository: _RestartStorySpyRepository(),
+      settle: false,
+    );
+
+    await tester.tap(find.byTooltip('잠시 멈춤'));
+    await tester.pump();
+
+    expect(find.text('이야기를 잠시 멈췄어요'), findsOneWidget);
+    expect(find.text('처음부터 다시하기'), findsOneWidget);
+
+    await tester.tap(find.text('처음부터 다시하기'));
+    await tester.pump();
+    expect(find.text('처음부터 다시 할까요?'), findsOneWidget);
   });
 
   testWidgets('무음(STT_EMPTY_TEXT)이면 화면을 안 바꾸고 마이크 옆에 안내만 하고, '
@@ -2096,20 +2286,28 @@ class _FakeAudioPlayer implements StoryAudioPlayer {
 class _StopSpyRepository implements PlayRepository {
   String? stoppedSessionId;
 
+  /// 불러온 세션들. 처음부터 다시하기가 **새 세션을 실제로 불러왔는지**
+  /// 보는 데 씁니다(주소만 바뀌고 화면이 그대로면 여기 안 쌓입니다).
+  final List<String> resumedSessionIds = <String>[];
+
   @override
-  Future<PlaySessionSnapshot> resume(String sessionId) async =>
-      const PlaySessionSnapshot(
-        phase: PlayPhase.dialogue,
-        currentScene: PlayScene(
-          sceneId: 'scene-1',
-          sceneOrder: 1,
-          sceneType: PlaySceneType.dialogue,
-          narrationSentences: <String>[],
-          characterName: '토리',
-          maxTurns: 4,
-        ),
-        openingText: '이럴 때는 어떻게 하면 좋을까?',
-      );
+  Future<PlaySessionSnapshot> resume(String sessionId) async {
+    resumedSessionIds.add(sessionId);
+    return const PlaySessionSnapshot(
+      phase: PlayPhase.dialogue,
+      // 처음부터 다시하려면 어느 이야기인지 알아야 합니다.
+      storyId: 'story-1',
+      currentScene: PlayScene(
+        sceneId: 'scene-1',
+        sceneOrder: 1,
+        sceneType: PlaySceneType.dialogue,
+        narrationSentences: <String>[],
+        characterName: '토리',
+        maxTurns: 4,
+      ),
+      openingText: '이럴 때는 어떻게 하면 좋을까?',
+    );
+  }
 
   @override
   Future<PlaySessionSnapshot> completeStoryScene(String sessionId) =>
@@ -2181,6 +2379,30 @@ class _StopSpyRepository implements PlayRepository {
   @override
   Future<void> stop(String sessionId) async {
     stoppedSessionId = sessionId;
+  }
+}
+
+/// 처음부터 다시하기가 새 세션을 만드는 통로. 어떤 이야기로 만들라고
+/// 했는지만 기록합니다. [failure] 를 주면 만들기가 실패합니다.
+class _RestartStorySpyRepository implements StoryRepository {
+  _RestartStorySpyRepository({this.failure});
+
+  final Failure? failure;
+  final List<String> startedStoryIds = <String>[];
+
+  @override
+  Future<StoryCatalog> getCatalog() => throw UnimplementedError();
+
+  @override
+  Future<StoryDetail?> getStoryDetail(String storyId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<String> startSession(String storyId) async {
+    startedStoryIds.add(storyId);
+    final Failure? error = failure;
+    if (error != null) throw error;
+    return 'restarted-session';
   }
 }
 
