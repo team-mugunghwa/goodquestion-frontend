@@ -1,5 +1,6 @@
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/util/child_age.dart';
 
 class AuthRemoteDataSource {
   const AuthRemoteDataSource(this._client);
@@ -51,7 +52,7 @@ class AuthRemoteDataSource {
         '/children',
         body: <String, dynamic>{
           'name': name,
-          'birthYear': DateTime.now().year - age,
+          'birthYear': birthYearFromAge(age),
         },
         parse: (Object? data) => _map(data)['id'] as String? ?? '',
       );

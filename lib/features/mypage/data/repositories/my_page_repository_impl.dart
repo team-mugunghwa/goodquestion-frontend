@@ -1,5 +1,6 @@
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failure.dart';
+import '../../../../core/util/child_age.dart';
 import '../../domain/entities/my_page_summary.dart';
 import '../../domain/repositories/my_page_repository.dart';
 import '../datasources/child_profile_remote_data_source.dart';
@@ -39,7 +40,7 @@ class MyPageRepositoryImpl implements MyPageRepository, ChildProfileRepository {
     try {
       final Map<String, dynamic> created = await _remote.createChild(
         name: name.trim(),
-        birthYear: DateTime.now().year - age,
+        birthYear: birthYearFromAge(age),
       );
       _selectedChildId = _toChild(created).childId;
     } on AppException catch (error) {
@@ -107,7 +108,7 @@ class MyPageRepositoryImpl implements MyPageRepository, ChildProfileRepository {
     return MyPageChild(
       childId: id,
       name: name,
-      age: responseAge ?? DateTime.now().year - birthYear!,
+      age: responseAge ?? ageFromBirthYear(birthYear!),
     );
   }
 }

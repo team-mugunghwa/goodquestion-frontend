@@ -30,7 +30,7 @@ class AccountRecoveryPage extends StatefulWidget {
   final Future<List<String>> Function({
     required String parentName,
     String? childName,
-    int? childBirthYear,
+    int? childAge,
   })?
   findEmails;
 
@@ -41,8 +41,7 @@ class AccountRecoveryPage extends StatefulWidget {
 class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _childNameController = TextEditingController();
-  final TextEditingController _childBirthYearController =
-      TextEditingController();
+  final TextEditingController _childAgeController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   String? _error;
   bool _completed = false;
@@ -58,7 +57,7 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
   void dispose() {
     _nameController.dispose();
     _childNameController.dispose();
-    _childBirthYearController.dispose();
+    _childAgeController.dispose();
     _emailController.dispose();
     super.dispose();
   }
@@ -104,7 +103,7 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
                     error: _error,
                     nameController: _nameController,
                     childNameController: _childNameController,
-                    childBirthYearController: _childBirthYearController,
+                    childAgeController: _childAgeController,
                     emailController: _emailController,
                     emails: _emails,
                     onSubmit: _submit,
@@ -138,7 +137,7 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
         final List<String> emails = await find(
           parentName: _nameController.text.trim(),
           childName: _childNameController.text.trim(),
-          childBirthYear: int.parse(_childBirthYearController.text.trim()),
+          childAge: int.parse(_childAgeController.text.trim()),
         );
         if (mounted) {
           setState(() {
@@ -172,18 +171,18 @@ class _AccountRecoveryPageState extends State<AccountRecoveryPage> {
   /// 두면 "항상 못 찾음"이고, 그건 사용자가 이해할 수 없는 실패입니다.
   /// 보내기 전에 막고 이유를 말해 주는 편이 낫습니다.
   String? _validateFindId() {
-    final String year = _childBirthYearController.text.trim();
+    final String age = _childAgeController.text.trim();
     if (_nameController.text.trim().isEmpty ||
         _childNameController.text.trim().isEmpty ||
-        year.isEmpty) {
+        age.isEmpty) {
       return AuthRecoveryStrings.requiredFields;
     }
-    final int? parsed = int.tryParse(year);
-    if (!RegExp(r'^\d{4}$').hasMatch(year) ||
-        parsed == null ||
-        parsed < 1900 ||
-        parsed > DateTime.now().year) {
-      return AuthRecoveryStrings.invalidBirthYear;
+    // 등록 화면이 고르게 하는 나이는 서버 옵션(지금 7~10세)이지만 여기서는
+    // 그 범위로 묶지 않습니다 - 옵션이 늘거나 등록 뒤 해가 바뀐 아이를 막아
+    // 버립니다. 숫자인지와 사람 나이인지만 봅니다.
+    final int? parsed = int.tryParse(age);
+    if (parsed == null || parsed < 1 || parsed > 19) {
+      return AuthRecoveryStrings.invalidChildAge;
     }
     return null;
   }
@@ -307,7 +306,7 @@ class _RecoveryCard extends StatelessWidget {
     required this.error,
     required this.nameController,
     required this.childNameController,
-    required this.childBirthYearController,
+    required this.childAgeController,
     required this.emailController,
     required this.emails,
     required this.onSubmit,
@@ -321,7 +320,7 @@ class _RecoveryCard extends StatelessWidget {
   final String? error;
   final TextEditingController nameController;
   final TextEditingController childNameController;
-  final TextEditingController childBirthYearController;
+  final TextEditingController childAgeController;
   final TextEditingController emailController;
 
   /// 서버가 가려서 준 가입 이메일. 비어 있으면 못 찾은 것입니다.
@@ -413,12 +412,12 @@ class _RecoveryCard extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.md),
         TextField(
-          controller: childBirthYearController,
+          controller: childAgeController,
           keyboardType: TextInputType.number,
           onSubmitted: (_) => onSubmit(),
           decoration: const InputDecoration(
-            labelText: AuthRecoveryStrings.childBirthYear,
-            hintText: AuthRecoveryStrings.childBirthYearHint,
+            labelText: AuthRecoveryStrings.childAge,
+            hintText: AuthRecoveryStrings.childAgeHint,
             prefixIcon: Icon(Icons.cake_outlined),
           ),
         ),
