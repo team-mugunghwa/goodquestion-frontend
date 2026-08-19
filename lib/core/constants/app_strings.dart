@@ -748,9 +748,27 @@ abstract final class FreeTalkStrings {
   static const String startFailed = '지금은 이야기를 시작하지 못했어. 다시 해볼까?';
 
   static const String exitTitle = '이야기를 그만할까?';
-  static const String exitMessage = '친구가 인사하고 보내 줄 거야.';
+
+  /// 나가는 길이 둘이라는 것을 카드 본문에서 **먼저** 말해 줍니다. 5~9세는
+  /// 버튼을 하나씩 읽기 전에 큰 글자부터 보기 때문에, 여기서 차이를 못 들으면
+  /// 아래 두 버튼이 같은 말로 보입니다.
+  static const String exitMessage = '인사를 듣고 가도 되고, 바로 나가도 돼.';
+
   static const String exitKeep = '더 이야기하기';
-  static const String exitLeave = '인사하고 끝내기';
+
+  /// 친구의 작별 인사를 듣고 나가는 쪽(`end`).
+  ///
+  /// [exitLeave] 와 **끝말을 일부러 맞췄습니다** — '나가기'가 같으니 아이 눈이
+  /// 다른 앞말('인사하고' 대 '바로')로 갑니다. 끝말까지 다르면('끝내기' 대
+  /// '나가기') 두 줄이 그냥 다른 말로 보여 무엇이 다른지가 흐려집니다.
+  static const String exitFarewell = '인사하고 나가기';
+
+  /// 인사 없이 곧장 홈으로 가는 쪽(`leave`).
+  ///
+  /// '마무리하기'·'종료'처럼 어른이 쓰는 말을 넣지 않습니다 — 7세가 읽어서
+  /// 뜻이 바로 오는 말만 씁니다. '바로'는 이 갈래를 고르는 이유(기다리지 않는
+  /// 다)를 그대로 가리키는 말이기도 합니다.
+  static const String exitLeave = '바로 나가기';
 
   // ── 또 만나자 ──
   static const String farewellTitle = '또 만나자!';

@@ -54,6 +54,13 @@ class FreeTalkRepositoryImpl implements FreeTalkRepository {
   Future<FreeTalkSpeech> end(String freeTalkId) =>
       _guard(() => _remote.end(freeTalkId));
 
+  /// 화면이 결과를 안 본다고 [_guard] 를 빼지 않습니다. 예외 모양이 여기서만
+  /// 달라지면, 나중에 이 호출을 쓰려는 쪽이 [Failure] 가 아니라 Dio 의 날
+  /// 예외를 받게 됩니다.
+  @override
+  Future<void> leave(String freeTalkId) =>
+      _guard(() => _remote.leave(freeTalkId));
+
   Future<MyPageChild> _selectedChild() async {
     final List<MyPageChild> children = await _children.getChildren();
     if (children.isEmpty) {
