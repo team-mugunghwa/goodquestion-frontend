@@ -19,6 +19,7 @@ const String _scene09 = '33333333-3333-3333-3333-000000000009';
 
 PlayTurnResult _turn({
   List<String> accumulated = const <String>[],
+  List<String> newElements = const <String>[],
   List<String> detected = const <String>[],
   String validity = 'VALID',
   PlayResponseMode mode = PlayResponseMode.normal,
@@ -32,7 +33,11 @@ PlayTurnResult _turn({
     detectedElements: detected,
     utteranceValidity: validity,
   ),
-  progress: PlayProgress(mode: mode, accumulatedElements: accumulated),
+  progress: PlayProgress(
+    mode: mode,
+    accumulatedElements: accumulated,
+    newElements: newElements,
+  ),
 );
 
 DialogueCharacterStateMachine _machineFor(String sceneId) {
@@ -43,7 +48,142 @@ DialogueCharacterStateMachine _machineFor(String sceneId) {
   );
 }
 
+/// 서버가 자유 대화에서 내려주는 감정 값. 백엔드 `CharacterEmotion` 6종과
+/// 같아야 한다 - 한쪽만 바뀌면 표정이 조용히 멈춘다.
+const List<String> _serverEmotions = <String>[
+  'NEUTRAL',
+  'HAPPY',
+  'SAD',
+  'WORRIED',
+  'SURPRISED',
+  'RELIEVED',
+];
+
+/// 서버 시드가 정한 **장면 목표 요소**(`story_scenes.required_elements`).
+///
+/// 프런트에는 안 내려오는 값이라(서버 내부 설정) 여기 옮겨 적는다 - 목표 요소
+/// 하나가 표정에 안 걸려 있으면 아이가 그 요소를 채워도 얼굴이 그대로다.
+/// 실제로 대화1의 REASON 이 그렇게 빠져 있었다.
+/// → 백엔드 `db/migration/R__1_seed_content.sql`
+const Map<String, List<String>> _sceneGoalElements = <String, List<String>>{
+  _scene03: <String>['PERSPECTIVE', 'EMOTION', 'REASON', 'SOLUTION'],
+  _scene05: <String>['PERSPECTIVE', 'EMPATHY', 'REASON', 'REQUEST'],
+  _scene07: <String>['SOLUTION', 'REASON', 'REQUEST', 'RESULT'],
+  _scene09: <String>['EMOTION', 'PERSPECTIVE', 'RESULT', 'SOLUTION'],
+};
+
 void main() {
+  _newElementsTests();
+
+  group('장면 목표 요소', () {
+    test('목표 요소는 하나도 빠짐없이 표정으로 반응한다', () {
+      final DialogueCharacterManifest manifest = _manifest();
+
+      _sceneGoalElements.forEach((String sceneId, List<String> goals) {
+        final DialogueSceneStates scene = manifest.sceneFor(sceneId: sceneId)!;
+        for (final String element in goals) {
+          expect(
+            scene.elementToState[element],
+            isNotNull,
+            reason:
+                '${scene.label}: $element 를 채워도 표정이 그대로다 - '
+                '그 장면이 아이에게 끌어내려는 요소인데 반응이 없다',
+          );
+          expect(
+            scene.assetOf(scene.elementToState[element]),
+            isNotNull,
+            reason: '${scene.label}: $element 가 없는 표정을 가리킨다',
+          );
+        }
+      });
+    });
+
+    test('목표가 아닌 요소에는 표정을 걸지 않는다', () {
+      // 대화3(마을 이장)이 EMOTION·PERSPECTIVE 에 반응하지 않는 것은 빠뜨린
+      // 것이 아니라 그 장면의 목표가 아니어서다. 목표 밖 요소에 얼굴을 붙이면
+      // 장면이 끌어내려는 것과 다른 신호를 준다.
+      final DialogueCharacterManifest manifest = _manifest();
+
+      _sceneGoalElements.forEach((String sceneId, List<String> goals) {
+        final DialogueSceneStates scene = manifest.sceneFor(sceneId: sceneId)!;
+        for (final String element in scene.elementToState.keys) {
+          expect(goals, contains(element), reason: scene.label);
+        }
+      });
+    });
+  });
+
+  group('자유 대화 감정 매핑', () {
+    test('감정 표는 서버 6종만 쓰고, 실재하는 표정만 가리킨다', () {
+      // 서버는 `HAPPY` 를 주고 표정 키는 `hopeful` 이다. 이 표가 없으면 둘이
+      // 한 번도 만나지 못해 자유 대화 표정이 끝까지 안 바뀐다.
+      final DialogueCharacterManifest manifest = _manifest();
+
+      for (final String sceneId in <String>[
+        _scene03,
+        _scene05,
+        _scene07,
+        _scene09,
+      ]) {
+        final DialogueSceneStates scene = manifest.sceneFor(sceneId: sceneId)!;
+        expect(
+          scene.emotionToState,
+          isNotEmpty,
+          reason: '${scene.label}: 감정 표가 비면 자유 대화에서 표정이 멈춘다',
+        );
+        for (final MapEntry<String, String> entry
+            in scene.emotionToState.entries) {
+          expect(
+            _serverEmotions,
+            contains(entry.key),
+            reason: '${scene.label}: 서버가 주지 않는 감정 값이다',
+          );
+          expect(
+            scene.assetOf(entry.value),
+            isNotNull,
+            reason: '${scene.label}: ${entry.key} 가 없는 표정을 가리킨다',
+          );
+        }
+      }
+    });
+
+    test('어느 인물이든 기쁨과 중립은 표정이 있다', () {
+      // 자유 대화에서 가장 흔한 두 감정이다. 이것마저 비면 "표정이 안 바뀐다"는
+      // 신고가 그대로 돌아온다.
+      final DialogueCharacterManifest manifest = _manifest();
+      for (final String sceneId in <String>[
+        _scene03,
+        _scene05,
+        _scene07,
+        _scene09,
+      ]) {
+        final DialogueSceneStates scene = manifest.sceneFor(sceneId: sceneId)!;
+        expect(
+          scene.stateForEmotion('NEUTRAL'),
+          isNotNull,
+          reason: scene.label,
+        );
+        expect(scene.stateForEmotion('HAPPY'), isNotNull, reason: scene.label);
+      }
+    });
+
+    test('모르는 감정은 표정을 바꾸지 않는다', () {
+      final DialogueSceneStates scene = _manifest().sceneFor(
+        sceneId: _scene03,
+      )!;
+      expect(scene.stateForEmotion('ANGRY'), isNull);
+      expect(scene.stateForEmotion(null), isNull);
+      expect(scene.stateForEmotion(''), isNull);
+    });
+
+    test('상태 키를 그대로 보내던 옛 서버와도 호환한다', () {
+      final DialogueSceneStates scene = _manifest().sceneFor(
+        sceneId: _scene03,
+      )!;
+      expect(scene.stateForEmotion('comforted'), 'comforted');
+    });
+  });
+
   group('매니페스트', () {
     test('네 장면이 모두 있고 에셋 파일이 실재한다', () {
       final Map<String, dynamic> json =
@@ -298,6 +438,56 @@ void main() {
         isNull,
       );
       expect(m.current, 'opening');
+    });
+  });
+}
+
+/// 서버가 표정 고르라고 따로 주는 `progress.newElements` 를 쓰는지.
+///
+/// 프런트가 누적을 직접 diff 하던 길은 **이어하기에서 어긋난다** - 직전 누적을
+/// 모르는 채로 들어와 첫 턴에 누적 전체가 "이번에 새로 통한 것"이 된다.
+void _newElementsTests() {
+  group('서버가 알려 준 이번 턴 요소', () {
+    test('newElements 가 있으면 그것만 본다', () {
+      final DialogueCharacterStateMachine machine = _machineFor(_scene03);
+
+      // 누적에는 EMOTION 도 있지만 이번 턴에 새로 통한 것은 PERSPECTIVE 뿐이다.
+      final DialogueStateTransition? transition = machine.apply(
+        _turn(
+          accumulated: <String>['EMOTION', 'PERSPECTIVE'],
+          newElements: <String>['PERSPECTIVE'],
+        ),
+      );
+
+      expect(transition?.state, 'considering');
+    });
+
+    test('이어하기로 들어와도 이번 턴 요소만 반영한다', () {
+      // 직전 누적을 모르는 상태(primeAccumulated 없이 시작)에서도, 서버가
+      // 이번 턴 요소를 알려 주므로 엉뚱한 표정으로 튀지 않는다.
+      final DialogueCharacterStateMachine machine = _machineFor(_scene03);
+
+      final DialogueStateTransition? transition = machine.apply(
+        _turn(
+          accumulated: <String>['EMOTION', 'PERSPECTIVE', 'SOLUTION'],
+          newElements: <String>['EMOTION'],
+        ),
+      );
+
+      expect(
+        transition?.state,
+        'comforted',
+        reason: '누적을 직접 diff 하면 우선순위가 앞선 hopeful 로 잘못 간다',
+      );
+    });
+
+    test('newElements 가 없는 옛 응답은 누적 diff 로 되돌아간다', () {
+      final DialogueCharacterStateMachine machine = _machineFor(_scene03);
+
+      expect(
+        machine.apply(_turn(accumulated: <String>['EMOTION']))?.state,
+        'comforted',
+      );
     });
   });
 }

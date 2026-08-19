@@ -109,6 +109,7 @@ class DialogueSceneStates {
     required this.states,
     required this.statePriority,
     required this.elementToState,
+    required this.emotionToState,
   });
 
   factory DialogueSceneStates._fromJson(Map<String, dynamic> json) {
@@ -143,6 +144,13 @@ class DialogueSceneStates {
               .map((dynamic e) => e as String)
               .toList(growable: false),
       elementToState: elementToState,
+      emotionToState:
+          ((json['emotions'] as Map<String, dynamic>?) ??
+                  const <String, dynamic>{})
+              .map(
+                (String emotion, dynamic state) =>
+                    MapEntry<String, String>(emotion, state as String),
+              ),
     );
   }
 
@@ -175,6 +183,28 @@ class DialogueSceneStates {
   /// 사고 요소 -> 상태 키. 여러 요소가 한 상태를 가리킬 수 있다
   /// (대화2의 PERSPECTIVE·REASON -> considering).
   final Map<String, String> elementToState;
+
+  /// 서버 감정(`CharacterEmotion` 6종) -> 상태 키. **후속 자유 대화 전용**이다.
+  ///
+  /// 자유 대화에는 사고 요소도 진행 판단도 없어서 표정을 고를 근거가 감정
+  /// 하나뿐이다. 서버가 주는 값은 `NEUTRAL/HAPPY/SAD/WORRIED/SURPRISED/RELIEVED`
+  /// 인데 이 표를 거치지 않으면 상태 키와 한 번도 맞지 않는다 - 그래서 자유
+  /// 대화의 표정이 한 번도 바뀌지 않았다.
+  ///
+  /// 어울리는 얼굴이 없는 감정은 **비워 둔다**(대화4의 SAD·WORRIED·SURPRISED).
+  /// 빠진 감정은 표정을 그대로 두는 쪽이고, 아이 말과 무관한 얼굴을 짓는 것보다 낫다.
+  final Map<String, String> emotionToState;
+
+  /// 서버 감정에 해당하는 상태 키. 모르는 감정이면 null.
+  ///
+  /// 옛 서버가 상태 키를 그대로 보내던 시절과도 호환한다 - 값이 이미 상태
+  /// 키면 그대로 쓴다.
+  String? stateForEmotion(String? emotion) {
+    if (emotion == null || emotion.isEmpty) return null;
+    final String? mapped = emotionToState[emotion];
+    if (mapped != null) return mapped;
+    return states.containsKey(emotion) ? emotion : null;
+  }
 
   String get backgroundAsset => '$dir/$background';
 
