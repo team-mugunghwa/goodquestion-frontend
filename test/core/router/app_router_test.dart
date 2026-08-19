@@ -206,6 +206,21 @@ void main() {
     });
   });
 
+  testWidgets('재생 화면에는 세션 id 를 키로 답니다 - 세션이 바뀌면 화면도 새로 서야 합니다', (
+    WidgetTester tester,
+  ) async {
+    // go_router 의 페이지 키는 주소가 아니라 경로 틀(`/play/:sessionId`)에서
+    // 나옵니다. 키를 안 달면 세션만 바뀔 때 화면 상태가 그대로 살아남아,
+    // 멈춤 화면의 "처음부터 다시하기"로 새 세션에 들어와도 옛 세션 장면이
+    // 그대로 남습니다.
+    await pumpAt(tester, AppRoutes.playOf('abc'));
+
+    expect(
+      tester.widget<PlayPage>(find.byType(PlayPage)).key,
+      const ValueKey<String>('abc'),
+    );
+  });
+
   testWidgets('회원가입 전용 경로는 만들지 않는다', (WidgetTester tester) async {
     for (final String location in <String>['/signup']) {
       await pumpAt(tester, location);
