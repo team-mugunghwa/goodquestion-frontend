@@ -20,6 +20,12 @@ abstract final class AppFonts {
   ///
   /// Pretendard — SIL Open Font License 1.1.
   static const String body = 'Pretendard';
+
+  /// 글리프가 없을 때 넘어갈 순서. 두 폰트 다 한글 11,172자를 갖고 있어서
+  /// 서로가 서로의 폴백이 됩니다. 이걸 두지 않으면 웹은 빠진 글자 하나 때문에
+  /// 구글 폰트 서버에서 Noto Sans KR 을 받아오고, 그동안 네모(□)가 보입니다.
+  static const List<String> displayFallback = [body];
+  static const List<String> bodyFallback = [display];
 }
 
 /// 글자 크기 토큰.
@@ -51,6 +57,7 @@ abstract final class AppTypography {
   /// 완료 화면의 축하 문구, 획득 별가루 개수. 화면당 한 번만.
   static const TextStyle kidHero = TextStyle(
     fontFamily: AppFonts.display,
+    fontFamilyFallback: AppFonts.displayFallback,
     fontSize: 44,
     height: 1.25,
     fontWeight: FontWeight.w800,
@@ -61,6 +68,7 @@ abstract final class AppTypography {
   /// 화면 제목, 미션 제목, 이야기 제목.
   static const TextStyle kidTitle = TextStyle(
     fontFamily: AppFonts.display,
+    fontFamilyFallback: AppFonts.displayFallback,
     fontSize: 32,
     height: 1.3,
     fontWeight: FontWeight.w800,
@@ -73,6 +81,7 @@ abstract final class AppTypography {
   /// 한 줄 20자를 넘기지 마세요 — 넘으면 폭을 줄이지 말고 문장을 자릅니다.
   static const TextStyle kidBody = TextStyle(
     fontFamily: AppFonts.display,
+    fontFamilyFallback: AppFonts.displayFallback,
     fontSize: 24,
     height: 1.55,
     fontWeight: FontWeight.w400,
@@ -83,6 +92,7 @@ abstract final class AppTypography {
   /// 확정 전이라는 걸 굵기와 색으로 구분합니다.
   static const TextStyle kidTranscript = TextStyle(
     fontFamily: AppFonts.body,
+    fontFamilyFallback: AppFonts.bodyFallback,
     fontSize: 24,
     height: 1.5,
     fontWeight: FontWeight.w500,
@@ -92,6 +102,7 @@ abstract final class AppTypography {
   /// 큰 버튼 안의 한 단어. ("말하기", "다음", "다시 듣기")
   static const TextStyle kidButton = TextStyle(
     fontFamily: AppFonts.display,
+    fontFamilyFallback: AppFonts.displayFallback,
     fontSize: 22,
     height: 1.2,
     fontWeight: FontWeight.w800,
@@ -101,6 +112,7 @@ abstract final class AppTypography {
   /// 아이 화면의 짧은 보조 글자. 별가루 개수, 아이템 가격.
   static const TextStyle kidLabel = TextStyle(
     fontFamily: AppFonts.display,
+    fontFamilyFallback: AppFonts.displayFallback,
     fontSize: 18,
     height: 1.3,
     fontWeight: FontWeight.w700,
@@ -115,6 +127,7 @@ abstract final class AppTypography {
   /// 쓰지 마세요 — 그쪽은 터치 타겟 64 를 지켜야 합니다.
   static const TextStyle kidCaption = TextStyle(
     fontFamily: AppFonts.display,
+    fontFamilyFallback: AppFonts.displayFallback,
     fontSize: 15,
     height: 1.3,
     fontWeight: FontWeight.w700,
@@ -130,6 +143,7 @@ abstract final class AppTypography {
 
   static const TextStyle _pageTitle = TextStyle(
     fontFamily: AppFonts.body,
+    fontFamilyFallback: AppFonts.bodyFallback,
     fontSize: 28,
     height: 1.3,
     fontWeight: FontWeight.w700,
@@ -139,6 +153,7 @@ abstract final class AppTypography {
 
   static const TextStyle _sectionTitle = TextStyle(
     fontFamily: AppFonts.body,
+    fontFamilyFallback: AppFonts.bodyFallback,
     fontSize: 20,
     height: 1.35,
     fontWeight: FontWeight.w600,
@@ -147,6 +162,7 @@ abstract final class AppTypography {
 
   static const TextStyle _cardTitle = TextStyle(
     fontFamily: AppFonts.body,
+    fontFamilyFallback: AppFonts.bodyFallback,
     fontSize: 17,
     height: 1.4,
     fontWeight: FontWeight.w600,
@@ -156,6 +172,7 @@ abstract final class AppTypography {
   /// 리포트 본문. 보호자는 긴 글을 읽으므로 행간을 넉넉히 줍니다.
   static const TextStyle _body = TextStyle(
     fontFamily: AppFonts.body,
+    fontFamilyFallback: AppFonts.bodyFallback,
     fontSize: 16,
     height: 1.65,
     fontWeight: FontWeight.w400,
@@ -164,6 +181,7 @@ abstract final class AppTypography {
 
   static const TextStyle _bodyStrong = TextStyle(
     fontFamily: AppFonts.body,
+    fontFamilyFallback: AppFonts.bodyFallback,
     fontSize: 16,
     height: 1.65,
     fontWeight: FontWeight.w600,
@@ -172,6 +190,7 @@ abstract final class AppTypography {
 
   static const TextStyle _caption = TextStyle(
     fontFamily: AppFonts.body,
+    fontFamilyFallback: AppFonts.bodyFallback,
     fontSize: 13,
     height: 1.45,
     fontWeight: FontWeight.w400,
@@ -180,6 +199,7 @@ abstract final class AppTypography {
 
   static const TextStyle _button = TextStyle(
     fontFamily: AppFonts.body,
+    fontFamilyFallback: AppFonts.bodyFallback,
     fontSize: 16,
     height: 1.2,
     fontWeight: FontWeight.w600,
@@ -189,6 +209,7 @@ abstract final class AppTypography {
   /// 분석 결과(우리 말)와 아이 말을 눈으로 구분해야 합니다.
   static const TextStyle quote = TextStyle(
     fontFamily: AppFonts.display,
+    fontFamilyFallback: AppFonts.displayFallback,
     fontSize: 18,
     height: 1.6,
     fontWeight: FontWeight.w400,

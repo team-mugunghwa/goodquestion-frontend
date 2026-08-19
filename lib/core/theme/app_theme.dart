@@ -56,6 +56,12 @@ abstract final class AppTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
+      // textTheme 을 안 거치는 기본 스타일(primaryTextTheme, 위젯 내부 기본값,
+      // 인라인 TextStyle 이 상속하는 바닥)까지 번들 폰트로 못 박습니다.
+      // 이게 없으면 그 글자들은 Roboto 로 그려져 한글이 없어 웹에서
+      // Noto Sans KR 을 받아올 때까지 네모(□)로 보입니다.
+      fontFamily: AppFonts.body,
+      fontFamilyFallback: const [AppFonts.body, AppFonts.display],
       textTheme: AppTypography.textTheme,
       scaffoldBackgroundColor: AppColors.guardianCanvas,
       focusColor: AppColors.focus,

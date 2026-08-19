@@ -1,8 +1,16 @@
 # 폰트
 
-이 폴더에 폰트 파일을 넣고 `pubspec.yaml` 에 등록해야 디자인대로 보입니다.
-**폰트 파일이 없어도 앱은 그냥 돕니다** — Flutter 가 시스템 기본 글꼴로 조용히
-대체합니다. 그래서 "왜 시안이랑 다르지?" 의 첫 번째 원인이 대개 이겁니다.
+**현재 상태: 파일이 들어 있고 `pubspec.yaml` 에 등록돼 있습니다** (2026-08-19).
+아래는 폰트를 갈아 끼우거나 굵기를 더할 때 다시 따라가는 절차입니다.
+
+| 패밀리 | 파일 | 굵기 | 라이선스 |
+|---|---|---|---|
+| Pretendard | `Pretendard-{Regular,Medium,SemiBold,Bold}.otf` | 400/500/600/700 | `Pretendard-OFL.txt` |
+| NanumSquareRound | `NanumSquareRound{R,B,EB}.ttf` | 400/700/800 | `NanumSquareRound-OFL.txt` |
+
+왜 번들하나: 등록하지 않으면 Flutter 가 시스템 기본 글꼴로 조용히 대체하고,
+**웹에서는 구글 폰트 서버에서 한글 폴백을 받아올 때까지 글자가 네모(□)로
+보입니다** (첫 로드·느린 망·차단된 망). 파일을 넣어 두면 그 구간이 사라집니다.
 
 폰트를 왜 이 두 개로 골랐는지는 [`docs/DESIGN_SYSTEM.md`](../../docs/DESIGN_SYSTEM.md) 참고.
 
@@ -14,21 +22,25 @@
 
 - 받는 곳: https://github.com/orioncactus/pretendard/releases (`Pretendard-x.x.x.zip` → `public/static/`)
 - 라이선스: **SIL Open Font License 1.1** — 상업적 이용·임베딩·재배포 허용
-- 넣을 파일 4개 (`.otf` 말고 **`.ttf`** 를 쓰세요. 용량이 작고 Flutter 웹에서 안전합니다)
+- 넣을 파일 4개. 공식 배포 zip 에는 `.otf`(CFF) 만 들어 있고 Flutter(Skia)는
+  이를 그대로 읽습니다. 하나에 약 1.5MB 로 `.ttf` 변환본보다 오히려 작습니다.
 
 ```
-Pretendard-Regular.ttf     (400)
-Pretendard-Medium.ttf      (500)
-Pretendard-SemiBold.ttf    (600)
-Pretendard-Bold.ttf        (700)
+public/static/Pretendard-Regular.otf     (400)
+public/static/Pretendard-Medium.otf      (500)
+public/static/Pretendard-SemiBold.otf    (600)
+public/static/Pretendard-Bold.otf        (700)
 ```
 
 ### 나눔스퀘어라운드 — 아이 화면 제목·버튼
 
 - 받는 곳: https://hangeul.naver.com/font (나눔스퀘어라운드)
-- 라이선스: **네이버 나눔글꼴 라이선스** — 무료, 상업적 이용·임베딩·재배포 허용.
-  ⚠️ **폰트 자체를 유료로 판매하는 것만 금지**입니다. 앱에 넣는 건 허용됩니다.
-  배포 전에 라이선스 원문을 한 번 읽고, 아래 3번대로 출처를 기록하세요.
+- 라이선스: **SIL Open Font License 1.1** (네이버 공식 안내: Copyright 2010 NAVER
+  Corporation, Reserved Font Name 에 NanumSquareRound 포함) — 무료, 상업적
+  이용·임베딩·재배포 허용. 폰트 자체를 유료로 판매하는 것만 금지.
+  원문: https://help.naver.com/service/30016/contents/18088
+- 직접 받기: `https://hangeul.pstatic.net/hangeul_static/webfont/NanumSquareRound/NanumSquareRound{R,B,EB}.ttf`
+  (네이버가 웹폰트로 서빙하는 TTF. 한글 11,172자 전부 들어 있음)
 - 넣을 파일 3개
 
 ```
@@ -55,17 +67,19 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+    - assets/fonts/Pretendard-OFL.txt          # 라이선스 화면에서 읽음
+    - assets/fonts/NanumSquareRound-OFL.txt
 
   fonts:
     - family: Pretendard
       fonts:
-        - asset: assets/fonts/Pretendard-Regular.ttf
+        - asset: assets/fonts/Pretendard-Regular.otf
           weight: 400
-        - asset: assets/fonts/Pretendard-Medium.ttf
+        - asset: assets/fonts/Pretendard-Medium.otf
           weight: 500
-        - asset: assets/fonts/Pretendard-SemiBold.ttf
+        - asset: assets/fonts/Pretendard-SemiBold.otf
           weight: 600
-        - asset: assets/fonts/Pretendard-Bold.ttf
+        - asset: assets/fonts/Pretendard-Bold.otf
           weight: 700
 
     - family: NanumSquareRound
@@ -85,10 +99,11 @@ flutter:
 
 ## 3. 라이선스 기록 (배포 전 필수)
 
-폰트 파일과 함께 받은 `LICENSE` / `OFL.txt` 를 이 폴더에 같이 커밋하고,
-앱의 **설정 → 오픈소스 라이선스** 화면에 표시합니다. Flutter 는
-`showLicensePage()` 를 기본 제공하지만 에셋 폰트는 자동으로 잡히지 않으므로,
-`main.dart` 에서 한 번 등록해 주세요.
+라이선스 원문(`Pretendard-OFL.txt`, `NanumSquareRound-OFL.txt`)을 이 폴더에
+같이 커밋했고, `main.dart` 에서 `LicenseRegistry` 에 등록해 둡니다. Flutter 는
+`showLicensePage()` 를 기본 제공하지만 에셋 폰트는 자동으로 잡히지 않기 때문입니다.
+(설정 화면에 "오픈소스 라이선스" 항목이 생기면 `showLicensePage(context: context)`
+한 줄이면 됩니다.)
 
 ```dart
 LicenseRegistry.addLicense(() async* {
@@ -110,6 +125,7 @@ Kenney 3D 에셋(내 행성)과 효과음도 같은 규칙입니다 — 출처�
 
 ## 4. 폰트 용량 주의
 
-한글 폰트는 파일 하나에 4~8MB 입니다. 7개면 앱 용량이 30MB 넘게 늘어납니다.
+지금 7개 파일 합계 약 9.4MB(Pretendard 1.5MB×4, 나눔 1.0MB×3)입니다.
+웹은 첫 프레임 전에 등록된 폰트를 전부 내려받으므로 굵기를 늘리면 초기 로딩이 그만큼 느려집니다.
 굵기를 더 늘리고 싶으면 **먼저 기존 굵기로 표현이 안 되는지** 확인하세요.
 필요해지면 `fonttools` 로 한글 상용 2,780자만 남기는 서브셋을 검토합니다.

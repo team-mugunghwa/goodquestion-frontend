@@ -166,7 +166,13 @@ class _SocialButton extends StatelessWidget {
         foregroundColor: foregroundColor,
         side: BorderSide(color: borderColor),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        // ButtonStyle.textStyle 은 테마와 합쳐지지 않고 통째로 바뀝니다.
+        // 폰트 패밀리 없는 TextStyle 을 주면 Roboto 로 떨어져 한글이 웹에서
+        // 폴백 폰트를 받아올 때까지 네모(□)로 보이므로 테마 스타일에서 파생합니다.
+        textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     ),
   );
