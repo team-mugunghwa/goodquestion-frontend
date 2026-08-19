@@ -200,6 +200,35 @@ class _PlayPageState extends State<PlayPage> {
   Timer? _confirmTimer;
   String? _retainedStoryImageUrl;
 
+  /// 지금(또는 마지막으로) 들려준 대사 한 덩어리. **다시 듣기가 이것을 그대로
+  /// 다시 재생합니다.**
+  ///
+  /// 예전에는 다시 듣기가 글자만 지금 대사에서 가져오고 소리는 늘 장면
+  /// 오프닝(`_snapshot.openingAudioUrl`)을 가리켰습니다. 그래서
+  ///
+  /// - 사전 렌더 음성이 있는 고정 대사는 **실측 구간을 안 넘겨** 파일 재생
+  ///   경로를 못 타고 문장마다 다시 합성됐습니다. 서버의 사전 렌더는 Gemini,
+  ///   실시간 합성은 그때 설정된 벤더라 **같은 인물이 다른 목소리로** 들렸습니다.
+  /// - 한 문장짜리 LLM 대사를 다시 들으면 화면엔 새 대사, 스피커에서는
+  ///   **오프닝 대사**가 나왔습니다.
+  ///
+  /// 재생을 시작하는 곳이 [_playCharacterMessage] 하나라, 거기서 한 번만
+  /// 적어 두면 다시 듣기가 같은 것을 그대로 다시 틉니다.
+  _SpokenMessage? _lastSpoken;
+
+  /// 이 화면이 살아 있는 동안의 합성 결과 캐시. 키는 `인물|문장`입니다.
+  ///
+  /// 같은 문장을 다시 합성하면 **같은 벤더라도 미세하게 다른 소리가 나오고
+  /// 아이는 그 차이를 알아챕니다**(백엔드 `데이터베이스_설계.md` 4장). 다시
+  /// 듣기·되감기가 잦은 화면이라 왕복(실측 1.5~2.6초)도 그대로 기다림이 됩니다.
+  ///
+  /// data URL(base64 mp3)이라 한 문장이 수십 KB입니다. 무한정 들고 있지 않고
+  /// [_speechCacheLimit] 개를 넘으면 가장 오래된 것부터 버립니다 - 방금 들은
+  /// 문장이 다시 듣기의 대상이라 최근 것만 남으면 충분합니다.
+  final Map<String, String> _speechCache = <String, String>{};
+
+  static const int _speechCacheLimit = 32;
+
   /// 멈춤 화면이 **나가기(X)로 떴는가.** 멈춤 버튼으로 뜬 것과 카드는 같고
   /// 묻는 말만 다릅니다. → [_PauseOverlay.exit]
   bool _exitPrompt = false;
@@ -1310,10 +1339,10 @@ class _PlayPageState extends State<PlayPage> {
     // 오디오 길이에 맞춰 넘어가고, 다시 켜는 순간 되감기 없이 바로 들립니다.
     if (widget.repository != null) {
       try {
-        final PlaySpeechAudio audio = await widget.repository!.synthesizeSpeech(
-          text: sentence,
-        );
-        debugPrint('[narration] tts ok, audioUrl len=${audio.audioUrl.length}');
+        // 내레이션은 characterName 없이 부릅니다 - 서버 규칙상 그래야
+        // 내레이션 보이스가 나옵니다.
+        final String narrationUrl = await _synthesize(sentence);
+        debugPrint('[narration] tts ok, audioUrl len=${narrationUrl.length}');
         if (!mounted || token != _speechToken) {
           debugPrint(
             '[narration] stale after tts (mounted=$mounted '
@@ -1330,7 +1359,7 @@ class _PlayPageState extends State<PlayPage> {
           debugPrint('[narration] paused during tts, bailing');
           return;
         }
-        await _audioPlayer.playUrl(audio.audioUrl);
+        await _audioPlayer.playUrl(narrationUrl);
         debugPrint('[narration] playUrl finished');
         played = true;
       } on Object catch (error, stack) {
@@ -1473,16 +1502,53 @@ class _PlayPageState extends State<PlayPage> {
     unawaited(_audioPlayer.setMuted(!soundOn));
   }
 
+  /// 문장 하나를 소리로 바꿉니다. **같은 문장은 화면이 사는 동안 한 번만
+  /// 합성합니다** → [_speechCache].
+  ///
+  /// [characterName] 이 null 이면 내레이션 보이스입니다(서버 규칙).
+  Future<String> _synthesize(String text, {String? characterName}) async {
+    final String key = '${characterName ?? ''}|$text';
+    final String? cached = _speechCache[key];
+    if (cached != null) return cached;
+    final PlaySpeechAudio audio = await widget.repository!.synthesizeSpeech(
+      text: text,
+      characterName: characterName,
+    );
+    if (audio.audioUrl.isNotEmpty) {
+      if (_speechCache.length >= _speechCacheLimit) {
+        _speechCache.remove(_speechCache.keys.first);
+      }
+      _speechCache[key] = audio.audioUrl;
+    }
+    return audio.audioUrl;
+  }
+
   Future<void> _playQuestion() async {
     if (_recordingVoice) {
       await _voiceRecorder.cancel();
       if (!mounted) return;
       setState(() => _recordingVoice = false);
     }
+    // 방금 들려준 대사를 **소리까지 통째로** 다시 틉니다. 글자·소리·실측
+    // 구간을 따로 고르면 안 됩니다 - 사전 렌더가 없는 대사(LLM 대답)의 빈
+    // audioUrl 자리에 오프닝 파일이 끼어들어, 화면엔 새 대사인데 스피커에선
+    // 오프닝이 나오던 것이 그 때문이었습니다.
+    //
+    // 아직 아무것도 들려주지 않았다면(첫 재생) 지금 화면의 대사와 장면
+    // 오프닝 음성입니다.
+    final _SpokenMessage message =
+        _lastSpoken ??
+        _SpokenMessage(
+          text: _characterReply ?? _snapshot?.openingText ?? widget.question,
+          audioUrl: _snapshot?.openingAudioUrl,
+          audioTimings:
+              _snapshot?.openingAudioTimings ?? const <PlayAudioTiming>[],
+        );
     unawaited(
       _playCharacterMessage(
-        _characterReply ?? _snapshot?.openingText ?? widget.question,
-        audioUrl: _snapshot?.openingAudioUrl,
+        message.text,
+        audioUrl: message.audioUrl,
+        audioTimings: message.audioTimings,
         onComplete: _startListening,
       ),
     );
@@ -1501,6 +1567,13 @@ class _PlayPageState extends State<PlayPage> {
     VoidCallback? onComplete,
   }) async {
     final int token = ++_speechToken;
+    // 다시 듣기가 그대로 다시 틀 수 있게 적어 둡니다 - 글자·소리·실측 구간이
+    // 한 묶음이라야 같은 목소리로 다시 들립니다.
+    _lastSpoken = _SpokenMessage(
+      text: text,
+      audioUrl: audioUrl,
+      audioTimings: audioTimings,
+    );
     _questionTimer?.cancel();
     _listeningTimer?.cancel();
     _releaseSpeechWait();
@@ -1669,20 +1742,18 @@ class _PlayPageState extends State<PlayPage> {
       // [_toggleSound]). 그래야 대사가 오디오 길이에 맞춰 넘어갑니다.
       if (widget.repository != null) {
         try {
+          final String characterName =
+              _snapshot?.currentScene?.characterName ?? widget.characterName;
           final String source = index == 0 && sentences.length == 1
               ? (audioUrl ??
-                    (await widget.repository!.synthesizeSpeech(
-                      text: sentences[index],
-                      characterName:
-                          _snapshot?.currentScene?.characterName ??
-                          widget.characterName,
-                    )).audioUrl)
-              : (await widget.repository!.synthesizeSpeech(
-                  text: sentences[index],
-                  characterName:
-                      _snapshot?.currentScene?.characterName ??
-                      widget.characterName,
-                )).audioUrl;
+                    await _synthesize(
+                      sentences[index],
+                      characterName: characterName,
+                    ))
+              : await _synthesize(
+                  sentences[index],
+                  characterName: characterName,
+                );
           // 내레이션과 같은 규칙입니다 - 합성을 기다리는 사이에 일시정지를
           // 눌렀으면 틀지 않습니다(멈춘 뒤에 소리가 새로 나오면 안 됩니다).
           if (source.isNotEmpty && _phase != DialoguePhase.paused) {
@@ -2092,6 +2163,26 @@ class _PlayPageState extends State<PlayPage> {
       ),
     );
   }
+}
+
+/// 한 번에 들려주는 대사 한 덩어리. **글자·소리·실측 구간은 한 묶음입니다** -
+/// 셋 중 하나만 따로 들고 다니면 다시 듣기가 다른 소리를 냅니다.
+/// → [_PlayPageState._lastSpoken]
+class _SpokenMessage {
+  const _SpokenMessage({
+    required this.text,
+    required this.audioUrl,
+    required this.audioTimings,
+  });
+
+  final String text;
+
+  /// 서버가 미리 렌더해 둔 음성. null 이면 실시간 합성으로 들려준 대사입니다.
+  final String? audioUrl;
+
+  /// 사전 렌더 음성의 문장별 실측 구간. 이것이 비면 파일 재생 경로를 못 타고
+  /// 문장마다 다시 합성됩니다 - 다시 듣기에서 목소리가 바뀌던 원인입니다.
+  final List<PlayAudioTiming> audioTimings;
 }
 
 class _StorySceneView extends StatelessWidget {

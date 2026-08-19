@@ -1452,6 +1452,129 @@ void main() {
     expect(find.byTooltip('눌러서 말하기'), findsOneWidget);
   });
 
+  testWidgets('다시 듣기는 사전 렌더 음성을 그대로 다시 튼다 - 다시 합성하지 않는다', (
+    WidgetTester tester,
+  ) async {
+    // 사전 렌더는 Gemini, 실시간 합성은 그때 설정된 벤더라 재합성하면 같은
+    // 인물이 다른 사람 목소리로 들립니다. 다시 듣기는 듣던 그 파일이어야
+    // 합니다. → 백엔드 application.yml external.tts 주석
+    final _VoiceSpyRepository repository = _VoiceSpyRepository();
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      settle: false,
+    );
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+
+    expect(audioPlayer.playedUrls, hasLength(1));
+    expect(audioPlayer.playedUrls.single, endsWith('/tts/opening.mp3'));
+    expect(
+      repository.synthesizedTexts,
+      isEmpty,
+      reason: '사전 렌더가 있으면 합성하지 않습니다',
+    );
+
+    await tester.tap(find.byTooltip('다시 듣기'));
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+
+    expect(
+      repository.synthesizedTexts,
+      isEmpty,
+      reason: '다시 들을 때 재합성하면 사전 렌더와 다른 목소리가 납니다',
+    );
+    expect(audioPlayer.playedUrls, hasLength(2));
+    expect(audioPlayer.playedUrls.last, endsWith('/tts/opening.mp3'));
+  });
+
+  testWidgets('다시 듣기는 지금 대사를 다시 튼다 - 장면 오프닝 음성으로 되돌아가지 않는다', (
+    WidgetTester tester,
+  ) async {
+    // 예전에는 글자만 지금 대사를 쓰고 소리는 늘 오프닝 파일을 가리켜서,
+    // 한 문장짜리 대답을 다시 들으면 화면엔 새 대사, 스피커에선 오프닝
+    // 대사가 나왔습니다.
+    final _VoiceSpyRepository repository = _VoiceSpyRepository();
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      settle: false,
+    );
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    // 오프닝이 끝나야 마이크가 열립니다.
+    audioPlayer.finishPlayback();
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+
+    await tester.tap(find.byTooltip('말하기 완료'));
+    for (int i = 0; i < 8; i++) {
+      await tester.pump();
+    }
+    await tester.tap(find.text('맞아요'));
+    for (int i = 0; i < 8; i++) {
+      await tester.pump();
+    }
+
+    expect(
+      audioPlayer.playedUrls.last,
+      'tts://그렇게 생각했구나.',
+      reason: '아이 말에 대한 대답이 나와야 합니다',
+    );
+
+    await tester.tap(find.byTooltip('다시 듣기'));
+    for (int i = 0; i < 8; i++) {
+      await tester.pump();
+    }
+
+    expect(
+      audioPlayer.playedUrls.last,
+      'tts://그렇게 생각했구나.',
+      reason: '방금 들은 대답을 다시 들어야 합니다 - 오프닝 파일로 돌아가면 딴 말·딴 목소리입니다',
+    );
+    expect(
+      repository.synthesizedTexts.where((String t) => t == '그렇게 생각했구나.'),
+      hasLength(1),
+      reason: '같은 문장을 다시 합성하면 미세하게 다른 소리가 납니다 - 캐시에서 꺼내야 합니다',
+    );
+  });
+
+  testWidgets('전개 화면 다시 듣기도 같은 문장을 다시 합성하지 않는다', (WidgetTester tester) async {
+    final _StoryNarrationSpyRepository repository =
+        _StoryNarrationSpyRepository();
+    final _SpyAudioPlayer audioPlayer = _SpyAudioPlayer();
+    await pumpPlay(
+      tester,
+      repository: repository,
+      audioPlayer: audioPlayer,
+      settle: false,
+    );
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    expect(repository.synthesizedTexts, <String>['첫 문장이에요.']);
+
+    await tester.tap(find.byTooltip('다시 듣기'));
+    for (int i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+
+    expect(
+      repository.synthesizedTexts,
+      <String>['첫 문장이에요.'],
+      reason: '되감아 들을 때마다 새로 합성하면 같은 문장이 조금씩 다른 소리로 들립니다',
+    );
+    expect(audioPlayer.playedUrls, hasLength(2), reason: '소리는 두 번 나야 합니다');
+  });
+
   testWidgets('1280x720 범용 대화 템플릿 골든', (WidgetTester tester) async {
     await pumpPlay(tester);
     await tester.pump();
@@ -1732,6 +1855,114 @@ class _SceneFlowSpyRepository implements PlayRepository {
   Future<void> stop(String sessionId) async {}
 }
 
+/// 목소리가 바뀌는 자리를 보는 가짜입니다. 실서버와 같은 모양으로:
+///
+/// - **오프닝 고정 대사**에는 사전 렌더 음성(파일 + 문장별 실측 구간)이 옵니다.
+/// - **LLM 대답**에는 audioUrl 이 없습니다 → 화면이 /api/tts 로 합성합니다.
+/// - 합성은 `tts://<문장>` 을 돌려주고 어떤 문장을 몇 번 불렀는지 기록합니다.
+class _VoiceSpyRepository implements PlayRepository {
+  final List<String> synthesizedTexts = <String>[];
+
+  @override
+  Future<PlaySessionSnapshot> resume(String sessionId) async =>
+      const PlaySessionSnapshot(
+        phase: PlayPhase.dialogue,
+        storyId: 'story-1',
+        currentScene: PlayScene(
+          sceneId: 'scene-1',
+          sceneOrder: 1,
+          sceneType: PlaySceneType.dialogue,
+          narrationSentences: <String>[],
+          characterName: '마을 이장',
+          maxTurns: 4,
+        ),
+        openingText: '큰일이 났네. 무슨 뾰족한 방법이 없겠는가?',
+        openingAudioUrl: '/tts/opening.mp3',
+        openingAudioTimings: <PlayAudioTiming>[
+          PlayAudioTiming(index: 0, start: 0, end: 3),
+          PlayAudioTiming(index: 1, start: 3, end: 6),
+        ],
+      );
+
+  @override
+  Future<PlaySessionSnapshot> completeStoryScene(String sessionId) =>
+      resume(sessionId);
+
+  @override
+  Future<PlayOpeningMessage> openCurrentScene(String sessionId) async =>
+      const PlayOpeningMessage(
+        text: '큰일이 났네. 무슨 뾰족한 방법이 없겠는가?',
+        audioUrl: '/tts/opening.mp3',
+        alreadyOpened: true,
+      );
+
+  @override
+  Future<List<PlayMessage>> sceneMessages(
+    String sessionId, {
+    required String sceneId,
+  }) async => const <PlayMessage>[];
+
+  @override
+  Future<PlayMission?> currentMission(String sessionId) async => null;
+
+  @override
+  Future<PlayTranscription> transcribeAudio(Uint8List wavBytes) async =>
+      const PlayTranscription(
+        text: '같이 방법을 찾아봐요.',
+        confidence: .94,
+        lowConfidence: false,
+      );
+
+  @override
+  Future<PlaySpeechAudio> synthesizeSpeech({
+    required String text,
+    String? characterName,
+  }) async {
+    synthesizedTexts.add(text);
+    return PlaySpeechAudio(audioUrl: 'tts://$text');
+  }
+
+  @override
+  Future<PlayTurnResult> submitUtterance(
+    String sessionId, {
+    required String text,
+    String? missionId,
+    String? sttRawText,
+    double? sttConfidence,
+    int sttRetryCount = 0,
+    String? idempotencyKey,
+  }) async => const PlayTurnResult(
+    // 실서버와 같습니다 - LLM 대답에는 사전 렌더 음성이 없습니다.
+    characterText: '그렇게 생각했구나.',
+    characterAudioUrl: null,
+    mission: null,
+    sceneTransition: null,
+  );
+
+  @override
+  Future<PlayPostActivityStart> startPostActivity(String sessionId) async =>
+      const PlayPostActivityStart(
+        cards: <PlayPostActivityCard>[],
+        attemptCount: 0,
+      );
+
+  @override
+  Future<PlayCardOrderResult> submitCardOrder(
+    String sessionId, {
+    required List<String> submittedOrder,
+  }) async => const PlayCardOrderResult(correct: true);
+
+  @override
+  Future<PlayRetellingResult> submitRetelling(
+    String sessionId, {
+    required String text,
+    String? sttRawText,
+  }) async => const PlayRetellingResult(sessionStatus: 'COMPLETED');
+
+  @override
+  Future<void> stop(String sessionId) async {}
+}
+
 class _FakeVoiceRecorder implements MissionVoiceRecorder {
   const _FakeVoiceRecorder();
 
@@ -1769,8 +2000,13 @@ class _SpyAudioPlayer implements StoryAudioPlayer {
   Completer<void>? _playing;
   bool _paused = false;
 
+  /// 실제로 튼 주소들. **무엇을 틀었는지**까지 봐야 다시 듣기가 같은 소리를
+  /// 내는지 알 수 있습니다(횟수만으로는 다른 음성을 틀어도 통과합니다).
+  final List<String> playedUrls = <String>[];
+
   @override
   Future<void> playUrl(String url) {
+    playedUrls.add(url);
     playCount++;
     _paused = false;
     final Completer<void> completer = Completer<void>();
