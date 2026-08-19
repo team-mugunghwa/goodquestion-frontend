@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:goodquestion/core/error/exceptions.dart';
 import 'package:goodquestion/core/error/failure.dart';
 import 'package:goodquestion/core/network/dio_client.dart';
+import 'package:goodquestion/core/storage/selected_child_store.dart';
 import 'package:goodquestion/features/mypage/data/datasources/child_profile_remote_data_source.dart';
 import 'package:goodquestion/features/mypage/data/dtos/my_page_dto.dart';
 import 'package:goodquestion/features/mypage/data/repositories/my_page_repository_impl.dart';
@@ -61,10 +62,31 @@ class _Remote extends ChildProfileRemoteDataSource {
   }
 }
 
+/// 기기 저장소 대신 메모리에 들고 있는 가짜. 단위 테스트에는 플러그인
+/// 채널이 없어 진짜 보안 저장소를 쓸 수 없습니다.
+class _MemoryChildStore extends SelectedChildStore {
+  String? _id;
+
+  @override
+  String? get value => _id;
+
+  @override
+  Future<String?> load() async => _id;
+
+  @override
+  Future<void> save(String childId) async => _id = childId;
+
+  @override
+  Future<void> clear() async => _id = null;
+}
+
 void main() {
   test('완주 편수와 별가루는 선택된 아이의 활동 요약에서 온다', () async {
     final _Remote remote = _Remote();
-    final MyPageRepositoryImpl repository = MyPageRepositoryImpl(remote);
+    final MyPageRepositoryImpl repository = MyPageRepositoryImpl(
+      remote,
+      selectedChild: _MemoryChildStore(),
+    );
     await repository.selectChild('child-2');
 
     final MyPageSummary summary = await repository.getSummary();
@@ -80,7 +102,10 @@ void main() {
   test('아이를 추가하면 동의도 함께 기록한다', () async {
     // 동의 기록이 없으면 그 아이로 이야기를 시작할 때 서버가 409 로 막습니다.
     final _Remote remote = _Remote();
-    final MyPageRepositoryImpl repository = MyPageRepositoryImpl(remote);
+    final MyPageRepositoryImpl repository = MyPageRepositoryImpl(
+      remote,
+      selectedChild: _MemoryChildStore(),
+    );
 
     await repository.createChild(name: '새봄', age: 7);
 
@@ -91,7 +116,10 @@ void main() {
 
   test('동의가 한 번 실패해도 다시 시도해 끝낸다', () async {
     final _Remote remote = _Remote()..consentFailures = 1;
-    final MyPageRepositoryImpl repository = MyPageRepositoryImpl(remote);
+    final MyPageRepositoryImpl repository = MyPageRepositoryImpl(
+      remote,
+      selectedChild: _MemoryChildStore(),
+    );
 
     await repository.createChild(name: '새봄', age: 7);
 
@@ -102,7 +130,10 @@ void main() {
     // 반쯤 만들어진 아이로 화면을 바꿔 두면 보호자가 그 아이로 이야기를
     // 시작했다가 409 를 만납니다.
     final _Remote remote = _Remote()..consentFailures = 2;
-    final MyPageRepositoryImpl repository = MyPageRepositoryImpl(remote);
+    final MyPageRepositoryImpl repository = MyPageRepositoryImpl(
+      remote,
+      selectedChild: _MemoryChildStore(),
+    );
     await repository.selectChild('child-2');
 
     await expectLater(
@@ -113,11 +144,59 @@ void main() {
     expect(repository.selectedChildId, 'child-2');
   });
 
+  test('고른 아이는 저장소에 남아 다음 실행에서 되살아난다', () async {
+    final _MemoryChildStore store = _MemoryChildStore();
+    await MyPageRepositoryImpl(
+      _Remote(),
+      selectedChild: store,
+    ).selectChild('child-2');
+
+    // 앱을 다시 켠 상황: 새 리포지토리가 같은 저장소를 읽습니다.
+    final MyPageRepositoryImpl reopened = MyPageRepositoryImpl(
+      _Remote(),
+      selectedChild: store,
+    );
+
+    expect(reopened.selectedChildId, 'child-2');
+    expect((await reopened.getSummary()).child?.name, '하늘');
+  });
+
+  test('저장된 아이가 목록에 없으면 첫 번째 아이로 되돌린다', () async {
+    // 그 아이가 지워졌거나 다른 계정으로 로그인한 경우입니다. 그대로 쓰면
+    // 남의 아이를 부릅니다.
+    final _MemoryChildStore store = _MemoryChildStore();
+    await store.save('child-gone');
+    final MyPageRepositoryImpl repository = MyPageRepositoryImpl(
+      _Remote(),
+      selectedChild: store,
+    );
+
+    final MyPageSummary summary = await repository.getSummary();
+
+    expect(summary.child?.childId, 'child-1');
+    expect(store.value, 'child-1', reason: '되돌린 선택도 저장돼야 합니다');
+  });
+
+  test('목록에 없는 아이는 고를 수 없고 저장도 안 된다', () async {
+    final _MemoryChildStore store = _MemoryChildStore();
+    final MyPageRepositoryImpl repository = MyPageRepositoryImpl(
+      _Remote(),
+      selectedChild: store,
+    );
+
+    await expectLater(
+      repository.selectChild('child-gone'),
+      throwsA(isA<Failure>()),
+    );
+    expect(store.value, isNull);
+  });
+
   test('아이가 없으면 활동 요약을 부르지 않고 두 값 모두 0으로 둔다', () async {
     final _Remote remote = _Remote(children: const <Map<String, dynamic>>[]);
 
     final MyPageSummary summary = await MyPageRepositoryImpl(
       remote,
+      selectedChild: _MemoryChildStore(),
     ).getSummary();
 
     expect(summary.completedStories, 0);
@@ -135,6 +214,7 @@ void main() {
 
     final MyPageSummary summary = await MyPageRepositoryImpl(
       remote,
+      selectedChild: _MemoryChildStore(),
     ).getSummary();
 
     expect(summary.completedStories, 0);
@@ -162,6 +242,7 @@ void main() {
   test('아이 목록 조회가 실패하면 그대로 실패한다 - 없는 화면을 그릴 수는 없다', () async {
     final MyPageRepositoryImpl repository = MyPageRepositoryImpl(
       _FailingChildrenRemote(),
+      selectedChild: _MemoryChildStore(),
     );
 
     await expectLater(repository.getSummary(), throwsA(isA<Failure>()));
