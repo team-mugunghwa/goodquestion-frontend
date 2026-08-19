@@ -1,5 +1,6 @@
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failure.dart';
+import '../../../../core/util/child_age.dart';
 import '../../domain/entities/my_page_summary.dart';
 import '../../domain/repositories/my_page_repository.dart';
 import '../datasources/child_profile_remote_data_source.dart';
@@ -39,9 +40,28 @@ class MyPageRepositoryImpl implements MyPageRepository, ChildProfileRepository {
     try {
       final Map<String, dynamic> created = await _remote.createChild(
         name: name.trim(),
-        birthYear: DateTime.now().year - age,
+        birthYear: birthYearFromAge(age),
       );
       _selectedChildId = _toChild(created).childId;
+    } on AppException catch (error) {
+      throw Failure.fromException(error);
+    }
+  }
+
+  @override
+  Future<void> updateChild({
+    required String childId,
+    required String name,
+    required int age,
+  }) async {
+    try {
+      // 화면은 나이를 받고 서버는 출생연도만 압니다. 아이 등록과 **같은 식**을
+      // 써야 같은 아이의 연도가 어긋나지 않습니다. → [birthYearFromAge]
+      await _remote.updateChild(
+        childId,
+        name: name.trim(),
+        birthYear: birthYearFromAge(age),
+      );
     } on AppException catch (error) {
       throw Failure.fromException(error);
     }
@@ -107,7 +127,7 @@ class MyPageRepositoryImpl implements MyPageRepository, ChildProfileRepository {
     return MyPageChild(
       childId: id,
       name: name,
-      age: responseAge ?? DateTime.now().year - birthYear!,
+      age: responseAge ?? ageFromBirthYear(birthYear!),
     );
   }
 }

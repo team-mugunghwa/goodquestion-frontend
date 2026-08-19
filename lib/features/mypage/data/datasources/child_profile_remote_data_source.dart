@@ -29,6 +29,24 @@ class ChildProfileRemoteDataSource {
         },
       );
 
+  /// 아이 프로필 수정. 두 필드 모두 선택이라 **보낼 것만** 실어 보냅니다.
+  /// (`birthYear` 는 서버가 2000~2100 으로 검증합니다)
+  Future<Map<String, dynamic>> updateChild(
+    String childId, {
+    String? name,
+    int? birthYear,
+  }) => _client.patch<Map<String, dynamic>>(
+    '/children/$childId',
+    body: <String, dynamic>{
+      if (name != null) 'name': name,
+      if (birthYear != null) 'birthYear': birthYear,
+    },
+    parse: (Object? data) {
+      if (data is Map<String, dynamic>) return data;
+      throw const ParseException('아이 정보 응답 형식이 올바르지 않습니다.');
+    },
+  );
+
   Future<Map<String, dynamic>> createChild({
     required String name,
     required int birthYear,

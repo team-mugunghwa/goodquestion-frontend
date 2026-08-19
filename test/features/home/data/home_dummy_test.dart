@@ -7,6 +7,12 @@ import 'package:goodquestion/features/mypage/domain/entities/my_page_summary.dar
 import 'package:goodquestion/features/mypage/domain/repositories/my_page_repository.dart';
 
 class _ChildProfiles implements ChildProfileRepository {
+  @override
+  Future<void> updateChild({
+    required String childId,
+    required String name,
+    required int age,
+  }) async {}
   _ChildProfiles(this.children, this.selectedChildId);
 
   final List<MyPageChild> children;
@@ -28,6 +34,12 @@ class _ChildProfiles implements ChildProfileRepository {
 
 class _UnexpectedChildProfiles implements ChildProfileRepository {
   @override
+  Future<void> updateChild({
+    required String childId,
+    required String name,
+    required int age,
+  }) async {}
+  @override
   String? get selectedChildId => null;
 
   @override
@@ -44,6 +56,12 @@ class _UnexpectedChildProfiles implements ChildProfileRepository {
 }
 
 class _UnauthorizedChildProfiles implements ChildProfileRepository {
+  @override
+  Future<void> updateChild({
+    required String childId,
+    required String name,
+    required int age,
+  }) async {}
   @override
   String? get selectedChildId => null;
 

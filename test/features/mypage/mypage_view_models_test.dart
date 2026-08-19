@@ -47,6 +47,19 @@ class _Stub
     createdChildAges.add(age);
   }
 
+  /// 고친 아이. **새로 만든 것과 섞이면 안 됩니다.**
+  final List<String> updated = <String>[];
+
+  @override
+  Future<void> updateChild({
+    required String childId,
+    required String name,
+    required int age,
+  }) async {
+    if (error != null) throw error!;
+    updated.add('$childId/$name/$age');
+  }
+
   @override
   Future<List<MyPageChild>> getChildren() async =>
       childProfiles ??
@@ -188,6 +201,7 @@ void main() {
       final vm = MyPageViewModel(
         GetMyPageSummaryUseCase(_Stub(summary: _summary)),
         CreateMyPageChildUseCase(_Stub(summary: _summary)),
+        UpdateMyPageChildUseCase(_Stub(summary: _summary)),
         GetMyPageChildrenUseCase(_Stub(summary: _summary)),
         SelectMyPageChildUseCase(_Stub(summary: _summary)),
       );
@@ -203,6 +217,7 @@ void main() {
       final vm = MyPageViewModel(
         GetMyPageSummaryUseCase(_Stub(summary: _noChild)),
         CreateMyPageChildUseCase(_Stub(summary: _noChild)),
+        UpdateMyPageChildUseCase(_Stub(summary: _noChild)),
         GetMyPageChildrenUseCase(_Stub(summary: _noChild)),
         SelectMyPageChildUseCase(_Stub(summary: _noChild)),
       );
@@ -219,6 +234,7 @@ void main() {
           _Stub(error: const NetworkFailure('연결이 끊겼습니다.')),
         ),
         CreateMyPageChildUseCase(_Stub()),
+        UpdateMyPageChildUseCase(_Stub()),
         GetMyPageChildrenUseCase(_Stub()),
         SelectMyPageChildUseCase(_Stub()),
       );
@@ -234,6 +250,7 @@ void main() {
       final MyPageViewModel vm = MyPageViewModel(
         GetMyPageSummaryUseCase(stub),
         CreateMyPageChildUseCase(stub),
+        UpdateMyPageChildUseCase(stub),
         GetMyPageChildrenUseCase(stub),
         SelectMyPageChildUseCase(stub),
       );
@@ -244,6 +261,29 @@ void main() {
       expect(stub.createdChildNames, <String>['새봄']);
       expect(stub.createdChildAges, <int>[7]);
       expect(vm.summary, same(_summary));
+    });
+
+    test('아이를 고치면 수정으로 가고 새로 만들지 않는다', () async {
+      final _Stub stub = _Stub(summary: _summary);
+      final vm = MyPageViewModel(
+        GetMyPageSummaryUseCase(stub),
+        CreateMyPageChildUseCase(stub),
+        UpdateMyPageChildUseCase(stub),
+        GetMyPageChildrenUseCase(stub),
+        SelectMyPageChildUseCase(stub),
+      );
+      await vm.load();
+
+      final bool saved = await vm.updateChild(
+        childId: 'child-1',
+        name: '하늘',
+        age: 9,
+      );
+
+      expect(saved, isTrue);
+      expect(stub.updated, <String>['child-1/하늘/9']);
+      // 수정이 추가로 새면 아이가 하나 더 생깁니다.
+      expect(stub.createdChildNames, isEmpty);
     });
 
     test('등록된 아이 중 선택한 프로필로 전환한다', () async {
@@ -259,6 +299,7 @@ void main() {
       final MyPageViewModel vm = MyPageViewModel(
         GetMyPageSummaryUseCase(stub),
         CreateMyPageChildUseCase(stub),
+        UpdateMyPageChildUseCase(stub),
         GetMyPageChildrenUseCase(stub),
         SelectMyPageChildUseCase(stub),
       );

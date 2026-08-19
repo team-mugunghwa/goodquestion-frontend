@@ -119,6 +119,7 @@ final GoRouter _router = GoRouter(
               create: (_) => MyPageViewModel(
                 GetMyPageSummaryUseCase(repo),
                 const CreateMyPageChildUseCase(children),
+                const UpdateMyPageChildUseCase(children),
                 const GetMyPageChildrenUseCase(children),
                 const SelectMyPageChildUseCase(children),
               )..load(),
@@ -178,6 +179,12 @@ class _PreviewChildren implements ChildProfileRepository {
   Future<List<MyPageChild>> getChildren() async => const <MyPageChild>[
     MyPageChild(childId: 'preview-child', name: '하늘이', age: 7),
   ];
+  @override
+  Future<void> updateChild({
+    required String childId,
+    required String name,
+    required int age,
+  }) async {}
 
   @override
   Future<void> selectChild(String childId) async {}
