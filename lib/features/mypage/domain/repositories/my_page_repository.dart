@@ -13,6 +13,14 @@ abstract class ChildProfileRepository {
 
   Future<void> createChild({required String name, required int age});
 
+  /// 이미 있는 아이를 고칩니다. **새로 만들지 않습니다** - 화면의 연필
+  /// 아이콘이 여기로 옵니다.
+  Future<void> updateChild({
+    required String childId,
+    required String name,
+    required int age,
+  });
+
   Future<List<MyPageChild>> getChildren();
 
   Future<void> selectChild(String childId);

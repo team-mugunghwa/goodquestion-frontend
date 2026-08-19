@@ -22,6 +22,19 @@ class CreateMyPageChildUseCase {
       _repository.createChild(name: name, age: age);
 }
 
+/// 아이 프로필 수정. 추가와 달리 **어느 아이인지**를 함께 받습니다.
+class UpdateMyPageChildUseCase {
+  const UpdateMyPageChildUseCase(this._repository);
+
+  final ChildProfileRepository _repository;
+
+  Future<void> call({
+    required String childId,
+    required String name,
+    required int age,
+  }) => _repository.updateChild(childId: childId, name: name, age: age);
+}
+
 class GetMyPageChildrenUseCase {
   const GetMyPageChildrenUseCase(this._repository);
 

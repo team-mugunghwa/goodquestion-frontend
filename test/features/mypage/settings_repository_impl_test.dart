@@ -22,6 +22,12 @@ class _Remote extends SettingsRemoteDataSource {
 
 class _Children implements ChildProfileRepository {
   @override
+  Future<void> updateChild({
+    required String childId,
+    required String name,
+    required int age,
+  }) async {}
+  @override
   String? selectedChildId = 'child-1';
 
   @override

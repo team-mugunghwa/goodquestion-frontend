@@ -64,9 +64,25 @@ class _Stub
   @override
   String? selectedChildId;
 
+  /// 새로 만든 아이 · 고친 아이. **섞이면 안 됩니다** - 수정 버튼이 추가로
+  /// 이어지면 아이가 하나 더 생깁니다.
+  final List<String> created = <String>[];
+  final List<String> updated = <String>[];
+
   @override
   Future<void> createChild({required String name, required int age}) async {
     if (error != null) throw error!;
+    created.add('$name/$age');
+  }
+
+  @override
+  Future<void> updateChild({
+    required String childId,
+    required String name,
+    required int age,
+  }) async {
+    if (error != null) throw error!;
+    updated.add('$childId/$name/$age');
   }
 
   @override
@@ -241,6 +257,7 @@ void main() {
           create: (_) => MyPageViewModel(
             GetMyPageSummaryUseCase(stub),
             CreateMyPageChildUseCase(stub),
+            UpdateMyPageChildUseCase(stub),
             GetMyPageChildrenUseCase(stub),
             SelectMyPageChildUseCase(stub),
           )..load(),
@@ -315,6 +332,56 @@ void main() {
 
       expect(stub.selectedChildId, 'child-2');
       expect(find.text('바다 · 10살'), findsOneWidget);
+    });
+
+    testWidgets('연필을 누르면 지금 값이 채워진 수정 폼이 열린다', (WidgetTester tester) async {
+      final _Stub stub = _Stub(summary: _summary);
+      await pump(tester, under(stub));
+
+      await tester.tap(find.byTooltip(MyPageStrings.editChild));
+      await tester.pumpAndSettle();
+
+      // 빈 폼이 열리면 저장할 때 아이가 하나 더 생깁니다.
+      expect(find.text('아이 프로필 수정'), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, '하늘이'), findsOneWidget);
+      expect(find.text('8세'), findsOneWidget);
+      expect(find.text('수정'), findsOneWidget);
+    });
+
+    testWidgets('수정 폼을 저장하면 그 아이를 고치고 새로 만들지 않는다', (WidgetTester tester) async {
+      final _Stub stub = _Stub(summary: _summary);
+      await pump(tester, under(stub));
+
+      await tester.tap(find.byTooltip(MyPageStrings.editChild));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField), '하늘');
+      await tester.tap(find.text('수정'));
+      await tester.pumpAndSettle();
+
+      expect(stub.updated, <String>['child-1/하늘/8']);
+      expect(stub.created, isEmpty, reason: '수정인데 아이가 하나 더 생기면 안 됩니다');
+      expect(find.text('아이 프로필을 수정했습니다.'), findsOneWidget);
+    });
+
+    testWidgets('아이 추가는 빈 폼에서 새로 만든다', (WidgetTester tester) async {
+      final _Stub stub = _Stub(summary: _summary);
+      await pump(tester, under(stub));
+
+      await tester.tap(find.text(MyPageStrings.addChild));
+      await tester.pumpAndSettle();
+
+      // 메뉴 타일에도 같은 말이 있어 시트의 안내문으로 가립니다.
+      expect(find.text('아이의 이름과 나이를 입력해 주세요.'), findsOneWidget);
+      // 지금 아이 이름이 남아 있으면 그 아이를 고치는 것처럼 보입니다.
+      expect(find.widgetWithText(TextFormField, '하늘이'), findsNothing);
+
+      await tester.enterText(find.byType(TextFormField), '새봄');
+      await tester.tap(find.text('저장'));
+      await tester.pumpAndSettle();
+
+      expect(stub.created, <String>['새봄/7']);
+      expect(stub.updated, isEmpty);
+      expect(find.text('아이 프로필을 추가했습니다.'), findsOneWidget);
     });
 
     testWidgets('실패해도 메뉴는 남는다', (WidgetTester tester) async {

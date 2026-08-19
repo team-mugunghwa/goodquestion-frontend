@@ -194,6 +194,12 @@ Widget _preview(HomeSummary? summary) => ChangeNotifierProvider<HomeViewModel>(
 );
 
 class _StubChildren implements ChildProfileRepository {
+  @override
+  Future<void> updateChild({
+    required String childId,
+    required String name,
+    required int age,
+  }) async {}
   const _StubChildren();
 
   @override

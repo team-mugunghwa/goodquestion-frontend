@@ -195,6 +195,12 @@ class _SilentSettings implements SettingsRepository {
 
 class _SilentMyPage implements MyPageRepository, ChildProfileRepository {
   @override
+  Future<void> updateChild({
+    required String childId,
+    required String name,
+    required int age,
+  }) async {}
+  @override
   String? selectedChildId;
 
   @override

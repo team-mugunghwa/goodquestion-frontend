@@ -356,6 +356,9 @@ Future<void> configureDependencies() async {
     ..registerLazySingleton<CreateMyPageChildUseCase>(
       () => CreateMyPageChildUseCase(getIt<ChildProfileRepository>()),
     )
+    ..registerLazySingleton<UpdateMyPageChildUseCase>(
+      () => UpdateMyPageChildUseCase(getIt<ChildProfileRepository>()),
+    )
     ..registerLazySingleton<GetMyPageChildrenUseCase>(
       () => GetMyPageChildrenUseCase(getIt<ChildProfileRepository>()),
     )

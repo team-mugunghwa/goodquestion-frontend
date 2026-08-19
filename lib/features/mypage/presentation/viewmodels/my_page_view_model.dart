@@ -11,12 +11,14 @@ class MyPageViewModel extends BaseViewModel {
   MyPageViewModel(
     this._getSummary,
     this._createChild,
+    this._updateChild,
     this._getChildren,
     this._selectChild,
   );
 
   final GetMyPageSummaryUseCase _getSummary;
   final CreateMyPageChildUseCase _createChild;
+  final UpdateMyPageChildUseCase _updateChild;
   final GetMyPageChildrenUseCase _getChildren;
   final SelectMyPageChildUseCase _selectChild;
 
@@ -39,13 +41,28 @@ class MyPageViewModel extends BaseViewModel {
     _children = await _getChildren();
   });
 
-  Future<bool> addChild({required String name, required int age}) async {
+  Future<bool> addChild({required String name, required int age}) =>
+      _saveChild(() => _createChild(name: name.trim(), age: age));
+
+  /// 이미 있는 아이를 고칩니다. **[childId] 가 있어야** 새로 만들지 않고
+  /// 그 아이를 고칩니다.
+  Future<bool> updateChild({
+    required String childId,
+    required String name,
+    required int age,
+  }) => _saveChild(
+    () => _updateChild(childId: childId, name: name.trim(), age: age),
+  );
+
+  /// 추가와 수정이 같은 뒷정리를 씁니다 - 저장 중 표시, 실패 메시지,
+  /// 그리고 성공하면 요약·목록을 다시 읽어 화면을 맞춥니다.
+  Future<bool> _saveChild(Future<void> Function() save) async {
     if (_isSavingChild) return false;
     _isSavingChild = true;
     _childSaveError = null;
     safeNotify();
     try {
-      await _createChild(name: name.trim(), age: age);
+      await save();
       _summary = await _getSummary();
       _children = await _getChildren();
       return true;

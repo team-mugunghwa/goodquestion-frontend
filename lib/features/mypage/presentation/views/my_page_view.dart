@@ -65,6 +65,7 @@ class MyPage extends StatelessWidget {
           create: (_) => MyPageViewModel(
             getIt<GetMyPageSummaryUseCase>(),
             getIt<CreateMyPageChildUseCase>(),
+            getIt<UpdateMyPageChildUseCase>(),
             getIt<GetMyPageChildrenUseCase>(),
             getIt<SelectMyPageChildUseCase>(),
           )..load(),
@@ -170,7 +171,9 @@ class MyPageView extends StatelessWidget {
     return ChildProfileCard(
       summary: summary,
       onSwitch: () => _openChildSwitch(context),
-      onEdit: () => _openChildForm(context),
+      // 연필은 **지금 아이를 고치는** 자리입니다. 값을 안 넘기면 빈 폼이
+      // 열리고, 저장하면 아이가 하나 더 생깁니다.
+      onEdit: () => _openChildForm(context, child: summary.child),
       onCreate: () => _openChildForm(context),
     );
   }
@@ -188,26 +191,37 @@ class MyPageView extends StatelessWidget {
     unawaited(context.push(AppRoutes.report));
   }
 
-  /// 아이 프로필 추가·수정 모달의 자리.
+  /// 아이 프로필 추가·수정 모달.
   ///
-  /// 모달 내부 폼은 별도 설계 범위라, 여기서는 호출 지점만 만들어 둡니다.
-  /// 지금은 최초 등록 화면(`/auth`)이 같은 일을 하므로 그리로 보냅니다.
-  Future<void> _openChildForm(BuildContext context) async {
+  /// [child] 가 있으면 **그 아이를 고치는** 폼입니다(지금 값이 채워진 채로
+  /// 열리고 저장하면 PATCH). 없으면 빈 폼으로 새로 만듭니다.
+  Future<void> _openChildForm(
+    BuildContext context, {
+    MyPageChild? child,
+  }) async {
     final _ChildFormValue? value = await showModalBottomSheet<_ChildFormValue>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (BuildContext sheetContext) => const _ChildProfileForm(),
+      builder: (BuildContext sheetContext) => _ChildProfileForm(child: child),
     );
     if (value == null || !context.mounted) return;
 
     final MyPageViewModel vm = context.read<MyPageViewModel>();
-    final bool saved = await vm.addChild(name: value.name, age: value.age);
+    final bool saved = child == null
+        ? await vm.addChild(name: value.name, age: value.age)
+        : await vm.updateChild(
+            childId: child.childId,
+            name: value.name,
+            age: value.age,
+          );
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          saved ? '아이 프로필이 저장되었습니다.' : vm.childSaveError ?? '저장하지 못했습니다.',
+          saved
+              ? (child == null ? '아이 프로필을 추가했습니다.' : '아이 프로필을 수정했습니다.')
+              : vm.childSaveError ?? '저장하지 못했습니다.',
         ),
       ),
     );
@@ -305,8 +319,16 @@ class _ChildFormValue {
   final int age;
 }
 
+/// 아이 프로필 폼. **추가와 수정이 같은 폼을 씁니다.**
+///
+/// 받는 것이 이름과 나이로 똑같아서, 나누면 검증과 나이 선택이 두 벌이 되고
+/// 한쪽만 고치는 실수가 생깁니다. 다른 것은 무엇을 하는 자리인지 알려 주는
+/// 제목·안내·버튼 문구뿐이라 [child] 유무로 갈라 씁니다.
 class _ChildProfileForm extends StatefulWidget {
-  const _ChildProfileForm();
+  const _ChildProfileForm({this.child});
+
+  /// null 이면 새로 만드는 폼, 있으면 그 아이를 고치는 폼입니다.
+  final MyPageChild? child;
 
   @override
   State<_ChildProfileForm> createState() => _ChildProfileFormState();
@@ -314,8 +336,18 @@ class _ChildProfileForm extends StatefulWidget {
 
 class _ChildProfileFormState extends State<_ChildProfileForm> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  final TextEditingController _nameController = TextEditingController();
-  int _age = 7;
+  late final TextEditingController _nameController = TextEditingController(
+    text: widget.child?.name ?? '',
+  );
+
+  /// 서버가 출생연도에서 계산해 내려준 나이를 그대로 씁니다. 목록에 없는
+  /// 나이면(선택지는 4~13세) 값이 사라지지 않게 목록에 끼워 넣습니다.
+  late int _age = widget.child?.age ?? 7;
+
+  bool get _isEdit => widget.child != null;
+
+  List<int> get _ageOptions =>
+      <int>{for (int age = 4; age <= 13; age++) age, _age}.toList()..sort();
 
   @override
   void dispose() {
@@ -339,10 +371,13 @@ class _ChildProfileFormState extends State<_ChildProfileForm> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Text('아이 프로필 추가', style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                _isEdit ? '아이 프로필 수정' : '아이 프로필 추가',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                '아이의 이름과 나이를 입력해 주세요.',
+                _isEdit ? '바꿀 내용을 고쳐 주세요.' : '아이의 이름과 나이를 입력해 주세요.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: AppSpacing.lg),
@@ -366,7 +401,7 @@ class _ChildProfileFormState extends State<_ChildProfileForm> {
                 initialValue: _age,
                 decoration: const InputDecoration(labelText: '나이'),
                 items: <DropdownMenuItem<int>>[
-                  for (int age = 4; age <= 13; age++)
+                  for (final int age in _ageOptions)
                     DropdownMenuItem<int>(value: age, child: Text('$age세')),
                 ],
                 onChanged: (int? value) {
@@ -386,7 +421,7 @@ class _ChildProfileFormState extends State<_ChildProfileForm> {
                   Expanded(
                     child: FilledButton(
                       onPressed: _submit,
-                      child: const Text('저장'),
+                      child: Text(_isEdit ? '수정' : '저장'),
                     ),
                   ),
                 ],
