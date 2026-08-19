@@ -333,10 +333,10 @@ Future<void> configureDependencies() async {
   final ReportRemoteDataSource reportRemote = ReportRemoteDataSource(
     getIt<DioClient>(),
   );
-  // 6각 그래프 축 점수는 서버 DTO에 아직 없어서, 목업일 때만
-  // ReportRepositoryMock을 씁니다. 실서버 연동(`_useMockRepository = false`)에서는
-  // 지금까지와 동일하게 ReportRepositoryImpl이 그대로 쓰이고, 그 경로에서는
-  // axisScores가 빈 목록이라 리포트 화면이 그래프 섹션만 조용히 숨깁니다.
+  // 6각 그래프 축 점수는 요약 카드와 별도 API(`/report/axis-scores`)로 옵니다.
+  // 실서버 연동(`_useMockRepository = false`)에서는 ReportRepositoryImpl이
+  // 그 API를 함께 불러 채웁니다. 축 점수 호출만 실패하면 axisScores가 빈
+  // 목록으로 남고, 리포트 화면은 그래프 섹션만 조용히 숨깁니다.
   // → claude/보호자리포트_6축그래프_설계안_D6.md
   final ReportRepository reportRepository = _useMockRepository
       ? ReportRepositoryMock()

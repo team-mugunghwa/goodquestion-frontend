@@ -14,11 +14,15 @@ class _Remote extends ReportRemoteDataSource {
     this.reports = const <ReportListResponseDto>[],
     this.detail,
     this.error,
+    this.axisScores = const <AxisScoreResponseDto>[],
+    this.axisScoreError,
   }) : super(DioClient());
 
   final List<ReportListResponseDto> reports;
   final ReportDetailResponseDto? detail;
   final Object? error;
+  final List<AxisScoreResponseDto> axisScores;
+  final Object? axisScoreError;
 
   @override
   Future<List<ReportListResponseDto>> fetchReports(String childId) async =>
@@ -28,6 +32,12 @@ class _Remote extends ReportRemoteDataSource {
   Future<ReportDetailResponseDto> fetchReport(String sessionId) async {
     if (error != null) throw error!;
     return detail!;
+  }
+
+  @override
+  Future<List<AxisScoreResponseDto>> fetchAxisScores(String sessionId) async {
+    if (axisScoreError != null) throw axisScoreError!;
+    return axisScores;
   }
 }
 
@@ -75,6 +85,121 @@ void main() {
     expect(list.reports.first.sessionId, 'session-new');
     expect(list.reports.first.playCount, 2);
     expect(list.reports.last.playCount, 1);
+  });
+
+  test('축 점수 응답 6개를 6각 그래프용 axisScores로 옮긴다', () async {
+    final ReportRepositoryImpl repository = ReportRepositoryImpl(
+      _Remote(
+        detail: ReportDetailResponseDto(
+          sessionId: 'session-uuid',
+          storyTitle: '방귀 뀌는 며느리',
+          summary: '상대의 마음을 헤아리고 자기 생각을 잘 말했어요.',
+          vocabulary: const VocabularyResponseDto(
+            mainWords: <String>[],
+            askedWords: <String>[],
+            repeatedExpressions: <String>[],
+            feedback: '',
+          ),
+          competencies: const <CompetencyResponseDto>[],
+          representativeUtterance: const RepresentativeUtteranceResponseDto(
+            text: '',
+            reason: '',
+          ),
+          homeGuide: const HomeGuideResponseDto(
+            storyQuestions: <String>[],
+            dailyLifeQuestions: <String>[],
+          ),
+          createdAt: DateTime(2026, 8, 15),
+        ),
+        axisScores: const <AxisScoreResponseDto>[
+          AxisScoreResponseDto(
+            label: '이유대기',
+            description: '왜 그렇게 생각했는지 근거를 붙여 말해요',
+            active: true,
+            score: 85,
+            previousScore: null,
+            evidence: '가족이니까 이해해 줄 거예요.',
+          ),
+          AxisScoreResponseDto(
+            label: '결과예측',
+            description: '그 행동 다음에 벌어질 일을 미리 그려봐요',
+            active: false,
+          ),
+          AxisScoreResponseDto(
+            label: '판단력',
+            description: '',
+            active: true,
+            score: 60,
+          ),
+          AxisScoreResponseDto(
+            label: '해결력',
+            description: '',
+            active: true,
+            score: 40,
+          ),
+          AxisScoreResponseDto(
+            label: '관점이해',
+            description: '',
+            active: true,
+            score: 90,
+          ),
+          AxisScoreResponseDto(
+            label: '감정표현',
+            description: '',
+            active: true,
+            score: 70,
+          ),
+        ],
+      ),
+      _Children(),
+    );
+
+    final ReportDetail report = (await repository.getReportDetail(
+      'session-uuid',
+    ))!;
+
+    expect(report.axisScores, hasLength(6));
+    expect(report.axisScores.first.label, '이유대기');
+    expect(report.axisScores.first.score, 85);
+    expect(report.axisScores[1].active, isFalse);
+    expect(report.axisScores[1].score, isNull);
+  });
+
+  test('축 점수 API가 실패해도 나머지 리포트는 정상 반환하고 그래프만 빈다', () async {
+    final ReportRepositoryImpl repository = ReportRepositoryImpl(
+      _Remote(
+        detail: ReportDetailResponseDto(
+          sessionId: 'session-uuid',
+          storyTitle: '방귀 뀌는 며느리',
+          summary: '요약',
+          vocabulary: const VocabularyResponseDto(
+            mainWords: <String>[],
+            askedWords: <String>[],
+            repeatedExpressions: <String>[],
+            feedback: '',
+          ),
+          competencies: const <CompetencyResponseDto>[],
+          representativeUtterance: const RepresentativeUtteranceResponseDto(
+            text: '',
+            reason: '',
+          ),
+          homeGuide: const HomeGuideResponseDto(
+            storyQuestions: <String>[],
+            dailyLifeQuestions: <String>[],
+          ),
+          createdAt: DateTime(2026, 8, 15),
+        ),
+        axisScoreError: const ParseException('축 점수 응답 형식이 올바르지 않습니다.'),
+      ),
+      _Children(),
+    );
+
+    final ReportDetail report = (await repository.getReportDetail(
+      'session-uuid',
+    ))!;
+
+    expect(report.axisScores, isEmpty);
+    expect(report.summary, '요약');
   });
 
   test('상세 응답은 내부 태그를 숨긴 어휘·역량 카드가 된다', () async {

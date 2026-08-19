@@ -52,7 +52,10 @@ class ReportRepositoryImpl implements ReportRepository {
       final ReportDetailResponseDto response = await _remote.fetchReport(
         sessionId,
       );
-      return _toDetail(response, child.name);
+      final List<AxisScoreResponseDto> axisScores = await _fetchAxisScores(
+        sessionId,
+      );
+      return _toDetail(response, child.name, axisScores);
     } on ServerException catch (error) {
       if (error.statusCode == 409 || error.code == 'REPORT_NOT_READY') {
         return null;
@@ -64,6 +67,18 @@ class ReportRepositoryImpl implements ReportRepository {
       throw Failure.fromException(error);
     } on Object catch (error) {
       throw Failure.fromException(ParseException('$error'));
+    }
+  }
+
+  /// 6각 그래프는 요약 카드와 별도 API다 — 실패해도 리포트 상세 전체를
+  /// 막지 않는다. 그래프 섹션은 원래 [ReportDetail.axisScores]가 비어
+  /// 있으면 스스로 숨도록 설계돼 있으므로, 여기서는 빈 목록으로 물러나는
+  /// 게 안전한 기본값이다.
+  Future<List<AxisScoreResponseDto>> _fetchAxisScores(String sessionId) async {
+    try {
+      return await _remote.fetchAxisScores(sessionId);
+    } on Object {
+      return const <AxisScoreResponseDto>[];
     }
   }
 
@@ -93,7 +108,11 @@ class ReportRepositoryImpl implements ReportRepository {
     return rounds;
   }
 
-  ReportDetail _toDetail(ReportDetailResponseDto response, String childName) {
+  ReportDetail _toDetail(
+    ReportDetailResponseDto response,
+    String childName,
+    List<AxisScoreResponseDto> axisScores,
+  ) {
     return ReportDetail(
       sessionId: response.sessionId,
       childName: childName,
@@ -114,8 +133,20 @@ class ReportRepositoryImpl implements ReportRepository {
             : response.representativeUtterance.reason,
       ),
       questionGroups: _questionGroups(response.homeGuide),
+      // AxisRadarSection이 정확히 6개가 아니면 스스로 숨으므로(방어 코드),
+      // 여기서 개수를 다시 검증하지 않고 그대로 옮긴다.
+      axisScores: axisScores.map(_axisScore).toList(growable: false),
     );
   }
+
+  AxisScore _axisScore(AxisScoreResponseDto dto) => AxisScore(
+    label: dto.label,
+    description: dto.description,
+    active: dto.active,
+    score: dto.score,
+    previousScore: dto.previousScore,
+    evidence: dto.evidence,
+  );
 
   /// 어휘는 역량 카드와 달리 강점/보완이 나뉘어 오지 않고 [VocabularyResponseDto.feedback]
   /// 한 덩어리로 온다 — 5단 카드 모양(feature/strength/improvement)에 맞춰 나눠 담는다.
