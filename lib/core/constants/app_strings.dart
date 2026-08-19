@@ -640,14 +640,21 @@ abstract final class AuthRecoveryStrings {
   static const String guardianName = '보호자 이름';
   static const String childName = '아이 이름';
   static const String childNameHint = '예: 지우';
-  static const String childBirthYear = '아이 출생연도';
-  static const String childBirthYearHint = '예: 2018';
+
+  /// **지금 나이를 받습니다.** 가입할 때 고른 나이를 그대로 넣으면 해가
+  /// 바뀐 만큼 어긋나 못 찾습니다 - 서버는 나이를 저장하지 않고 출생연도만
+  /// 들고 있어 나이를 매번 다시 계산하기 때문입니다. 라벨에 "지금"을 넣어
+  /// 두었다가 뺐습니다(2026-08): 대부분은 아이의 현재 나이를 적으므로,
+  /// 드문 경우를 위해 라벨을 길게 두는 것보다 등록 화면과 같은 말로
+  /// 부르는 편이 낫습니다.
+  static const String childAge = '아이 나이';
+  static const String childAgeHint = '예: 8';
   static const String findIdAction = '가입 이메일 확인하기';
 
   /// 아이 정보를 왜 다 받는지. **비워 두면 못 찾습니다** - 서버가 아이 정보
   /// 없이 찾을 때는 아이가 등록된 계정을 결과에서 빼기 때문입니다(아이 정보
   /// 없이 남의 계정을 캐낼 수 없게 하는 조건).
-  static const String childInfoNotice = '아이 이름과 출생연도를 모두 입력해야 계정을 찾을 수 있어요.';
+  static const String childInfoNotice = '아이 이름과 나이를 모두 입력해야 계정을 찾을 수 있어요.';
 
   static const String resetTitle = '비밀번호를 다시 설정해요';
   static const String resetDescription = '가입한 이메일로 안전한 비밀번호 재설정 링크를 보내드립니다.';
@@ -656,7 +663,7 @@ abstract final class AuthRecoveryStrings {
   static const String resetAction = '재설정 링크 받기';
 
   static const String requiredFields = '입력하지 않은 항목이 있어요.';
-  static const String invalidBirthYear = '출생연도를 네 자리로 입력해 주세요. (예: 2018)';
+  static const String invalidChildAge = '아이 나이를 숫자로 입력해 주세요. (예: 8)';
   static const String invalidEmail = '올바른 이메일 주소를 입력해 주세요.';
   static const String requestFailed = '요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.';
 
