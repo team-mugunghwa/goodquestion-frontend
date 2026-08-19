@@ -9,6 +9,7 @@ import 'package:goodquestion/core/router/app_routes.dart';
 import 'package:goodquestion/features/play/data/stt_choice_catalog.dart';
 import 'package:goodquestion/features/play/domain/entities/play_session.dart';
 import 'package:goodquestion/features/play/domain/repositories/play_repository.dart';
+import 'package:goodquestion/features/play/presentation/character/dialogue_character_stage.dart';
 import 'package:goodquestion/features/play/presentation/views/play_view.dart';
 import 'package:goodquestion/features/play/presentation/voice/mission_voice_recorder.dart';
 import 'package:goodquestion/features/play/presentation/voice/story_audio_player.dart';
@@ -1452,6 +1453,41 @@ void main() {
     expect(find.byTooltip('눌러서 말하기'), findsOneWidget);
   });
 
+  testWidgets('아이 답변에 따라 캐릭터 표정이 바뀐다', (WidgetTester tester) async {
+    // 상태머신만으로는 화면까지 이어졌는지 알 수 없습니다 - 매니페스트가
+    // 장면을 못 찾거나(UUID·순번) 무대가 안 붙으면 아무 일도 일어나지
+    // 않은 채 첫 얼굴만 남습니다.
+    final _ExpressionSpyRepository repository = _ExpressionSpyRepository();
+    await pumpPlay(tester, repository: repository, settle: false);
+    for (int i = 0; i < 10; i++) {
+      await tester.pump();
+    }
+
+    String? face() => tester
+        .widget<DialogueCharacterStage>(find.byType(DialogueCharacterStage))
+        .state;
+    expect(face(), 'opening');
+
+    // 마이크가 열릴 때까지.
+    for (int i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    await tester.tap(find.byTooltip('말하기 완료'));
+    for (int i = 0; i < 10; i++) {
+      await tester.pump();
+    }
+    await tester.tap(find.text('맞아요'));
+    for (int i = 0; i < 12; i++) {
+      await tester.pump();
+    }
+
+    expect(
+      face(),
+      'considering',
+      reason: 'PERSPECTIVE 를 새로 채웠으니 생각에 잠긴 얼굴로 바뀌어야 합니다',
+    );
+  });
+
   testWidgets('1280x720 범용 대화 템플릿 골든', (WidgetTester tester) async {
     await pumpPlay(tester);
     await tester.pump();
@@ -1707,6 +1743,114 @@ class _SceneFlowSpyRepository implements PlayRepository {
       ),
     );
   }
+
+  @override
+  Future<PlayPostActivityStart> startPostActivity(String sessionId) async =>
+      const PlayPostActivityStart(
+        cards: <PlayPostActivityCard>[],
+        attemptCount: 0,
+      );
+
+  @override
+  Future<PlayCardOrderResult> submitCardOrder(
+    String sessionId, {
+    required List<String> submittedOrder,
+  }) async => const PlayCardOrderResult(correct: true);
+
+  @override
+  Future<PlayRetellingResult> submitRetelling(
+    String sessionId, {
+    required String text,
+    String? sttRawText,
+  }) async => const PlayRetellingResult(sessionStatus: 'COMPLETED');
+
+  @override
+  Future<void> stop(String sessionId) async {}
+}
+
+/// 표정이 화면까지 이어지는지 보는 가짜입니다. 장면·요소·응답 모양을
+/// **운영 서버가 실제로 준 그대로** 씁니다(대화1, sceneOrder 2, newElements 포함).
+class _ExpressionSpyRepository implements PlayRepository {
+  @override
+  Future<PlaySessionSnapshot> resume(String sessionId) async =>
+      const PlaySessionSnapshot(
+        phase: PlayPhase.dialogue,
+        storyId: '11111111-1111-1111-1111-111111111111',
+        currentScene: PlayScene(
+          sceneId: '33333333-3333-3333-3333-000000000003',
+          // 서버의 sceneOrder 는 매니페스트의 콘텐츠 번호(3)와 다릅니다.
+          // 장면 UUID 로 찾히는지까지 함께 봅니다.
+          sceneOrder: 2,
+          sceneType: PlaySceneType.dialogue,
+          narrationSentences: <String>[],
+          characterName: '방귀쟁이 며느리',
+          maxTurns: 4,
+        ),
+        openingText: '내 방귀가 너무 크다는 걸 알면 가족들이 나를 이상하게 생각하지 않을까?',
+      );
+
+  @override
+  Future<PlaySessionSnapshot> completeStoryScene(String sessionId) =>
+      resume(sessionId);
+
+  @override
+  Future<PlayOpeningMessage> openCurrentScene(String sessionId) async =>
+      const PlayOpeningMessage(
+        text: '...',
+        audioUrl: null,
+        alreadyOpened: true,
+      );
+
+  @override
+  Future<List<PlayMessage>> sceneMessages(
+    String sessionId, {
+    required String sceneId,
+  }) async => const <PlayMessage>[];
+
+  @override
+  Future<PlayMission?> currentMission(String sessionId) async => null;
+
+  @override
+  Future<PlayTranscription> transcribeAudio(Uint8List wavBytes) async =>
+      const PlayTranscription(
+        text: '며느리가 많이 속상했을 것 같아요.',
+        confidence: .95,
+        lowConfidence: false,
+      );
+
+  @override
+  Future<PlaySpeechAudio> synthesizeSpeech({
+    required String text,
+    String? characterName,
+  }) async => const PlaySpeechAudio(audioUrl: 'tts://x');
+
+  @override
+  Future<PlayTurnResult> submitUtterance(
+    String sessionId, {
+    required String text,
+    String? missionId,
+    String? sttRawText,
+    double? sttConfidence,
+    int sttRetryCount = 0,
+    String? idempotencyKey,
+  }) async => const PlayTurnResult(
+    characterText: '그렇게 생각해 줘서 고마워.',
+    characterAudioUrl: null,
+    mission: null,
+    sceneTransition: null,
+    analysis: PlayAnalysis(
+      childIntent: 'PERSPECTIVE',
+      detectedElements: <String>['PERSPECTIVE'],
+      utteranceValidity: 'VALID',
+    ),
+    progress: PlayProgress(
+      mode: PlayResponseMode.normal,
+      accumulatedElements: <String>['PERSPECTIVE'],
+      newElements: <String>['PERSPECTIVE'],
+      turnCount: 1,
+      maxTurns: 4,
+    ),
+  );
 
   @override
   Future<PlayPostActivityStart> startPostActivity(String sessionId) async =>

@@ -101,6 +101,7 @@ class PlaySessionDto {
         _ => null,
       },
       accumulatedElements: _elementNames(value['accumulatedElements']),
+      newElements: _elementNames(value['newElements']),
       missingElements: _elementNames(value['missingElements']),
       turnCount: (value['turnCount'] as num?)?.toInt() ?? 0,
       maxTurns: (value['maxTurns'] as num?)?.toInt() ?? 0,

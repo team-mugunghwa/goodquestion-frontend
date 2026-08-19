@@ -330,15 +330,21 @@ class _FreeTalkPageState extends State<FreeTalkPage> {
 
   /// 서버가 준 감정을 표정으로 옮깁니다.
   ///
-  /// **매니페스트에 없는 감정은 무시합니다.** 모르는 값에 아무 표정이나
-  /// 고르면 아이가 한 말과 무관한 얼굴이 나옵니다 — 표정을 안 바꾸는 쪽이
-  /// 틀린 표정을 짓는 것보다 낫습니다.
+  /// 서버는 `CharacterEmotion` 6종(NEUTRAL/HAPPY/SAD/WORRIED/SURPRISED/RELIEVED)을
+  /// 주고, 표정 에셋의 상태 키는 인물마다 다릅니다(`hopeful`·`softened`…).
+  /// **그 사이를 매니페스트의 `emotions` 표가 잇습니다** — 예전에는 감정 값을
+  /// 상태 키로 곧장 조회해서 한 번도 맞지 않았고, 그래서 자유 대화에서는
+  /// 표정이 끝까지 첫 얼굴 그대로였습니다.
+  ///
+  /// **매핑에 없는 감정은 무시합니다.** 모르는 값에 아무 표정이나 고르면
+  /// 아이가 한 말과 무관한 얼굴이 나옵니다 — 표정을 안 바꾸는 쪽이 틀린
+  /// 표정을 짓는 것보다 낫습니다.
   void _applyEmotion(String? emotion) {
     final DialogueCharacterStateMachine? character = _character;
-    if (character == null || emotion == null) return;
-    if (!character.scene.states.containsKey(emotion)) return;
-    if (character.current == emotion) return;
-    setState(() => character.moveTo(emotion));
+    if (character == null) return;
+    final String? state = character.scene.stateForEmotion(emotion);
+    if (state == null || character.current == state) return;
+    setState(() => character.moveTo(state));
   }
 
   List<String> _splitSentences(String text) {

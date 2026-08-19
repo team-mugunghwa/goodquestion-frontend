@@ -11,6 +11,7 @@ import 'package:goodquestion/core/widgets/kid_button.dart';
 import 'package:goodquestion/features/free_talk/domain/entities/free_talk.dart';
 import 'package:goodquestion/features/free_talk/presentation/views/free_talk_view.dart';
 import 'package:goodquestion/features/free_talk/presentation/widgets/free_talk_farewell.dart';
+import 'package:goodquestion/features/play/presentation/character/dialogue_character_stage.dart';
 import 'package:goodquestion/features/play/presentation/voice/story_audio_player.dart';
 
 import 'fakes.dart';
@@ -148,6 +149,68 @@ void main() {
     expect(find.byTooltip('잠시 멈춤'), findsNothing);
     // 진행바는 이 Semantics 라벨로 자기를 알립니다. 그 라벨이 없어야 합니다.
     expect(find.bySemanticsLabel('이야기 진행'), findsNothing);
+  });
+
+  testWidgets('아이 말에 따라 캐릭터 표정이 바뀐다', (WidgetTester tester) async {
+    // 서버는 감정 6종(HAPPY…)을 주고 표정 키는 인물마다 다릅니다(hopeful…).
+    // 예전에는 감정 값을 상태 키로 곧장 조회해서 한 번도 안 맞았고, 자유
+    // 대화 내내 첫 얼굴 그대로였습니다.
+    await pumpTalk(
+      tester,
+      repository: FakeFreeTalkRepository(
+        turns: const <FreeTalkTurn>[
+          FreeTalkTurn(
+            characterMessage: FreeTalkSpeech(
+              text: '정말 신난다!',
+              audioUrl: '/tts/turn.mp3',
+              emotion: 'HAPPY',
+            ),
+            turnCount: 2,
+            ended: false,
+          ),
+        ],
+      ),
+    );
+    await settleTurn(tester);
+
+    String? face() => tester
+        .widget<DialogueCharacterStage>(find.byType(DialogueCharacterStage))
+        .state;
+    final String? before = face();
+    expect(before, 'opening', reason: '첫 얼굴은 오프닝 표정입니다');
+
+    await speakAndConfirm(tester);
+
+    expect(face(), 'hopeful', reason: 'HAPPY 는 이 인물의 hopeful 표정으로 이어져야 합니다');
+  });
+
+  testWidgets('모르는 감정이 오면 표정을 그대로 둔다', (WidgetTester tester) async {
+    // 아이 말과 무관한 얼굴을 짓느니 안 바꾸는 편이 낫습니다.
+    await pumpTalk(
+      tester,
+      repository: FakeFreeTalkRepository(
+        turns: const <FreeTalkTurn>[
+          FreeTalkTurn(
+            characterMessage: FreeTalkSpeech(
+              text: '그렇구나.',
+              audioUrl: '/tts/turn.mp3',
+              emotion: 'ANGRY',
+            ),
+            turnCount: 2,
+            ended: false,
+          ),
+        ],
+      ),
+    );
+    await settleTurn(tester);
+    await speakAndConfirm(tester);
+
+    expect(
+      tester
+          .widget<DialogueCharacterStage>(find.byType(DialogueCharacterStage))
+          .state,
+      'opening',
+    );
   });
 
   testWidgets('남은 턴 수를 화면 어디에도 적지 않는다', (WidgetTester tester) async {
