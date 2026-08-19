@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_strings.dart';
+import '../../../../core/text/korean_wrap.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_shadows.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../core/widgets/character_avatar.dart';
 import '../../../../core/widgets/screen_metrics.dart';
 import '../../domain/entities/story_detail.dart';
 
@@ -87,7 +88,10 @@ class RoleCard extends StatelessWidget {
                 // 모자란 게 아니라 의도한 것으로 읽힙니다.
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: <Widget>[
-                  _Avatar(image: _characterImage, size: AppSizes.illustration),
+                  CharacterAvatar(
+                    assetImage: _characterImage,
+                    size: AppSizes.illustration,
+                  ),
                   const SizedBox(width: AppSpacing.lg),
                   Flexible(
                     child: _RoleLabel(
@@ -101,100 +105,14 @@ class RoleCard extends StatelessWidget {
             : Column(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  _Avatar(image: _characterImage, size: AppSizes.mic),
+                  CharacterAvatar(
+                    assetImage: _characterImage,
+                    size: AppSizes.mic,
+                  ),
                   const SizedBox(height: AppSpacing.md),
                   _RoleLabel(role: role, metrics: metrics, centered: true),
                 ],
               ),
-      ),
-    );
-  }
-}
-
-/// 역할 캐릭터. 파스텔 면 위에 **흰 원반**으로 얹습니다.
-///
-/// 그림만 덩그러니 두면 배경이 옅어서 카드에 얹힌 게 아니라 얼룩처럼
-/// 보입니다. 원반 + `soft` 그림자면 메달처럼 읽혀서, 캐릭터가 아직 없어
-/// 로고 마크가 뜨는 이야기에서도 "자리를 비워 둔 것"이 아니라 "그렇게
-/// 생긴 것"이 됩니다.
-class _Avatar extends StatelessWidget {
-  const _Avatar({this.image, required this.size});
-
-  /// 역할 캐릭터 에셋. 없으면 로고 마크로 갑니다. → [RoleCard]
-  final String? image;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    final String? path = image;
-    return Container(
-      width: size,
-      height: size,
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        shape: BoxShape.circle,
-        boxShadow: AppShadows.soft,
-      ),
-      // 원 밖으로 나간 어깨는 잘립니다. 잘린 자리가 곧 원반의 테두리라
-      // 인물 사진을 끼운 메달처럼 보입니다.
-      clipBehavior: Clip.antiAlias,
-      child: path == null ? const _LogoMark() : _CharacterBust(image: path),
-    );
-  }
-}
-
-/// 캐릭터가 없는 이야기의 대체 그림. 로고는 원반 안쪽에 여백을 두고 앉습니다.
-class _LogoMark extends StatelessWidget {
-  const _LogoMark();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.all(AppSpacing.md),
-      child: Image(
-        image: AssetImage(AppAssets.logoMark),
-        fit: BoxFit.contain,
-        excludeFromSemantics: true,
-      ),
-    );
-  }
-}
-
-/// 전신 캐릭터에서 **머리~어깨만** 잘라 원반에 담습니다.
-///
-/// 대화 화면용 에셋은 세로 3:4 전신이라 그대로 넣으면 치마가 원반의 절반을
-/// 차지하고 얼굴이 손톱만 해집니다. 자른 파일을 따로 만들지 않고 화면에서
-/// 잘라 씁니다 — 표정이 바뀌면 파일만 갈아 끼우면 됩니다.
-class _CharacterBust extends StatelessWidget {
-  const _CharacterBust({required this.image});
-
-  final String image;
-
-  /// 원본에서 실제로 쓰는 범위. 위 끝(머리 위 여백)에서 시작해 세로
-  /// [_bustHeight] 까지가 머리~어깨이고, 가로는 얼굴을 가운데 두고
-  /// [_bustWidth] 만 씁니다. 두 값의 비가 거의 1:1 이라 원반에 넣어도
-  /// 얼굴이 옆으로 눌리지 않습니다.
-  static const double _bustWidth = 0.5;
-  static const double _bustHeight = 0.36;
-
-  @override
-  Widget build(BuildContext context) {
-    return FittedBox(
-      fit: BoxFit.cover,
-      child: Align(
-        alignment: Alignment.topCenter,
-        widthFactor: _bustWidth,
-        heightFactor: _bustHeight,
-        child: Image(
-          image: AssetImage(image),
-          excludeFromSemantics: true,
-          // 에셋이 빠지면 **빈 흰 원반**이 남습니다. 로고 마크를 뒤에 깔면
-          // 캐릭터의 투명한 배경 사이로 로고가 비쳐서 평소에도 보입니다.
-          // 경로는 컴파일 타임 상수라 파일이 빠지면 골든 테스트에서 걸립니다.
-          errorBuilder:
-              (BuildContext context, Object error, StackTrace? stack) =>
-                  const SizedBox.shrink(),
-        ),
       ),
     );
   }
@@ -228,7 +146,10 @@ class _RoleLabel extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.xs),
         Text(
-          StoryDetailStrings.roleName(role.name),
+          // 역할 이름은 이 화면에서 가장 큰 글자라 **가장 잘 쪼개집니다.**
+          // ("고민을 들 / 어주는 아이"야!) 어절 단위로 묶어 둡니다.
+          StoryDetailStrings.roleName(role.name).keepWords,
+          semanticsLabel: StoryDetailStrings.roleName(role.name),
           textAlign: centered ? TextAlign.center : TextAlign.start,
           // 이 화면에서 가장 진한 글자입니다. 파스텔은 면으로만 쓰고 글자에는
           // `Deep` 을 쓰라는 규칙 그대로. (`docs/DESIGN_SYSTEM.md` 3장)

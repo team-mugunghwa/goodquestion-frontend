@@ -45,6 +45,7 @@ import '../../features/question/domain/usecases/get_questions_use_case.dart';
 import '../../features/story/data/datasources/story_remote_data_source.dart';
 import '../../features/story/data/repositories/story_repository_impl.dart';
 import '../../features/story/domain/repositories/story_repository.dart';
+import '../../features/story/domain/usecases/get_completed_stories_use_case.dart';
 import '../../features/story/domain/usecases/get_story_catalog_use_case.dart';
 import '../../features/story/domain/usecases/get_story_detail_use_case.dart';
 import '../../features/story/domain/usecases/start_story_session_use_case.dart';
@@ -179,6 +180,15 @@ Future<void> configureDependencies() async {
     )
     ..registerLazySingleton<GetStoryDetailUseCase>(
       () => GetStoryDetailUseCase(getIt<StoryRepository>()),
+    )
+    ..registerLazySingleton<GetCompletedStoriesUseCase>(
+      // 리포트는 **폴백 전용**입니다 — 완주 목록 API 가 아직 실서버에 없는
+      // 동안만 제목으로 되짚습니다. 배포되면 그 인자를 지웁니다.
+      // → GetCompletedStoriesUseCase 주석
+      () => GetCompletedStoriesUseCase(
+        getIt<StoryRepository>(),
+        getIt<ReportRepository>(),
+      ),
     )
     ..registerLazySingleton<StartStorySessionUseCase>(
       // 진행 중 세션은 홈 응답에만 있어서 HomeRepository 를 함께 봅니다.

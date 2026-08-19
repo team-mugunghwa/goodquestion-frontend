@@ -149,6 +149,20 @@ abstract final class StoryDetailStrings {
   /// 없는 storyId 로 들어온 경우.
   static const String notFound = '앗, 이 이야기를 찾을 수 없어.';
   static const String goToList = '이야기 고르러 가기';
+
+  // ── 완주한 이야기 ──
+
+  /// 표지 위·목록 카드 위에 얹는 뱃지.
+  ///
+  /// **"완주"라는 말을 쓰지 않습니다** — 초1~3이 읽는 말이 아닙니다. 아이가
+  /// 한 일을 아이 말로, 그리고 **끝냈다는 사실 하나만** 적습니다.
+  /// ("다 들었어"는 듣기만 한 것처럼 읽혀서 뺐습니다 — 이야기는 듣고 말하고
+  /// 순서까지 맞혀야 끝납니다.)
+  static const String completedBadge = '끝냈어';
+
+  /// 완주한 이야기의 "시작하기". 처음 듣는 것과 다른 일이라 이름도 다릅니다 —
+  /// 같은 글자면 아이가 어디까지 했는지 화면에서 읽을 수 없습니다.
+  static const String restart = '다시 듣기';
 }
 
 /// 이야기 말하기(`/play/:sessionId`) 전용 문구.
@@ -715,6 +729,16 @@ abstract final class FreeTalkStrings {
     if (code < 0xAC00 || code > 0xD7A3) return '와';
     return (code - 0xAC00) % 28 == 0 ? '와' : '과';
   }
+
+  // ── 이야기 상세의 친구들 카드 ──
+
+  /// 카드 머리. 아래 얼굴들이 주인공이라 이 줄은 작게 둡니다.
+  /// (역할 카드의 `roleIntro` 와 같은 위계)
+  static const String friendsIntro = '이야기 친구들';
+
+  /// 머리 아래 한 줄. **무엇을 할 수 있는지**를 말합니다 — 얼굴만 세 개
+  /// 늘어놓으면 아이는 그게 눌러도 되는 것인 줄 모릅니다.
+  static const String friendsHint = '얼굴을 누르면 다시 이야기할 수 있어';
 
   // ── 인물 고르기 ──
   static const String pickTitle = '누구랑 더 이야기해볼까?';

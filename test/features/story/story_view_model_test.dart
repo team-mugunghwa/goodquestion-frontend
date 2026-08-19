@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:goodquestion/core/error/failure.dart';
 import 'package:goodquestion/core/state/view_state.dart';
+import 'package:goodquestion/features/free_talk/domain/entities/free_talk.dart';
+import 'package:goodquestion/features/free_talk/domain/repositories/free_talk_repository.dart';
 import 'package:goodquestion/features/home/domain/entities/home_summary.dart';
 import 'package:goodquestion/features/home/domain/entities/in_progress_session.dart';
 import 'package:goodquestion/features/home/domain/entities/planet_summary.dart';
@@ -41,6 +43,10 @@ class _StubRepository implements StoryRepository {
   int startCalls = 0;
 
   @override
+  /// 이 테스트는 완주 도장을 보지 않습니다. → story_views_test.dart
+  Future<Set<String>> getCompletedStoryIds() async => const <String>{};
+
+  @override
   Future<String> startSession(String storyId) async {
     startCalls++;
     return '9000-$storyId';
@@ -48,6 +54,45 @@ class _StubRepository implements StoryRepository {
 }
 
 /// 홈이 돌려주는 "진행 중 세션" 만 흉내 냅니다.
+/// 자유 대화 저장소 스텁 — 상세 화면은 **인물 목록만** 씁니다.
+/// 나머지 메서드는 불리면 테스트가 틀린 것이므로 곧장 터뜨립니다.
+class _StubFreeTalkRepository implements FreeTalkRepository {
+  _StubFreeTalkRepository({
+    this.result = const <FreeTalkCharacter>[],
+    this.error,
+  });
+
+  final List<FreeTalkCharacter> result;
+  final Object? error;
+
+  /// 인물 목록을 몇 번 물었는지. "저장소를 안 주면 아예 안 묻는지"를 보려면
+  /// 호출 여부 자체를 세야 합니다.
+  int characterCalls = 0;
+
+  @override
+  Future<List<FreeTalkCharacter>> characters(String storyId) async {
+    characterCalls++;
+    if (error != null) throw error!;
+    return result;
+  }
+
+  @override
+  Future<FreeTalkSession> start({
+    required String storyId,
+    required String characterId,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<FreeTalkTurn> sendMessage(
+    String freeTalkId, {
+    required String text,
+    String? idempotencyKey,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<FreeTalkSpeech> end(String freeTalkId) => throw UnimplementedError();
+}
+
 class _StubHomeRepository implements HomeRepository {
   _StubHomeRepository({this.inProgressSession, this.error});
 
@@ -168,12 +213,16 @@ void main() {
   });
 
   group('StoryDetailViewModel', () {
-    StoryDetailViewModel viewModelOf(StoryRepository repository, String id) =>
-        StoryDetailViewModel(
-          GetStoryDetailUseCase(repository),
-          StartStorySessionUseCase(repository, _StubHomeRepository()),
-          storyId: id,
-        );
+    StoryDetailViewModel viewModelOf(
+      StoryRepository repository,
+      String id, {
+      FreeTalkRepository? freeTalk,
+    }) => StoryDetailViewModel(
+      GetStoryDetailUseCase(repository),
+      StartStorySessionUseCase(repository, _StubHomeRepository()),
+      storyId: id,
+      freeTalk: freeTalk,
+    );
 
     test('있는 이야기는 success 이고 notFound 가 아니다', () async {
       final vm = viewModelOf(_StubRepository(detail: _detail), '11');
@@ -183,6 +232,84 @@ void main() {
       expect(vm.state, ViewState.success);
       expect(vm.isNotFound, isFalse);
       expect(vm.story?.role.name, '며느리의 친구');
+    });
+
+    // ── 후속 자유 대화 진입점 ──
+    //
+    // 완주 여부를 알려 주는 서버 필드가 없어서, 인물 목록이 돌아오는지로
+    // 판정합니다. → `docs/BACKEND_REQUESTS_FREE_TALK_ENTRY.md`
+
+    test('인물이 돌아오면 완주로 보고 친구들을 그대로 넘긴다', () async {
+      final freeTalk = _StubFreeTalkRepository(
+        result: <FreeTalkCharacter>[
+          FreeTalkCharacter(
+            characterId: 'c1',
+            name: '며느리',
+            characterKey: 'daughter_in_law',
+            lastTalkedAt: DateTime(2026, 8, 17),
+          ),
+          FreeTalkCharacter(
+            characterId: 'c2',
+            name: '시아버지',
+            characterKey: 'father_in_law',
+            lastTalkedAt: DateTime(2026, 8, 18),
+          ),
+        ],
+      );
+      final vm = viewModelOf(
+        _StubRepository(detail: _detail),
+        '11',
+        freeTalk: freeTalk,
+      );
+
+      await vm.load();
+
+      expect(vm.canFreeTalk, isTrue);
+      expect(vm.isCompleted, isTrue);
+      // 순서를 뒤섞지 않습니다 — 서버 순서가 이야기에 나온 차례입니다.
+      expect(
+        vm.freeTalkCharacters.map((FreeTalkCharacter c) => c.name),
+        <String>['며느리', '시아버지'],
+      );
+    });
+
+    test('완주 전(404)이면 도장도 친구도 없고 화면은 멀쩡하다', () async {
+      final vm = viewModelOf(
+        _StubRepository(detail: _detail),
+        '11',
+        freeTalk: _StubFreeTalkRepository(
+          error: const ServerFailure(message: '완주 전', code: 'NOT_FOUND'),
+        ),
+      );
+
+      await vm.load();
+
+      // 여기서 error 로 떨어지면 자유 대화와 아무 상관 없는 "시작하기"까지
+      // 함께 못 쓰게 됩니다. 이야기를 여는 일과 분리돼 있어야 합니다.
+      expect(vm.state, ViewState.success);
+      expect(vm.story, isNotNull);
+      expect(vm.canFreeTalk, isFalse);
+      expect(vm.isCompleted, isFalse);
+      expect(vm.freeTalkCharacters, isEmpty);
+    });
+
+    test('저장소를 안 주면 아예 묻지 않는다', () async {
+      final vm = viewModelOf(_StubRepository(detail: _detail), '11');
+
+      await vm.load();
+
+      expect(vm.canFreeTalk, isFalse);
+    });
+
+    test('없는 이야기는 인물도 묻지 않는다', () async {
+      final freeTalk = _StubFreeTalkRepository();
+      final vm = viewModelOf(_StubRepository(), '999', freeTalk: freeTalk);
+
+      await vm.load();
+
+      // 이야기 자체가 없는데 그 이야기의 인물을 묻는 건 낭비입니다.
+      expect(freeTalk.characterCalls, 0);
+      expect(vm.canFreeTalk, isFalse);
     });
 
     test('없는 이야기는 error 가 아니라 notFound 다', () async {

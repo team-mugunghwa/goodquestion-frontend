@@ -3,20 +3,28 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:goodquestion/core/constants/app_assets.dart';
 import 'package:goodquestion/core/constants/app_strings.dart';
 import 'package:goodquestion/core/error/failure.dart';
+import 'package:goodquestion/core/text/korean_wrap.dart';
 import 'package:goodquestion/core/theme/app_theme.dart';
 import 'package:goodquestion/core/widgets/app_bottom_nav.dart';
+import 'package:goodquestion/core/widgets/completed_badge.dart';
 import 'package:goodquestion/core/widgets/speaker_button.dart';
 import 'package:goodquestion/core/widgets/story_card.dart';
 import 'package:goodquestion/core/widgets/story_thumbnail.dart';
+import 'package:goodquestion/features/free_talk/domain/entities/free_talk.dart';
+import 'package:goodquestion/features/free_talk/domain/repositories/free_talk_repository.dart';
 import 'package:goodquestion/features/home/domain/entities/home_summary.dart';
 import 'package:goodquestion/features/home/domain/entities/planet_summary.dart';
 import 'package:goodquestion/features/home/domain/entities/recommended_story.dart';
 import 'package:goodquestion/features/home/domain/repositories/home_repository.dart';
+import 'package:goodquestion/features/mypage/domain/entities/report_detail.dart';
+import 'package:goodquestion/features/mypage/domain/entities/report_summary.dart';
+import 'package:goodquestion/features/mypage/domain/repositories/my_page_repository.dart';
 import 'package:goodquestion/features/story/domain/entities/story_catalog.dart';
 import 'package:goodquestion/features/story/domain/entities/story_detail.dart';
 import 'package:goodquestion/features/story/domain/entities/story_summary.dart';
 import 'package:goodquestion/features/story/domain/entities/story_topic.dart';
 import 'package:goodquestion/features/story/domain/repositories/story_repository.dart';
+import 'package:goodquestion/features/story/domain/usecases/get_completed_stories_use_case.dart';
 import 'package:goodquestion/features/story/domain/usecases/get_story_catalog_use_case.dart';
 import 'package:goodquestion/features/story/domain/usecases/get_story_detail_use_case.dart';
 import 'package:goodquestion/features/story/domain/usecases/start_story_session_use_case.dart';
@@ -26,9 +34,92 @@ import 'package:goodquestion/features/story/presentation/views/story_detail_view
 import 'package:goodquestion/features/story/presentation/views/story_list_view.dart';
 import 'package:goodquestion/features/story/presentation/widgets/role_card.dart';
 import 'package:provider/provider.dart';
+import '../../support/kid_text.dart';
 
 /// 진행 중 세션이 없는 홈. 상세 화면 테스트는 "시작하기 → 새 세션" 만
 /// 보면 되므로 홈은 빈 값으로 둡니다.
+/// 방귀 뀌는 며느리의 인물 셋. 순서는 이야기에 나온 차례입니다.
+const List<FreeTalkCharacter> _threeFriends = <FreeTalkCharacter>[
+  FreeTalkCharacter(
+    characterId: 'c1',
+    name: '며느리',
+    characterKey: 'daughter_in_law',
+  ),
+  FreeTalkCharacter(
+    characterId: 'c2',
+    name: '시아버지',
+    characterKey: 'father_in_law',
+  ),
+  FreeTalkCharacter(
+    characterId: 'c3',
+    name: '마을 이장',
+    characterKey: 'village_chief',
+  ),
+];
+
+/// 완주 기록. 서버가 완주 목록에 storyId 를 안 줘서 **제목만** 돌려줍니다.
+class _StubReports implements ReportRepository {
+  const _StubReports(this.titles, {this.error});
+
+  final List<String> titles;
+  final Object? error;
+
+  @override
+  Future<ReportList> getReportList() async {
+    if (error != null) throw error!;
+    return ReportList(
+      childName: '지우',
+      totalCount: titles.length,
+      reports: <ReportSummary>[
+        for (final String title in titles)
+          ReportSummary(
+            sessionId: 's-$title',
+            storyTitle: title,
+            completedAt: DateTime(2026, 8, 18),
+            playCount: 1,
+            highlightUtterance: '',
+          ),
+      ],
+    );
+  }
+
+  @override
+  Future<ReportDetail?> getReportDetail(String sessionId) =>
+      throw UnimplementedError();
+}
+
+class _StubFreeTalkRepository implements FreeTalkRepository {
+  const _StubFreeTalkRepository({
+    this.result = const <FreeTalkCharacter>[],
+    this.error,
+  });
+
+  final List<FreeTalkCharacter> result;
+  final Object? error;
+
+  @override
+  Future<List<FreeTalkCharacter>> characters(String storyId) async {
+    if (error != null) throw error!;
+    return result;
+  }
+
+  @override
+  Future<FreeTalkSession> start({
+    required String storyId,
+    required String characterId,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<FreeTalkTurn> sendMessage(
+    String freeTalkId, {
+    required String text,
+    String? idempotencyKey,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<FreeTalkSpeech> end(String freeTalkId) => throw UnimplementedError();
+}
+
 class _StubHomeRepository implements HomeRepository {
   @override
   Future<HomeSummary> getHomeSummary() async => const HomeSummary(
@@ -38,11 +129,19 @@ class _StubHomeRepository implements HomeRepository {
 }
 
 class _StubRepository implements StoryRepository {
-  _StubRepository({this.catalog, this.detail, this.error});
+  _StubRepository({
+    this.catalog,
+    this.detail,
+    this.error,
+    this.completedStoryIds = const <String>{},
+  });
 
   final StoryCatalog? catalog;
   final StoryDetail? detail;
   final Object? error;
+
+  /// 완주한 이야기. 서버가 id 로 내려줍니다.
+  final Set<String> completedStoryIds;
 
   @override
   Future<StoryCatalog> getCatalog() async {
@@ -54,6 +153,12 @@ class _StubRepository implements StoryRepository {
   Future<StoryDetail?> getStoryDetail(String storyId) async {
     if (error != null) throw error!;
     return detail;
+  }
+
+  @override
+  Future<Set<String>> getCompletedStoryIds() async {
+    if (error != null) throw error!;
+    return completedStoryIds;
   }
 
   @override
@@ -133,22 +238,30 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Widget listUnder(StoryRepository repository) =>
-      ChangeNotifierProvider<StoryListViewModel>(
-        create: (_) =>
-            StoryListViewModel(GetStoryCatalogUseCase(repository))..load(),
-        child: const StoryListView(),
-      );
+  Widget listUnder(
+    StoryRepository repository, {
+    GetCompletedStoriesUseCase? completed,
+  }) => ChangeNotifierProvider<StoryListViewModel>(
+    create: (_) => StoryListViewModel(
+      GetStoryCatalogUseCase(repository),
+      completedStories: completed,
+    )..load(),
+    child: const StoryListView(),
+  );
 
-  Widget detailUnder(StoryRepository repository, {String storyId = '11'}) =>
-      ChangeNotifierProvider<StoryDetailViewModel>(
-        create: (_) => StoryDetailViewModel(
-          GetStoryDetailUseCase(repository),
-          StartStorySessionUseCase(repository, _StubHomeRepository()),
-          storyId: storyId,
-        )..load(),
-        child: const StoryDetailView(),
-      );
+  Widget detailUnder(
+    StoryRepository repository, {
+    String storyId = '11',
+    FreeTalkRepository? freeTalk,
+  }) => ChangeNotifierProvider<StoryDetailViewModel>(
+    create: (_) => StoryDetailViewModel(
+      GetStoryDetailUseCase(repository),
+      StartStorySessionUseCase(repository, _StubHomeRepository()),
+      storyId: storyId,
+      freeTalk: freeTalk,
+    )..load(),
+    child: const StoryDetailView(),
+  );
 
   group('이야기 목록', () {
     testWidgets('헤더·칩·카드·하단 내비가 함께 보인다', (WidgetTester tester) async {
@@ -201,6 +314,45 @@ void main() {
       expect(find.byType(StoryCard), findsWidgets);
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets('완주한 이야기 카드에만 도장이 찍힌다', (WidgetTester tester) async {
+      await pump(
+        tester,
+        listUnder(
+          _StubRepository(catalog: _catalog),
+          // 서버가 완주한 이야기 id 를 내려주는 정식 경로.
+          completed: GetCompletedStoriesUseCase(
+            _StubRepository(
+              catalog: _catalog,
+              completedStoryIds: <String>{'11'},
+            ),
+            const _StubReports(<String>[]),
+          ),
+        ),
+      );
+
+      // 목록에 두 편이 있고, 그중 한 편만 끝냈습니다.
+      expect(find.byType(CompletedBadge), findsOneWidget);
+    });
+
+    testWidgets('완주 목록을 못 불러도 목록은 멀쩡하다', (WidgetTester tester) async {
+      await pump(
+        tester,
+        listUnder(
+          _StubRepository(catalog: _catalog),
+          // 정식 경로도 폴백(리포트)도 실패한 상황.
+          completed: GetCompletedStoriesUseCase(
+            _StubRepository(error: const UnknownFailure()),
+            const _StubReports(<String>[], error: UnknownFailure()),
+          ),
+        ),
+      );
+
+      // 도장은 있으면 좋은 정보입니다. 못 불렀다고 목록을 에러로 만들지
+      // 않습니다.
+      expect(find.byType(StoryCard), findsNWidgets(2));
+      expect(find.byType(CompletedBadge), findsNothing);
+    });
   });
 
   group('이야기 상세', () {
@@ -209,10 +361,10 @@ void main() {
 
       expect(find.text('방귀 뀌는 며느리'), findsOneWidget);
       // 소개(3인칭)와 도입문(아이에게 하는 말)은 다른 자리의 다른 글입니다.
-      expect(find.textContaining('마음을 털어놓는'), findsOneWidget);
-      expect(find.textContaining('옛날 어느 마을에'), findsOneWidget);
+      expect(find.textContaining('마음을 털어놓는'.keepWords), findsOneWidget);
+      expect(find.textContaining('옛날 어느 마을에'.keepWords), findsOneWidget);
       expect(find.text(StoryDetailStrings.roleIntro), findsOneWidget);
-      expect(find.textContaining('며느리의 친구'), findsOneWidget);
+      expect(find.textContaining('며느리의 친구'.keepWords), findsOneWidget);
       expect(find.text(StoryDetailStrings.listen), findsOneWidget);
       expect(find.text(StoryDetailStrings.start), findsOneWidget);
     });
@@ -283,7 +435,7 @@ void main() {
       expect(find.byType(SpeakerButton), findsNothing);
       // 남는 것만으로도 화면은 성립합니다 — 제목·소개·칩·시작하기.
       expect(find.text('방귀 뀌는 며느리'), findsOneWidget);
-      expect(find.textContaining('마음을 털어놓는'), findsOneWidget);
+      expect(find.textContaining('마음을 털어놓는'.keepWords), findsOneWidget);
       expect(find.text('쉬움'), findsOneWidget);
       expect(find.text(StoryDetailStrings.start), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -380,6 +532,47 @@ void main() {
       await tester.pump(SpeakerButton.mockDuration);
       await tester.pumpAndSettle();
       expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
+    });
+
+    // ── 후속 자유 대화 진입점 ──
+
+    testWidgets('완주한 이야기는 친구들 카드와 완주 도장이 함께 뜬다', (WidgetTester tester) async {
+      await pump(
+        tester,
+        detailUnder(
+          _StubRepository(detail: _detail),
+          freeTalk: const _StubFreeTalkRepository(result: _threeFriends),
+        ),
+        size: const Size(430, 1400),
+      );
+
+      // 얼굴이 셋 다 보여야 합니다. 버튼 한 줄이었을 때는 친구가 셋이라는
+      // 사실 자체가 화면에 없었습니다.
+      expect(find.text(FreeTalkStrings.friendsIntro), findsOneWidget);
+      expect(findKidText('며느리'), findsOneWidget);
+      expect(findKidText('시아버지'), findsOneWidget);
+      expect(findKidText('마을 이장'), findsOneWidget);
+      // 표지 도장 — 목록 카드와 같은 뱃지입니다.
+      expect(find.byType(CompletedBadge), findsOneWidget);
+      // 하단 버튼은 여전히 하나뿐이고, 이름만 "다시 듣기"로 바뀝니다.
+      expect(find.text(StoryDetailStrings.restart), findsOneWidget);
+      expect(find.text(StoryDetailStrings.start), findsNothing);
+    });
+
+    testWidgets('완주 전이면 친구도 도장도 없다', (WidgetTester tester) async {
+      await pump(
+        tester,
+        detailUnder(
+          _StubRepository(detail: _detail),
+          freeTalk: const _StubFreeTalkRepository(
+            error: ServerFailure(message: '완주 전', code: 'NOT_FOUND'),
+          ),
+        ),
+      );
+
+      expect(find.text(StoryDetailStrings.start), findsOneWidget);
+      expect(find.text(FreeTalkStrings.friendsIntro), findsNothing);
+      expect(find.byType(CompletedBadge), findsNothing);
     });
 
     testWidgets('폰 폭에서도 시작하기가 하단에 남는다', (WidgetTester tester) async {

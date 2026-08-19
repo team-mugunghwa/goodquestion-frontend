@@ -31,6 +31,29 @@ class StoryRemoteDataSource {
         },
       );
 
+  /// 이 아이가 완주한 이야기의 id 들.
+  ///
+  /// 목록 카드에 "끝냈어" 도장을 찍는 데 씁니다. 완주한 게 없으면 **빈
+  /// 배열**이고 404 가 아닙니다 — 아직 아무것도 안 한 것은 정상입니다.
+  /// (서버 판정 근거는 COMPLETED 세션이고, 후속 자유 대화의 진입 조건과
+  /// 같습니다. → 백엔드 `ChildStoryController`)
+  Future<List<String>> fetchCompletedStoryIds(String childId) =>
+      _client.get<List<String>>(
+        '/children/$childId/stories/completed',
+        parse: (Object? data) {
+          if (data is Map<String, dynamic>) {
+            final Object? ids = data['storyIds'];
+            if (ids is List) {
+              return <String>[
+                for (final Object? id in ids)
+                  if (id is String && id.isNotEmpty) id,
+              ];
+            }
+          }
+          throw const ParseException('완주한 이야기 응답 형식이 올바르지 않습니다.');
+        },
+      );
+
   /// 이야기를 시작해 세션을 만듭니다. `sessionId` 만 돌려줍니다 — 첫 장면은
   /// 재생 화면(⛔ 미구현)에서 다시 받습니다.
   Future<String> startSession({

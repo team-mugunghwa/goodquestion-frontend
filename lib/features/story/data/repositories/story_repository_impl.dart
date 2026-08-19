@@ -38,6 +38,12 @@ class StoryRepositoryImpl implements StoryRepository {
   }
 
   @override
+  Future<Set<String>> getCompletedStoryIds() => _guard(() async {
+    final String childId = await _resolveChildId();
+    return (await _remote.fetchCompletedStoryIds(childId)).toSet();
+  });
+
+  @override
   Future<String> startSession(String storyId) => _guard(() async {
     final String childId = await _resolveChildId();
     return _remote.startSession(childId: childId, storyId: storyId);

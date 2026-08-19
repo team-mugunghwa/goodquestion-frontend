@@ -16,5 +16,11 @@ abstract class StoryRepository {
 
   /// 이야기를 시작해 세션을 만듭니다. 서비스 전체에서 세션이 생기는
   /// **유일한 지점**입니다. 만들어진 sessionId(UUID) 를 돌려줍니다.
+  /// 이 아이가 완주한 이야기의 id 들. 완주한 게 없으면 빈 집합입니다.
+  ///
+  /// 목록 카드의 "끝냈어" 도장이 이걸로 그려집니다. 서버 판정 근거는 COMPLETED
+  /// 세션이고, 후속 자유 대화의 진입 조건과 같습니다.
+  Future<Set<String>> getCompletedStoryIds();
+
   Future<String> startSession(String storyId);
 }
