@@ -16,8 +16,10 @@ import '../repositories/story_repository.dart';
 /// **묻지 않고 이어갑니다.** 저학년 아이에게 "이어하기 / 처음부터"를
 /// 물으면 되돌릴 수 없는 선택(처음부터 = 듣던 이야기 폐기)을 글로 읽고
 /// 판단해야 합니다. 홈의 이어하기 카드와도 같은 동작이라 앱 안에서 규칙이
-/// 하나로 유지됩니다. 처음부터 다시 하고 싶으면 재생 화면의
-/// "이야기 그만하기"로 지금 세션을 끝낸 뒤 다시 시작하면 됩니다.
+/// 하나로 유지됩니다. 처음부터 다시 하고 싶으면 재생 화면 멈춤 카드의
+/// "처음부터 다시하기"를 쓰면 됩니다 - 듣던 세션을 끝내고
+/// [StoryRepository.startSession] 으로 새 세션을 만듭니다.
+/// → `features/play/presentation/views/play_view.dart`
 class StartStorySessionUseCase {
   const StartStorySessionUseCase(this._repository, this._homeRepository);
 
