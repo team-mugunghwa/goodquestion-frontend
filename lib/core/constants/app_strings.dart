@@ -313,6 +313,13 @@ abstract final class WordStrings {
   static const String showAllWords = '전체 보기';
   static const String practice = '따라 말하기';
   static const String close = '닫기';
+
+  // ── 단어 지우기 확인 시트 ──
+  static String deleteTitle(String word) => '$word, 지울까?';
+  static const String deleteMessage = '지우면 다시 볼 수 없어.';
+  static const String deleteKeep = '다시 볼래';
+  static const String deleteConfirm = '지울래';
+  static const String deleteAction = '단어 지우기';
 }
 
 /// 예문 따라 말하기(`/words/:wordId/practice`) 전용 문구.

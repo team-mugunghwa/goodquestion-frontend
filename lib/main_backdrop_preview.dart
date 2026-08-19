@@ -30,6 +30,7 @@ import 'features/story/presentation/views/story_list_view.dart';
 import 'features/word/data/datasources/word_local_data_source.dart';
 import 'features/word/data/repositories/word_repository_mock.dart';
 import 'features/word/domain/entities/saved_word.dart';
+import 'features/word/domain/usecases/delete_word_use_case.dart';
 import 'features/word/domain/usecases/get_word_book_use_case.dart';
 import 'features/word/domain/usecases/toggle_word_like_use_case.dart';
 import 'features/word/presentation/viewmodels/sentence_practice_view_model.dart';
@@ -62,6 +63,7 @@ final GoRouter _router = GoRouter(
         create: (_) => WordListViewModel(
           GetWordBookUseCase(_wordRepository),
           ToggleWordLikeUseCase(_wordRepository),
+          DeleteWordUseCase(_wordRepository),
         )..load(),
         child: const WordListView(),
       ),

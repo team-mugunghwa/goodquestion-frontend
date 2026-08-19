@@ -33,6 +33,9 @@ class _FakeRepository implements WordRepository {
   Future<bool> toggleLike(String wordId) async => true;
 
   @override
+  Future<void> deleteWord(String wordId) async {}
+
+  @override
   Future<SentencePracticeResult> practiceSentence({
     required String wordId,
     required SentenceType sentenceType,

@@ -12,6 +12,7 @@ import 'package:goodquestion/features/word/domain/entities/sentence_practice.dar
 import 'package:goodquestion/features/word/domain/entities/word_book.dart';
 import 'package:goodquestion/features/word/domain/entities/word_group.dart';
 import 'package:goodquestion/features/word/domain/repositories/word_repository.dart';
+import 'package:goodquestion/features/word/domain/usecases/delete_word_use_case.dart';
 import 'package:goodquestion/features/word/domain/usecases/get_word_book_use_case.dart';
 import 'package:goodquestion/features/word/domain/usecases/toggle_word_like_use_case.dart';
 import 'package:goodquestion/features/word/presentation/viewmodels/word_list_view_model.dart';
@@ -25,6 +26,7 @@ class _StubRepository implements WordRepository {
   final WordBook? book;
   final Object? error;
   final Map<String, bool> likes = <String, bool>{};
+  final List<String> deleted = <String>[];
 
   @override
   Future<SentencePracticeResult> practiceSentence({
@@ -48,6 +50,11 @@ class _StubRepository implements WordRepository {
     final bool next = !(likes[wordId] ?? false);
     likes[wordId] = next;
     return next;
+  }
+
+  @override
+  Future<void> deleteWord(String wordId) async {
+    deleted.add(wordId);
   }
 }
 
@@ -130,6 +137,7 @@ void main() {
           create: (_) => WordListViewModel(
             GetWordBookUseCase(repository),
             ToggleWordLikeUseCase(repository),
+            DeleteWordUseCase(repository),
           )..load(),
           child: const WordListView(),
         ),
@@ -201,6 +209,40 @@ void main() {
 
     final WordCard card = tester.widget<WordCard>(find.byType(WordCard).first);
     expect(card.word.liked, isTrue);
+  });
+
+  testWidgets('카드의 X를 누르면 확인 시트가 뜨고, 지우기를 고르면 실제로 지워진다', (
+    WidgetTester tester,
+  ) async {
+    final repository = _StubRepository(book: _book);
+    await pump(tester, repository);
+
+    await tester.tap(find.bySemanticsLabel(WordStrings.deleteAction).first);
+    await tester.pumpAndSettle();
+
+    // 확인 시트가 뜬 상태 - 아직 지워지지 않았습니다.
+    expect(find.text(WordStrings.deleteTitle('며느리')), findsOneWidget);
+    expect(repository.deleted, isEmpty);
+
+    await tester.tap(find.text(WordStrings.deleteConfirm));
+    await tester.pumpAndSettle();
+
+    expect(repository.deleted, <String>['101']);
+    expect(find.text('며느리'), findsNothing);
+    expect(find.byType(WordCard), findsNWidgets(2));
+  });
+
+  testWidgets('확인 시트에서 취소하면 지워지지 않는다', (WidgetTester tester) async {
+    final repository = _StubRepository(book: _book);
+    await pump(tester, repository);
+
+    await tester.tap(find.bySemanticsLabel(WordStrings.deleteAction).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(WordStrings.deleteKeep));
+    await tester.pumpAndSettle();
+
+    expect(repository.deleted, isEmpty);
+    expect(find.byType(WordCard), findsNWidgets(3));
   });
 
   testWidgets('이야기 칩으로 그룹을 좁힌다', (WidgetTester tester) async {

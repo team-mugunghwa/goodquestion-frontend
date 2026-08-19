@@ -24,12 +24,16 @@ class WordCard extends StatelessWidget {
     required this.metrics,
     required this.onTap,
     required this.onToggleLike,
+    required this.onDelete,
   });
 
   final SavedWord word;
   final ScreenMetrics metrics;
   final VoidCallback onTap;
   final VoidCallback onToggleLike;
+
+  /// 확인 시트를 이미 거친 뒤에 부릅니다 - 카드는 되묻지 않습니다.
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -95,6 +99,24 @@ class WordCard extends StatelessWidget {
                   color: word.liked
                       ? AppColors.brandBlueDeep
                       : AppColors.ink300,
+                ),
+              ),
+            ),
+          ),
+          // 지우기. 하트 바로 옆이지만 눈에 덜 띄는 옅은 색으로 둡니다 -
+          // 되돌릴 수 없는 동작이 실수로 눌리기 쉬우면 안 됩니다.
+          Semantics(
+            button: true,
+            child: PressScale(
+              onTap: onDelete,
+              borderRadius: AppRadius.pill,
+              semanticLabel: WordStrings.deleteAction,
+              child: const SizedBox.square(
+                dimension: AppSizes.tapChildSecondary,
+                child: Icon(
+                  AppIcons.delete,
+                  size: AppSizes.iconChild,
+                  color: AppColors.ink300,
                 ),
               ),
             ),

@@ -8,6 +8,7 @@ import 'package:goodquestion/features/word/domain/entities/sentence_practice.dar
 import 'package:goodquestion/features/word/domain/entities/word_book.dart';
 import 'package:goodquestion/features/word/domain/entities/word_group.dart';
 import 'package:goodquestion/features/word/domain/repositories/word_repository.dart';
+import 'package:goodquestion/features/word/domain/usecases/delete_word_use_case.dart';
 import 'package:goodquestion/features/word/domain/usecases/get_word_book_use_case.dart';
 import 'package:goodquestion/features/word/domain/usecases/toggle_word_like_use_case.dart';
 import 'package:goodquestion/features/word/presentation/viewmodels/word_list_view_model.dart';
@@ -18,6 +19,7 @@ class _StubRepository implements WordRepository {
   final WordBook? book;
   final Object? error;
   final Map<String, bool> likes = <String, bool>{};
+  final List<String> deleted = <String>[];
 
   @override
   Future<SentencePracticeResult> practiceSentence({
@@ -41,6 +43,11 @@ class _StubRepository implements WordRepository {
     final bool next = !(likes[wordId] ?? false);
     likes[wordId] = next;
     return next;
+  }
+
+  @override
+  Future<void> deleteWord(String wordId) async {
+    deleted.add(wordId);
   }
 }
 
@@ -90,6 +97,7 @@ void main() {
   WordListViewModel viewModelOf(WordRepository repository) => WordListViewModel(
     GetWordBookUseCase(repository),
     ToggleWordLikeUseCase(repository),
+    DeleteWordUseCase(repository),
   );
 
   test('load 하면 이야기 그룹이 그대로 온다', () async {
@@ -143,6 +151,31 @@ void main() {
     // 다른 단어는 건드리지 않습니다.
     expect(vm.wordOf('102')?.liked, isFalse);
     expect(vm.wordOf('201')?.liked, isTrue);
+  });
+
+  test('단어를 지우면 저장소를 부르고 목록 카드에서 즉시 빠진다', () async {
+    final repository = _StubRepository(book: _book);
+    final vm = viewModelOf(repository);
+    await vm.load();
+
+    await vm.deleteWord('102');
+
+    expect(repository.deleted, <String>['102']);
+    expect(vm.wordOf('102'), isNull);
+    expect(vm.totalCount, 2);
+    // 같은 이야기의 다른 단어는 그대로입니다.
+    expect(vm.wordOf('101'), isNotNull);
+  });
+
+  test('묶음의 마지막 단어를 지우면 그 이야기 묶음도 함께 사라진다', () async {
+    final vm = viewModelOf(_StubRepository(book: _book));
+    await vm.load();
+
+    await vm.deleteWord('201');
+
+    expect(vm.wordOf('201'), isNull);
+    expect(vm.allGroups, hasLength(1));
+    expect(vm.allGroups.first.storyTitle, '방귀 뀌는 며느리');
   });
 
   test('실패하면 error 와 메시지가 남는다', () async {
