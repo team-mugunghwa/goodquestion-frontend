@@ -59,8 +59,59 @@ const List<String> _serverEmotions = <String>[
   'RELIEVED',
 ];
 
+/// 서버 시드가 정한 **장면 목표 요소**(`story_scenes.required_elements`).
+///
+/// 프런트에는 안 내려오는 값이라(서버 내부 설정) 여기 옮겨 적는다 - 목표 요소
+/// 하나가 표정에 안 걸려 있으면 아이가 그 요소를 채워도 얼굴이 그대로다.
+/// 실제로 대화1의 REASON 이 그렇게 빠져 있었다.
+/// → 백엔드 `db/migration/R__1_seed_content.sql`
+const Map<String, List<String>> _sceneGoalElements = <String, List<String>>{
+  _scene03: <String>['PERSPECTIVE', 'EMOTION', 'REASON', 'SOLUTION'],
+  _scene05: <String>['PERSPECTIVE', 'EMPATHY', 'REASON', 'REQUEST'],
+  _scene07: <String>['SOLUTION', 'REASON', 'REQUEST', 'RESULT'],
+  _scene09: <String>['EMOTION', 'PERSPECTIVE', 'RESULT', 'SOLUTION'],
+};
+
 void main() {
   _newElementsTests();
+
+  group('장면 목표 요소', () {
+    test('목표 요소는 하나도 빠짐없이 표정으로 반응한다', () {
+      final DialogueCharacterManifest manifest = _manifest();
+
+      _sceneGoalElements.forEach((String sceneId, List<String> goals) {
+        final DialogueSceneStates scene = manifest.sceneFor(sceneId: sceneId)!;
+        for (final String element in goals) {
+          expect(
+            scene.elementToState[element],
+            isNotNull,
+            reason:
+                '${scene.label}: $element 를 채워도 표정이 그대로다 - '
+                '그 장면이 아이에게 끌어내려는 요소인데 반응이 없다',
+          );
+          expect(
+            scene.assetOf(scene.elementToState[element]),
+            isNotNull,
+            reason: '${scene.label}: $element 가 없는 표정을 가리킨다',
+          );
+        }
+      });
+    });
+
+    test('목표가 아닌 요소에는 표정을 걸지 않는다', () {
+      // 대화3(마을 이장)이 EMOTION·PERSPECTIVE 에 반응하지 않는 것은 빠뜨린
+      // 것이 아니라 그 장면의 목표가 아니어서다. 목표 밖 요소에 얼굴을 붙이면
+      // 장면이 끌어내려는 것과 다른 신호를 준다.
+      final DialogueCharacterManifest manifest = _manifest();
+
+      _sceneGoalElements.forEach((String sceneId, List<String> goals) {
+        final DialogueSceneStates scene = manifest.sceneFor(sceneId: sceneId)!;
+        for (final String element in scene.elementToState.keys) {
+          expect(goals, contains(element), reason: scene.label);
+        }
+      });
+    });
+  });
 
   group('자유 대화 감정 매핑', () {
     test('감정 표는 서버 6종만 쓰고, 실재하는 표정만 가리킨다', () {

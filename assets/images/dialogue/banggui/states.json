@@ -58,7 +58,8 @@
         "considering": {
           "asset": "character_considering.webp",
           "elements": [
-            "PERSPECTIVE"
+            "PERSPECTIVE",
+            "REASON"
           ]
         },
         "hopeful": {
