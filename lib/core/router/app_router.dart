@@ -26,6 +26,7 @@ import '../../features/play/data/dialogue_word_capture.dart';
 import '../../features/play/domain/repositories/play_repository.dart';
 import '../../features/play/presentation/views/play_recap_view.dart';
 import '../../features/play/presentation/views/play_view.dart';
+import '../../features/story/domain/repositories/story_repository.dart';
 import '../../features/story/presentation/views/story_detail_view.dart';
 import '../../features/story/presentation/views/story_list_view.dart';
 import '../../features/word/domain/entities/saved_word.dart';
@@ -100,16 +101,27 @@ GoRouter createAppRouter({
       ),
       GoRoute(
         path: AppRoutes.playPath,
-        builder: (BuildContext context, GoRouterState state) => PlayPage(
-          sessionId: state.pathParameters[AppRoutes.sessionIdParam]!,
-          // 홈 이어하기·이야기 상세가 실어 보내는 전체 장면 수. 없으면 진행바만
-          // 눈금 없이 그립니다. → [AppRoutes.playOf]
-          totalScenes: int.tryParse(
-            state.uri.queryParameters[AppRoutes.totalScenesParam] ?? '',
-          ),
-          repository: getIt<PlayRepository>(),
-          wordCapture: getIt<DialogueWordCapture>(),
-        ),
+        builder: (BuildContext context, GoRouterState state) {
+          final String sessionId =
+              state.pathParameters[AppRoutes.sessionIdParam]!;
+          return PlayPage(
+            // **세션 id 를 키로 답니다.** go_router 의 페이지 키는 주소가
+            // 아니라 경로 틀(`/play/:sessionId`)에서 나와서, 세션만 바뀌면
+            // 키가 같습니다 - 그러면 화면 상태가 그대로 살아남아, 처음부터
+            // 다시하기로 새 세션에 들어와도 옛 세션 화면이 그대로 남습니다.
+            key: ValueKey<String>(sessionId),
+            sessionId: sessionId,
+            // 홈 이어하기·이야기 상세가 실어 보내는 전체 장면 수. 없으면 진행바만
+            // 눈금 없이 그립니다. → [AppRoutes.playOf]
+            totalScenes: int.tryParse(
+              state.uri.queryParameters[AppRoutes.totalScenesParam] ?? '',
+            ),
+            repository: getIt<PlayRepository>(),
+            // 멈춤 화면의 "처음부터 다시하기"가 새 세션을 만드는 통로.
+            storyRepository: getIt<StoryRepository>(),
+            wordCapture: getIt<DialogueWordCapture>(),
+          );
+        },
         routes: <RouteBase>[
           GoRoute(
             path: 'recap',
