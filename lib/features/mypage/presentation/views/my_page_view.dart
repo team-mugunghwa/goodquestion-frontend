@@ -9,12 +9,14 @@ import '../../../../core/constants/app_icons.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/app_state_views.dart';
 import '../../../../core/widgets/child_avatar.dart';
 import '../../../../core/widgets/guardian_list.dart';
 import '../../../../core/widgets/guardian_scaffold.dart';
+import '../../../../core/widgets/policy_document_view.dart';
 import '../../../../core/widgets/skeleton_box.dart';
 import '../../domain/entities/my_page_summary.dart';
 import '../../domain/guardian_gate.dart';
@@ -346,6 +348,12 @@ class _ChildProfileFormState extends State<_ChildProfileForm> {
 
   bool get _isEdit => widget.child != null;
 
+  /// 아동 개인정보 수집 동의. **추가할 때만 받습니다** - 수정은 이미 동의를
+  /// 받아 둔 아이를 고치는 것이고, 서버 동의 기록도 아이 생성 시점에
+  /// 남습니다.
+  bool _consented = false;
+  bool _consentMissing = false;
+
   List<int> get _ageOptions =>
       <int>{for (int age = 4; age <= 13; age++) age, _age}.toList()..sort();
 
@@ -408,6 +416,41 @@ class _ChildProfileFormState extends State<_ChildProfileForm> {
                   if (value != null) _age = value;
                 },
               ),
+              if (!_isEdit) ...<Widget>[
+                const SizedBox(height: AppSpacing.sm),
+                Row(
+                  children: <Widget>[
+                    Checkbox(
+                      value: _consented,
+                      onChanged: (bool? value) => setState(() {
+                        _consented = value ?? false;
+                        if (_consented) _consentMissing = false;
+                      }),
+                    ),
+                    Expanded(
+                      child: Text(
+                        '[${MyPageStrings.childConsentRequired}] '
+                        '${MyPageStrings.childConsentLabel}',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => _openChildPrivacy(context),
+                      child: const Text(MyPageStrings.childConsentView),
+                    ),
+                  ],
+                ),
+                if (_consentMissing)
+                  Padding(
+                    padding: const EdgeInsets.only(left: AppSpacing.md),
+                    child: Text(
+                      MyPageStrings.childConsentMissing,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: AppColors.danger),
+                    ),
+                  ),
+              ],
               const SizedBox(height: AppSpacing.lg),
               Row(
                 children: <Widget>[
@@ -433,8 +476,32 @@ class _ChildProfileFormState extends State<_ChildProfileForm> {
     );
   }
 
+  /// 동의 내용을 실제로 읽을 수 있어야 합니다. 설정에서 여는 것과 **같은
+  /// 번들 문서**라 두 곳의 고지 내용이 갈리지 않습니다.
+  void _openChildPrivacy(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (BuildContext sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(sheetContext).size.height * .82,
+          child: const PolicyDocumentView(
+            title: SettingsStrings.childPrivacy,
+            assetPath: 'assets/policies/child_privacy.md',
+          ),
+        ),
+      ),
+    );
+  }
+
   void _submit() {
     if (_formKey.currentState?.validate() != true) return;
+    // 동의 없이 아이만 만들어지면 그 아이로는 이야기를 시작할 수 없습니다.
+    if (!_isEdit && !_consented) {
+      setState(() => _consentMissing = true);
+      return;
+    }
     Navigator.of(
       context,
     ).pop(_ChildFormValue(_nameController.text.trim(), _age));

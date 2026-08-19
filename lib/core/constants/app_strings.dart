@@ -400,6 +400,15 @@ abstract final class MyPageStrings {
   static String completedStories(int count) => '완주한 이야기 $count편';
   static String stardust(int count) => '별가루 $count';
 
+  /// 아이를 새로 추가할 때 받는 필수 동의. **아이마다 따로 받습니다** -
+  /// 아동 개인정보 수집은 계정 약관과 별도 항목이고(PRD F-01), 서버도 아이별로
+  /// 동의 기록을 요구합니다(없으면 이야기 시작이 409 로 막힙니다).
+  /// 문서 원본은 설정에서 여는 것과 같은 번들 문서입니다.
+  static const String childConsentLabel = '아동 개인정보 수집·이용에 동의합니다';
+  static const String childConsentRequired = '필수';
+  static const String childConsentView = '보기';
+  static const String childConsentMissing = '동의해야 아이를 추가할 수 있어요.';
+
   static const String switchChild = '프로필 전환';
   static const String editChild = '프로필 수정';
 

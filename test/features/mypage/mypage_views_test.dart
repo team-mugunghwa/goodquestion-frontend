@@ -376,12 +376,42 @@ void main() {
       expect(find.widgetWithText(TextFormField, '하늘이'), findsNothing);
 
       await tester.enterText(find.byType(TextFormField), '새봄');
+      await tester.tap(find.byType(Checkbox));
+      await tester.pump();
       await tester.tap(find.text('저장'));
       await tester.pumpAndSettle();
 
       expect(stub.created, <String>['새봄/7']);
       expect(stub.updated, isEmpty);
       expect(find.text('아이 프로필을 추가했습니다.'), findsOneWidget);
+    });
+
+    testWidgets('동의하지 않으면 아이를 만들지 않는다', (WidgetTester tester) async {
+      final _Stub stub = _Stub(summary: _summary);
+      await pump(tester, under(stub));
+
+      await tester.tap(find.text(MyPageStrings.addChild));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField), '새봄');
+      await tester.tap(find.text('저장'));
+      await tester.pumpAndSettle();
+
+      // 동의 없이 아이만 만들어지면 그 아이로는 이야기를 시작할 수 없습니다
+      // (서버가 CONSENT_REQUIRED 로 막습니다).
+      expect(find.text(MyPageStrings.childConsentMissing), findsOneWidget);
+      expect(stub.created, isEmpty);
+    });
+
+    testWidgets('수정 폼에는 동의 체크가 없다', (WidgetTester tester) async {
+      final _Stub stub = _Stub(summary: _summary);
+      await pump(tester, under(stub));
+
+      await tester.tap(find.byTooltip(MyPageStrings.editChild));
+      await tester.pumpAndSettle();
+
+      // 이미 동의를 받아 둔 아이를 고치는 자리입니다.
+      expect(find.byType(Checkbox), findsNothing);
+      expect(find.text(MyPageStrings.childConsentLabel), findsNothing);
     });
 
     testWidgets('실패해도 메뉴는 남는다', (WidgetTester tester) async {

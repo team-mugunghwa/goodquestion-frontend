@@ -35,6 +35,18 @@ class MyPageRepositoryImpl implements MyPageRepository, ChildProfileRepository {
     }
   }
 
+  /// 아이를 만들고 **곧바로 동의를 기록합니다.**
+  ///
+  /// 동의 기록이 없으면 그 아이로 이야기를 시작할 때 서버가
+  /// `CONSENT_REQUIRED`(409) 로 막습니다. 아이를 먼저 만들어야 childId 가
+  /// 나오므로 순서를 뒤집을 수는 없고, 대신 **동의까지 끝나야 성공**으로
+  /// 칩니다.
+  ///
+  /// 동의만 실패하면 한 번 더 시도합니다(끊긴 연결·순간 오류가 대부분입니다).
+  /// 그래도 실패하면 실패로 올리고 **새 아이를 고르지 않습니다** - 반쯤
+  /// 만들어진 아이로 화면을 바꿔 두면 보호자가 그 아이로 이야기를 시작했다가
+  /// 409 를 만납니다. 아이는 서버에 남으므로, 다시 추가하지 말고 그 아이를
+  /// 골라 다시 시도하면 됩니다.
   @override
   Future<void> createChild({required String name, required int age}) async {
     try {
@@ -42,9 +54,19 @@ class MyPageRepositoryImpl implements MyPageRepository, ChildProfileRepository {
         name: name.trim(),
         birthYear: birthYearFromAge(age),
       );
-      _selectedChildId = _toChild(created).childId;
+      final String childId = _toChild(created).childId;
+      await _saveConsentWithRetry(childId);
+      _selectedChildId = childId;
     } on AppException catch (error) {
       throw Failure.fromException(error);
+    }
+  }
+
+  Future<void> _saveConsentWithRetry(String childId) async {
+    try {
+      await _remote.saveConsent(childId);
+    } on AppException {
+      await _remote.saveConsent(childId);
     }
   }
 

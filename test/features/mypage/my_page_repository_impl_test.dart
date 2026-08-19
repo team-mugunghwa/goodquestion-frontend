@@ -24,8 +24,33 @@ class _Remote extends ChildProfileRemoteDataSource {
   /// 어떤 아이로 물어봤는지. 아이가 없으면 아예 부르지 말아야 합니다.
   final List<String> activityCalls = <String>[];
 
+  /// 만든 아이와 동의를 남긴 아이. **동의 없이 아이만 남으면 안 됩니다.**
+  final List<String> createdNames = <String>[];
+  final List<String> consented = <String>[];
+
+  /// 동의 호출이 몇 번째까지 실패하는가. 1 이면 첫 번째만 실패합니다.
+  int consentFailures = 0;
+
   @override
   Future<List<Map<String, dynamic>>> getChildren() async => children;
+
+  @override
+  Future<Map<String, dynamic>> createChild({
+    required String name,
+    required int birthYear,
+  }) async {
+    createdNames.add(name);
+    return <String, dynamic>{'id': 'child-new', 'name': name, 'age': 8};
+  }
+
+  @override
+  Future<void> saveConsent(String childId) async {
+    if (consentFailures > 0) {
+      consentFailures--;
+      throw const NetworkException();
+    }
+    consented.add(childId);
+  }
 
   @override
   Future<ChildActivityDto> getActivity(String childId) async {
@@ -50,6 +75,42 @@ void main() {
       'child-2',
     ], reason: '선택된 아이 기준입니다 - 목록 첫 아이로 물어보면 다른 아이의 숫자가 뜹니다');
     expect(summary.child?.name, '하늘');
+  });
+
+  test('아이를 추가하면 동의도 함께 기록한다', () async {
+    // 동의 기록이 없으면 그 아이로 이야기를 시작할 때 서버가 409 로 막습니다.
+    final _Remote remote = _Remote();
+    final MyPageRepositoryImpl repository = MyPageRepositoryImpl(remote);
+
+    await repository.createChild(name: '새봄', age: 7);
+
+    expect(remote.createdNames, <String>['새봄']);
+    expect(remote.consented, <String>['child-new']);
+    expect(repository.selectedChildId, 'child-new');
+  });
+
+  test('동의가 한 번 실패해도 다시 시도해 끝낸다', () async {
+    final _Remote remote = _Remote()..consentFailures = 1;
+    final MyPageRepositoryImpl repository = MyPageRepositoryImpl(remote);
+
+    await repository.createChild(name: '새봄', age: 7);
+
+    expect(remote.consented, <String>['child-new']);
+  });
+
+  test('동의를 끝내 못 남기면 실패로 올리고 그 아이를 고르지 않는다', () async {
+    // 반쯤 만들어진 아이로 화면을 바꿔 두면 보호자가 그 아이로 이야기를
+    // 시작했다가 409 를 만납니다.
+    final _Remote remote = _Remote()..consentFailures = 2;
+    final MyPageRepositoryImpl repository = MyPageRepositoryImpl(remote);
+    await repository.selectChild('child-2');
+
+    await expectLater(
+      repository.createChild(name: '새봄', age: 7),
+      throwsA(isA<Failure>()),
+    );
+    expect(remote.consented, isEmpty);
+    expect(repository.selectedChildId, 'child-2');
   });
 
   test('아이가 없으면 활동 요약을 부르지 않고 두 값 모두 0으로 둔다', () async {
