@@ -75,7 +75,7 @@ final GetIt getIt = GetIt.instance;
 ///
 /// 서버 연동이 시작되면 `false` 로 바꾸기만 하면 됩니다.
 /// 화면·ViewModel 코드는 전혀 손대지 않습니다.
-const bool _useMockRepository = true;
+const bool _useMockRepository = false;
 
 Future<void> configureDependencies() async {
   // ---- core ----
