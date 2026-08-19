@@ -1,5 +1,6 @@
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failure.dart';
+import '../../../../core/storage/selected_child_store.dart';
 import '../../../../core/util/child_age.dart';
 import '../../domain/entities/my_page_summary.dart';
 import '../../domain/repositories/my_page_repository.dart';
@@ -7,19 +8,22 @@ import '../datasources/child_profile_remote_data_source.dart';
 import '../dtos/my_page_dto.dart';
 
 class MyPageRepositoryImpl implements MyPageRepository, ChildProfileRepository {
-  MyPageRepositoryImpl(this._remote);
+  MyPageRepositoryImpl(this._remote, {SelectedChildStore? selectedChild})
+    : _selected = selectedChild ?? SelectedChildStore();
 
   final ChildProfileRemoteDataSource _remote;
-  String? _selectedChildId;
+
+  /// 고른 아이는 기기에 남습니다 - 새로고침해도 그 아이로 돌아옵니다.
+  final SelectedChildStore _selected;
 
   @override
-  String? get selectedChildId => _selectedChildId;
+  String? get selectedChildId => _selected.value;
 
   @override
   Future<MyPageSummary> getSummary() async {
     try {
       final List<MyPageChild> children = await _fetchChildren();
-      final MyPageChild? current = _currentChild(children);
+      final MyPageChild? current = await _currentChild(children);
       // 아이를 고르지 않았으면 부를 대상이 없습니다.
       final ChildActivityDto? activity = current == null
           ? null
@@ -35,6 +39,18 @@ class MyPageRepositoryImpl implements MyPageRepository, ChildProfileRepository {
     }
   }
 
+  /// 아이를 만들고 **곧바로 동의를 기록합니다.**
+  ///
+  /// 동의 기록이 없으면 그 아이로 이야기를 시작할 때 서버가
+  /// `CONSENT_REQUIRED`(409) 로 막습니다. 아이를 먼저 만들어야 childId 가
+  /// 나오므로 순서를 뒤집을 수는 없고, 대신 **동의까지 끝나야 성공**으로
+  /// 칩니다.
+  ///
+  /// 동의만 실패하면 한 번 더 시도합니다(끊긴 연결·순간 오류가 대부분입니다).
+  /// 그래도 실패하면 실패로 올리고 **새 아이를 고르지 않습니다** - 반쯤
+  /// 만들어진 아이로 화면을 바꿔 두면 보호자가 그 아이로 이야기를 시작했다가
+  /// 409 를 만납니다. 아이는 서버에 남으므로, 다시 추가하지 말고 그 아이를
+  /// 골라 다시 시도하면 됩니다.
   @override
   Future<void> createChild({required String name, required int age}) async {
     try {
@@ -42,9 +58,19 @@ class MyPageRepositoryImpl implements MyPageRepository, ChildProfileRepository {
         name: name.trim(),
         birthYear: birthYearFromAge(age),
       );
-      _selectedChildId = _toChild(created).childId;
+      final String childId = _toChild(created).childId;
+      await _saveConsentWithRetry(childId);
+      await _selected.save(childId);
     } on AppException catch (error) {
       throw Failure.fromException(error);
+    }
+  }
+
+  Future<void> _saveConsentWithRetry(String childId) async {
+    try {
+      await _remote.saveConsent(childId);
+    } on AppException {
+      await _remote.saveConsent(childId);
     }
   }
 
@@ -82,7 +108,7 @@ class MyPageRepositoryImpl implements MyPageRepository, ChildProfileRepository {
     if (!children.any((MyPageChild child) => child.childId == childId)) {
       throw const UnknownFailure('선택한 아이 프로필을 찾을 수 없습니다.');
     }
-    _selectedChildId = childId;
+    await _selected.save(childId);
   }
 
   /// 완주 편수·별가루. **실패해도 두 값을 0 으로 두고 넘어갑니다.**
@@ -102,15 +128,17 @@ class MyPageRepositoryImpl implements MyPageRepository, ChildProfileRepository {
   Future<List<MyPageChild>> _fetchChildren() async =>
       (await _remote.getChildren()).map(_toChild).toList(growable: false);
 
-  MyPageChild? _currentChild(List<MyPageChild> children) {
+  /// 저장된 아이가 목록에 없으면(지워졌거나 다른 계정으로 로그인했으면)
+  /// 첫 번째 아이로 되돌립니다 - 그 값을 그대로 쓰면 남의 아이를 부릅니다.
+  Future<MyPageChild?> _currentChild(List<MyPageChild> children) async {
     if (children.isEmpty) return null;
-    final String? selectedId = _selectedChildId;
+    final String? selectedId = _selected.value;
     if (selectedId != null) {
       for (final MyPageChild child in children) {
         if (child.childId == selectedId) return child;
       }
     }
-    _selectedChildId = children.first.childId;
+    await _selected.save(children.first.childId);
     return children.first;
   }
 

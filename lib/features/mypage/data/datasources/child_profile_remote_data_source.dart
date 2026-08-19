@@ -1,3 +1,4 @@
+import '../../../../core/constants/consent.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/network/dio_client.dart';
 import '../dtos/my_page_dto.dart';
@@ -28,6 +29,19 @@ class ChildProfileRemoteDataSource {
           throw const ParseException('활동 요약 응답 형식이 올바르지 않습니다.');
         },
       );
+
+  /// 아이별 개인정보 동의 기록. **아이를 만든 뒤 반드시 불러야** 합니다 -
+  /// 이 기록이 없으면 그 아이로 이야기를 시작할 때 서버가
+  /// `CONSENT_REQUIRED`(409) 로 막습니다. 가입 흐름이 부르는 것과 같은
+  /// 엔드포인트·같은 본문입니다.
+  Future<void> saveConsent(String childId) => _client.post<void>(
+    '/children/$childId/consents',
+    body: <String, dynamic>{
+      'consentVersion': childConsentVersion,
+      'verificationMethod': childConsentVerification,
+    },
+    parse: (_) {},
+  );
 
   /// 아이 프로필 수정. 두 필드 모두 선택이라 **보낼 것만** 실어 보냅니다.
   /// (`birthYear` 는 서버가 2000~2100 으로 검증합니다)

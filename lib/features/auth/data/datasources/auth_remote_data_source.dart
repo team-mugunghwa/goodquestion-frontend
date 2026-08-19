@@ -1,3 +1,4 @@
+import '../../../../core/constants/consent.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/util/child_age.dart';
@@ -60,8 +61,8 @@ class AuthRemoteDataSource {
   Future<void> saveConsent(String childId) => _client.post<void>(
     '/children/$childId/consents',
     body: <String, dynamic>{
-      'consentVersion': 'v1',
-      'verificationMethod': 'AUTHENTICATED_PARENT',
+      'consentVersion': childConsentVersion,
+      'verificationMethod': childConsentVerification,
     },
     parse: (_) {},
   );
