@@ -22,6 +22,17 @@ Future<void> main() async {
 
   await configureDependencies();
 
+  // 번들한 폰트의 라이선스(OFL 1.1). 에셋 폰트는 showLicensePage 가 자동으로
+  // 잡아 주지 않으므로 직접 등록합니다. → assets/fonts/README.md 3
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks(const [
+      'Pretendard',
+    ], await rootBundle.loadString('assets/fonts/Pretendard-OFL.txt'));
+    yield LicenseEntryWithLineBreaks(const [
+      'NanumSquareRound',
+    ], await rootBundle.loadString('assets/fonts/NanumSquareRound-OFL.txt'));
+  });
+
   // 기기에 한국어 목소리가 있는지 여기서 한 번 확인해 둡니다. 없으면 스피커
   // 버튼이 비활성될 뿐, 앱은 그대로 뜹니다 — 소리 때문에 화면을 막지 않습니다.
   await SpeechService.instance.init();

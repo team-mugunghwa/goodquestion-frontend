@@ -124,3 +124,30 @@ flutter:
     # → docs/DECISIONS.md 015
     - assets/dummy/
     - assets/policies/
+    # 폰트 라이선스 원문. 설정 → 오픈소스 라이선스 화면에서 읽어 보여 줍니다.
+    - assets/fonts/Pretendard-OFL.txt
+    - assets/fonts/NanumSquareRound-OFL.txt
+
+  # 폰트는 파일로 번들합니다. 등록하지 않으면 Flutter 가 시스템 기본 글꼴로
+  # 조용히 대체하고, 웹에서는 구글 폰트 서버에서 한글 폴백을 받아올 때까지
+  # 글자가 네모(□)로 보입니다. family 이름은 lib/core/theme/app_typography.dart
+  # 의 AppFonts 와 한 글자도 다르면 안 됩니다. → assets/fonts/README.md
+  fonts:
+    - family: Pretendard
+      fonts:
+        - asset: assets/fonts/Pretendard-Regular.otf
+          weight: 400
+        - asset: assets/fonts/Pretendard-Medium.otf
+          weight: 500
+        - asset: assets/fonts/Pretendard-SemiBold.otf
+          weight: 600
+        - asset: assets/fonts/Pretendard-Bold.otf
+          weight: 700
+    - family: NanumSquareRound
+      fonts:
+        - asset: assets/fonts/NanumSquareRoundR.ttf
+          weight: 400
+        - asset: assets/fonts/NanumSquareRoundB.ttf
+          weight: 700
+        - asset: assets/fonts/NanumSquareRoundEB.ttf
+          weight: 800
