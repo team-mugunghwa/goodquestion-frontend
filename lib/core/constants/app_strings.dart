@@ -641,10 +641,13 @@ abstract final class AuthRecoveryStrings {
   static const String childName = '아이 이름';
   static const String childNameHint = '예: 지우';
 
-  /// **"지금" 나이입니다.** 가입할 때 고른 나이로 착각하면 해가 바뀐 만큼
-  /// 어긋나 못 찾습니다 - 서버는 나이를 저장하지 않고 출생연도만 들고 있어
-  /// 나이를 매번 다시 계산하기 때문입니다.
-  static const String childAge = '지금 아이 나이';
+  /// **지금 나이를 받습니다.** 가입할 때 고른 나이를 그대로 넣으면 해가
+  /// 바뀐 만큼 어긋나 못 찾습니다 - 서버는 나이를 저장하지 않고 출생연도만
+  /// 들고 있어 나이를 매번 다시 계산하기 때문입니다. 라벨에 "지금"을 넣어
+  /// 두었다가 뺐습니다(2026-08): 대부분은 아이의 현재 나이를 적으므로,
+  /// 드문 경우를 위해 라벨을 길게 두는 것보다 등록 화면과 같은 말로
+  /// 부르는 편이 낫습니다.
+  static const String childAge = '아이 나이';
   static const String childAgeHint = '예: 8';
   static const String findIdAction = '가입 이메일 확인하기';
 
