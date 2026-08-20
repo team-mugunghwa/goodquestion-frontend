@@ -287,8 +287,12 @@ void main() {
     await pumpRecap(tester);
     await goToRetell(tester);
 
-    // ① 말하기 전 — 완료 버튼이 아직 없습니다.
-    expect(find.widgetWithText(KidPrimaryButton, '다 했어'), findsNothing);
+    // ① 말하기 전 — 다음 버튼이 아직 없습니다. (기본 카드 4장 - 첫 장면은
+    //    마지막이 아니니 다 말해도 "다 했어"가 아니라 "다음"입니다)
+    expect(
+      find.widgetWithText(KidPrimaryButton, RecapStrings.next),
+      findsNothing,
+    );
     expect(find.textContaining('며느리가 방귀를 참다가'), findsNothing);
 
     // ② 말하는 중.
@@ -296,38 +300,39 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('멈추기'), findsOneWidget);
     expect(find.textContaining('며느리가 방귀를 참다가'), findsOneWidget);
-    expect(buttonWith(tester, '다 했어').onPressed, isNotNull);
+    expect(buttonWith(tester, RecapStrings.next).onPressed, isNotNull);
 
-    // ③ 곧바로 멈춰도 띠가 접히거나 완료 버튼이 죽지 않습니다.
+    // ③ 곧바로 멈춰도 띠가 접히거나 다음 버튼이 죽지 않습니다.
     await tester.tap(find.text('멈추기'));
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('말하기'), findsOneWidget);
     expect(find.textContaining('며느리가 방귀를 참다가'), findsOneWidget);
-    expect(buttonWith(tester, '다 했어').onPressed, isNotNull);
-  });
-
-  testWidgets('발화 완료 후 저장 완료 화면을 보여준다', (WidgetTester tester) async {
-    await pumpRecap(tester);
-    await goToRetell(tester);
-    await tester.tap(find.text('말하기'));
-    await tester.pump();
-    await tester.tap(find.text('다 했어'));
-    await tester.pump(const Duration(milliseconds: 800));
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('이야기를 멋지게 들려줬어!'), findsOneWidget);
+    expect(buttonWith(tester, RecapStrings.next).onPressed, isNotNull);
   });
 
   // ── 후속 자유 대화 진입점 ──────────────────────────────
 
-  /// 순서 맞추기 → 다시 말하기 → 완료까지 한 번에 밀어 줍니다.
-  Future<void> goToCompleted(WidgetTester tester) async {
+  /// 순서 맞추기 → 다시 말하기(장면마다 한 번씩 말하기) → 완료까지 밀어 줍니다.
+  Future<void> goToCompleted(WidgetTester tester, {int sceneCount = 4}) async {
     await goToRetell(tester);
-    await tester.tap(find.text('말하기'));
-    await tester.pump();
-    await tester.tap(find.text('다 했어'));
+    for (int i = 0; i < sceneCount; i++) {
+      await tester.tap(find.text('말하기'));
+      await tester.pump();
+      final bool isLast = i == sceneCount - 1;
+      await tester.tap(
+        find.text(isLast ? RecapStrings.finish : RecapStrings.next),
+      );
+      await tester.pump();
+    }
     await tester.pump(const Duration(milliseconds: 800));
     await tester.pump(const Duration(milliseconds: 400));
   }
+
+  testWidgets('발화 완료 후 저장 완료 화면을 보여준다', (WidgetTester tester) async {
+    await pumpRecap(tester);
+    await goToCompleted(tester);
+    expect(find.text('이야기를 멋지게 들려줬어!'), findsOneWidget);
+  });
 
   testWidgets('완료 화면에 "○○와 더 이야기하기" 진입점이 뜬다', (WidgetTester tester) async {
     await pumpRecap(tester, storyId: 'story-1', lastCharacterName: '시아버지');

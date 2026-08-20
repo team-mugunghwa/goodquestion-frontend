@@ -249,6 +249,14 @@ abstract final class RecapStrings {
   static const String finish = '다 했어';
   static const String saving = '저장 중';
 
+  /// 마지막 장면이 아닐 때, 이 장면 답을 확정하고 다음 장면으로 넘어가는 버튼.
+  /// 마지막 장면이면 이 대신 [finish] 가 뜹니다.
+  static const String next = '다음';
+
+  /// 같은 장면에서 마이크가 두 번 연속 안 됐을 때만 뜨는 탈출구. 계속
+  /// 안 되는 마이크에 아이가 갇히지 않게 합니다.
+  static const String skipScene = '다음에 말할래';
+
   /// 녹음을 끝내고 글자를 받아 오는 사이.
   static const String retellTranscribing = '무슨 이야기인지 듣고 있어…';
 

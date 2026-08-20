@@ -10,6 +10,7 @@ import '../../../../core/constants/app_icons.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/error/failure.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/text/korean_keyword_match.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_shadows.dart';
@@ -176,6 +177,50 @@ class _RecapDragData {
   final int? fromSlot;
 }
 
+/// 장면 하나에 대한 아이의 답변.
+///
+/// 장면마다 따로 녹음하므로 발화·낱말 체크가 **장면 단위로 갈립니다** -
+/// 재녹음해도 다른 장면 답변은 건드리지 않고, 체크도 그 장면의 최신
+/// 텍스트로만 다시 계산합니다(이전 것과 합집합하지 않습니다).
+class _SceneAnswer {
+  const _SceneAnswer({
+    required this.text,
+    this.rawText,
+    this.usedKeywords = const <String>{},
+  });
+
+  /// 확정 텍스트. 데모 모드에서는 고정 문장, 서버 모드에서는 STT 교정 결과.
+  final String text;
+
+  /// STT 원문(서버가 교정하기 전). 없으면(데모 모드 등) `null`.
+  final String? rawText;
+
+  /// 이 장면 텍스트에서 실제로 매칭된 낱말.
+  final Set<String> usedKeywords;
+}
+
+/// [sceneIndex] 번째 장면에 붙는 낱말 목록입니다.
+///
+/// 낱말이 장면보다 적으면 남는 장면은 빈 목록(낱말 없음)이고, 많으면 남는
+/// 낱말을 **마지막 장면에 몰아 붙입니다.** 조용히 버리면 어휘가 화면에서
+/// 사라진 걸 아무도 모르고, 새 줄을 만들면 참고자료 칩 줄이 도로 생깁니다.
+///
+/// `_SceneStrip`(화면에 뭘 그릴지)과 `_PlayRecapPageState`(무엇을 매칭
+/// 판정에 쓸지) 양쪽이 **이 함수 하나**를 부릅니다. 규칙이 두 군데로
+/// 갈라지면 화면과 판정이 어긋납니다.
+List<String> _keywordsForScene(
+  List<String> keywords,
+  int sceneIndex,
+  int sceneCount,
+) {
+  if (sceneIndex >= keywords.length) return const <String>[];
+  final bool isLast = sceneIndex == sceneCount - 1;
+  if (isLast && keywords.length > sceneCount) {
+    return keywords.sublist(sceneIndex);
+  }
+  return <String>[keywords[sceneIndex]];
+}
+
 class _PlayRecapPageState extends State<PlayRecapPage> {
   /// 트레이에 놓이는 순서. 한 번 정하면 바뀌지 않아서, 자리에 놓았다가
   /// 되돌린 카드가 늘 같은 위치로 돌아옵니다.
@@ -207,12 +252,20 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
   bool _transcribing = false;
   bool _isSaving = false;
 
-  /// 아이가 말한 내용. **null 이면 아직 말하기 전**입니다. 데모 모드에서는
-  /// 마이크를 누르는 순간 고정 문장이 들어옵니다.
-  String? _transcript;
+  /// 장면별 답변. 길이는 늘 **정답 순서 장면 수와 같습니다** - 이야기마다
+  /// 장면이 4~5장으로 다를 수 있어 길이를 박아 두지 않고 [_enterRetell]
+  /// 에서 그때그때 만듭니다. `null` = 아직 그 장면을 말하지 않았습니다.
+  List<_SceneAnswer?> _answers = const <_SceneAnswer?>[];
 
-  /// STT 원문(서버가 교정하기 전). 완료 제출의 `sttRawText` 로 되올립니다.
-  String? _sttRawText;
+  /// 지금 답하는 장면. **뒤로 가는 길은 없습니다** - 막히면 [_skipScene] 로
+  /// 빠져나갑니다.
+  int _sceneIndex = 0;
+
+  /// 지금 장면에서 STT 가 연속으로 실패한 횟수. 2번 연속 실패하면
+  /// [_skipScene] 를 쓸 수 있습니다 - 마이크가 계속 안 되는 아이가 활동에
+  /// 갇히지 않게 하는 탈출구입니다. 장면을 넘어가거나 그 장면이 성공하면
+  /// 0으로 돌아갑니다.
+  int _sceneFailCount = 0;
 
   /// 말풍선에 띄우는 한 줄 안내. 재녹음·재시도처럼 **아이가 그 자리에서
   /// 풀 수 있는** 상황을 화면 전체 에러로 바꾸지 않기 위한 자리입니다.
@@ -234,9 +287,23 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
   /// 끕니다 — 화면을 나간 뒤 `setState` 가 불리면 위젯 테스트가 죽습니다.
   Timer? _saveTimer;
 
-  static const String _demoTranscript =
-      '며느리가 방귀를 참다가 시아버지 갓을 날려서 쫓겨났어요. '
-      '그런데 방귀로 배를 우수수 떨어뜨려서 마을 사람들이 고마워했어요.';
+  /// 데모 모드 전용 고정 문장. **장면 수만큼 쪼갭니다** - 한 덩어리를 계속
+  /// 보여 주면 장면마다 다른 말을 하는 척도 안 나고, 재녹음해도 늘 같은
+  /// 전체 줄거리만 반복됩니다.
+  ///
+  /// 장면이 이 목록보다 많으면(콘텐츠가 늘어난 경우) **순환시키지 않고
+  /// 마지막 문장을 그대로 재사용**합니다. 순환시키면 뒷장면에 앞장면
+  /// 문장이 다시 붙어서 "어라, 아까 그 말인데?" 하고 아이가 헷갈릴 수
+  /// 있습니다 - 이야기가 끝나가는 느낌은 마지막 문장을 밀어 쓰는 쪽이 낫습니다.
+  static const List<String> _demoTranscripts = <String>[
+    '며느리가 방귀를 참다가 시무룩하게 서 있었어요.',
+    '방귀 때문에 시아버지 갓이 날아가서 화가 났어요.',
+    '며느리가 방귀로 배나무의 배를 우수수 떨어뜨렸어요.',
+    '마을 사람들이 배를 얻고 며느리에게 고마워했어요.',
+  ];
+
+  String _demoTextFor(int sceneIndex) =>
+      _demoTranscripts[math.min(sceneIndex, _demoTranscripts.length - 1)];
 
   @override
   void initState() {
@@ -434,6 +501,15 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
       _selectedCardId = null;
       _showRetryHint = false;
       _hint = null;
+      // 장면 수는 이야기마다 다릅니다(4~5장) - 길이를 박지 않고 정답 순서
+      // 카드 수에서 그대로 파생시킵니다.
+      _answers = List<_SceneAnswer?>.filled(
+        _orderedCards.length,
+        null,
+        growable: false,
+      );
+      _sceneIndex = 0;
+      _sceneFailCount = 0;
     });
     // 마이크를 대신 눌러 주지 않습니다. 아이가 직접 누르는 게 "내 차례"의
     // 신호이고, 자동으로 켜면 "말하기 전" 상태가 한순간만 존재합니다. (PRD F-04)
@@ -445,10 +521,22 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
     if (_transcribing || _isSaving) return;
     final PlayRepository? repository = widget.repository;
     if (repository == null) {
-      // 데모 모드 - 녹음도 STT 도 없이 고정 문장을 보여 줍니다.
+      // 데모 모드 - 녹음도 STT 도 없이 고정 문장을 보여 줍니다. **시작하는
+      // 순간**(눌러서 듣는 상태로 바뀌는 순간) 곧바로 채웁니다 - 이미 답한
+      // 장면이면 이 시작이 곧 재녹음이라, 덮어써서 새로 받습니다.
       setState(() {
-        _isListening = !_isListening;
-        _transcript ??= _demoTranscript;
+        final bool startingNow = !_isListening;
+        _isListening = startingNow;
+        if (startingNow) {
+          final String text = _demoTextFor(_sceneIndex);
+          _answers[_sceneIndex] = _SceneAnswer(
+            text: text,
+            usedKeywords: matchedKeywords(
+              text,
+              _keywordsForScene(_keywords, _sceneIndex, _answers.length),
+            ),
+          );
+        }
       });
       return;
     }
@@ -493,8 +581,17 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
       if (!mounted) return;
       setState(() {
         _transcribing = false;
-        _transcript = transcription.text;
-        _sttRawText = transcription.rawText;
+        _sceneFailCount = 0;
+        // 재녹음이면 그 장면의 이전 답과 체크를 덮어씁니다 - 합집합하지
+        // 않습니다. 장면끼리는 서로 영향을 주지 않습니다.
+        _answers[_sceneIndex] = _SceneAnswer(
+          text: transcription.text,
+          rawText: transcription.rawText,
+          usedKeywords: matchedKeywords(
+            transcription.text,
+            _keywordsForScene(_keywords, _sceneIndex, _answers.length),
+          ),
+        );
         _hint = null;
       });
     } on Failure catch (error) {
@@ -503,15 +600,46 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
       // 말풍선으로만 안내한 뒤 그 자리에서 다시 녹음하게 둡니다.
       setState(() {
         _transcribing = false;
+        _sceneFailCount++;
         _hint = _voiceRetryHint(error) ?? error.message;
       });
     } on Object {
       if (!mounted) return;
       setState(() {
         _transcribing = false;
+        _sceneFailCount++;
         _hint = RecapStrings.micFailed;
       });
     }
+  }
+
+  /// 이 장면에서 STT 가 2번 연속 실패했을 때만 켜집니다.
+  bool get _canSkipScene =>
+      _sceneFailCount >= 2 && _answers[_sceneIndex] == null;
+
+  /// 다음 장면으로. **이전 장면으로 돌아가는 길은 없습니다** - 이번 범위 밖입니다.
+  void _nextScene() {
+    if (_answers[_sceneIndex] == null) return;
+    setState(() {
+      _sceneIndex++;
+      _isListening = false;
+      _sceneFailCount = 0;
+      _hint = null;
+    });
+  }
+
+  /// 마이크가 계속 안 되는 아이를 위한 탈출구. 이 장면은 `null` 로 남습니다.
+  /// 마지막 장면이면 넘어갈 다음 장면이 없으니 곧바로 완료를 시도합니다.
+  void _skipScene() {
+    if (!_canSkipScene) return;
+    final bool isLast = _sceneIndex == _answers.length - 1;
+    setState(() {
+      _sceneFailCount = 0;
+      _hint = null;
+      _isListening = false;
+      if (!isLast) _sceneIndex++;
+    });
+    if (isLast) unawaited(_completeActivity());
   }
 
   /// 마이크 옆 안내로 처리할 실패인지. (`play_view.dart` 와 같은 표)
@@ -528,8 +656,21 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
   }
 
   /// 완료. **이 한 번의 호출로 세션 완료·별가루·아이템 해금이 끝납니다.**
+  /// `/retelling` 은 여기서 **정확히 한 번**만 불립니다 - 장면마다 부르지
+  /// 않고, 말한 장면을 다 모아 한 번에 보냅니다.
   Future<void> _completeActivity() async {
     if (_isSaving) return;
+    // 말한 장면만 순서대로 모읍니다. 건너뛴(=null) 장면은 빠집니다.
+    final List<_SceneAnswer> spoken = <_SceneAnswer>[
+      for (final _SceneAnswer? answer in _answers)
+        if (answer != null) answer,
+    ];
+    // 답이 하나도 없으면(전부 건너뛴 경우 포함) 보낼 것이 없습니다.
+    if (spoken.isEmpty) {
+      setState(() => _hint = RecapStrings.sttEmpty);
+      return;
+    }
+
     final PlayRepository? repository = widget.repository;
     if (repository == null) {
       setState(() {
@@ -547,12 +688,22 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
       return;
     }
 
-    final String text = _transcript?.trim() ?? '';
-    // 빈 텍스트는 서버가 400 으로 막습니다. 그 전에 아이에게 말을 겁니다.
-    if (text.isEmpty) {
-      setState(() => _hint = RecapStrings.sttEmpty);
-      return;
-    }
+    final String text = spoken
+        .map((_SceneAnswer answer) => answer.text)
+        .join(' ')
+        .trim();
+    // 원문이 하나라도 있으면 같은 방식으로 이어 붙이고, 전부 없으면(데모
+    // 등) sttRawText 자체를 보내지 않습니다.
+    final bool hasRawText = spoken.any(
+      (_SceneAnswer answer) => answer.rawText != null,
+    );
+    final String? sttRawText = hasRawText
+        ? spoken
+              .map((_SceneAnswer answer) => answer.rawText ?? answer.text)
+              .join(' ')
+              .trim()
+        : null;
+
     setState(() {
       _isListening = false;
       _isSaving = true;
@@ -562,7 +713,7 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
       final PlayRetellingResult result = await repository.submitRetelling(
         widget.sessionId,
         text: text,
-        sttRawText: _sttRawText,
+        sttRawText: sttRawText,
       );
       if (!mounted) return;
       setState(() {
@@ -693,9 +844,13 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
         isTranscribing: _transcribing,
         isSaving: _isSaving,
         hint: _hint,
-        transcript: _transcript,
+        answers: _answers,
+        sceneIndex: _sceneIndex,
+        canSkip: _canSkipScene,
         onMic: () => unawaited(_toggleListening()),
+        onNextScene: _nextScene,
         onComplete: () => unawaited(_completeActivity()),
+        onSkip: _skipScene,
       ),
       _RecapStep.completed => _CompletedStep(
         key: const ValueKey<String>('completed'),
@@ -1666,9 +1821,13 @@ class _RetellStep extends StatelessWidget {
     required this.isTranscribing,
     required this.isSaving,
     required this.hint,
-    required this.transcript,
+    required this.answers,
+    required this.sceneIndex,
+    required this.canSkip,
     required this.onMic,
+    required this.onNextScene,
     required this.onComplete,
+    required this.onSkip,
     super.key,
   });
 
@@ -1685,10 +1844,25 @@ class _RetellStep extends StatelessWidget {
   /// 다시 녹음·다시 저장처럼 **아이가 그 자리에서 풀 수 있는** 안내.
   final String? hint;
 
-  /// 아이가 말한 내용. `null` 이면 아직 말하기 전입니다.
-  final String? transcript;
+  /// 장면별 답변. 길이는 [cards] 와 같습니다. `null` = 아직 그 장면을
+  /// 말하지 않았습니다.
+  final List<_SceneAnswer?> answers;
+
+  /// 지금 답하는 장면. [_SceneStrip] 에서 테두리로 구분해 줍니다.
+  final int sceneIndex;
+
+  /// 지금 장면에서 STT 가 2번 연속 실패해 건너뛸 수 있는 상태인지.
+  final bool canSkip;
   final VoidCallback onMic;
+
+  /// 지금 장면 답을 확정하고 다음 장면으로. 마지막 장면이 아닐 때만 씁니다.
+  final VoidCallback onNextScene;
+
+  /// 마지막 장면까지 다 답했을 때 - 여기서만 `/retelling` 을 부릅니다.
   final VoidCallback onComplete;
+
+  /// 마이크가 계속 안 되는 아이를 위한 탈출구.
+  final VoidCallback onSkip;
 
   /// 장면 **그림**(카드 테와 낱말 띠를 뺀 순수 그림) 한 장의 세로 하한.
   /// 예산을 짤 때 이걸 먼저 확보하고, 남은 높이를 받아쓰기 줄 수로 환산합니다.
@@ -1715,10 +1889,12 @@ class _RetellStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 말하기를 한 번이라도 마쳤는지는 **받아쓴 글자**로 판별합니다. 녹음
-    // 시간이나 마이크 상태에서 파생시키면, 0초에 멈춘 아이의 화면에서 띠가
-    // 접히고 완료 버튼이 죽습니다.
-    final bool hasSpoken = transcript != null;
+    // 말하기를 한 번이라도 마쳤는지는 **이 장면의 받아쓴 글자**로 판별합니다.
+    // 녹음 시간이나 마이크 상태에서 파생시키면, 0초에 멈춘 아이의 화면에서
+    // 띠가 접히고 다음/완료 버튼이 죽습니다.
+    final _SceneAnswer? currentAnswer = answers[sceneIndex];
+    final bool hasSpoken = currentAnswer != null;
+    final bool isLastScene = sceneIndex == answers.length - 1;
     final String message =
         hint ??
         (isListening
@@ -1802,11 +1978,12 @@ class _RetellStep extends StatelessWidget {
                         cardHeight: sceneImageHeight + cardChrome,
                         available: contentWidth,
                         arrowWidth: _arrowWidth,
+                        currentIndex: sceneIndex,
                       ),
                       const SizedBox(height: AppSpacing.md),
                       _TranscriptBubble(
                         metrics: metrics,
-                        text: transcript,
+                        text: currentAnswer?.text,
                         height: bubbleHeight,
                         padding: _bubblePadding,
                       ),
@@ -1826,18 +2003,32 @@ class _RetellStep extends StatelessWidget {
                 listening: isListening,
                 onTap: isSaving || isTranscribing ? null : onMic,
               );
-              // 말하기 전에는 완료 버튼을 내보내지 않습니다. 한 화면에서
+              // 말하기 전에는 다음/완료 버튼을 내보내지 않습니다. 한 화면에서
               // 아이가 고를 것을 하나로 줄이면 다음 행동이 분명해집니다.
-              final Widget? finish = transcript != null
+              // 마지막 장면이면 "다 했어", 아니면 "다음" - 같은 자리를 씁니다.
+              final Widget? finish = hasSpoken
                   ? KidPrimaryButton(
                       icon: AppIcons.done,
-                      label: isSaving
-                          ? RecapStrings.saving
-                          : RecapStrings.finish,
+                      label: isLastScene
+                          ? (isSaving
+                                ? RecapStrings.saving
+                                : RecapStrings.finish)
+                          : RecapStrings.next,
                       labelStyle: metrics.text(AppTypography.kidButton),
-                      onPressed: isSaving ? null : onComplete,
+                      onPressed: isSaving
+                          ? null
+                          : (isLastScene ? onComplete : onNextScene),
                     )
-                  : null;
+                  // 말하기 전인데 이 장면에서 STT 가 2번 연속 실패했으면
+                  // 같은 자리에 건너뛰기가 뜹니다 - 마이크에 갇히지 않게.
+                  : (canSkip
+                        ? KidSecondaryButton(
+                            icon: AppIcons.next,
+                            label: RecapStrings.skipScene,
+                            labelStyle: metrics.text(AppTypography.kidButton),
+                            onPressed: onSkip,
+                          )
+                        : null);
 
               // 마이크는 **늘 화면 한가운데**입니다. 완료 버튼이 나타났다고
               // 마이크가 옆으로 밀리면, 아이 손이 기억한 자리가 어긋납니다.
@@ -1906,6 +2097,7 @@ class _SceneStrip extends StatelessWidget {
     required this.cardHeight,
     required this.available,
     required this.arrowWidth,
+    required this.currentIndex,
   });
 
   final ScreenMetrics metrics;
@@ -1923,6 +2115,10 @@ class _SceneStrip extends StatelessWidget {
   final double available;
   final double arrowWidth;
 
+  /// 지금 답하는 장면. 이 카드만 테두리로 구분합니다 - 장면마다 따로
+  /// 녹음하니, 지금 어느 장면을 말할 차례인지 그림만으로도 보여야 합니다.
+  final int currentIndex;
+
   /// [index] 장면에 붙는 낱말. 없으면 `null`.
   ///
   /// 개수는 어긋날 수 있습니다 — 둘 다 **콘텐츠 오류이지 예외가 아닙니다.**
@@ -1930,13 +2126,12 @@ class _SceneStrip extends StatelessWidget {
   /// - 낱말이 많으면: 남는 낱말을 마지막 장면에 몰아 붙입니다. 조용히 버리면
   ///   어휘가 화면에서 사라진 걸 아무도 모르고, 새 줄을 만들면 이번에 없앤
   ///   "참고자료 칩 줄"이 그대로 돌아옵니다.
+  ///
+  /// 이 규칙은 [_keywordsForScene] 하나로 [_PlayRecapPageState] 의 낱말
+  /// 체크 판정과 같이 씁니다 - 갈라지면 화면과 판정이 어긋납니다.
   String? _keywordFor(int index) {
-    if (index >= keywords.length) return null;
-    final bool isLast = index == cards.length - 1;
-    if (isLast && keywords.length > cards.length) {
-      return keywords.sublist(index).join(' · ');
-    }
-    return keywords[index];
+    final List<String> words = _keywordsForScene(keywords, index, cards.length);
+    return words.isEmpty ? null : words.join(' · ');
   }
 
   @override
@@ -1992,6 +2187,16 @@ class _SceneStrip extends StatelessWidget {
                         color: AppColors.surface,
                         borderRadius: BorderRadius.circular(AppRadius.lg),
                         boxShadow: AppShadows.soft,
+                        // 지금 답하는 장면만 테두리로 구분합니다. 장면
+                        // 4장이 한 줄로 늘어선 배치는 다음 단계(디자이너)가
+                        // 채팅형으로 바꿀 때까지 그대로 둡니다 - 여기서는
+                        // "지금 어디를 말할 차례인지"만 알 수 있으면 됩니다.
+                        border: index == currentIndex
+                            ? Border.all(
+                                color: AppColors.brandBlueDeep,
+                                width: 3,
+                              )
+                            : null,
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(AppSpacing.xs),
