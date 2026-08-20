@@ -1754,6 +1754,12 @@ class _PlayPageState extends State<PlayPage> {
     VoidCallback? onComplete,
   }) async {
     final int token = ++_speechToken;
+    // 방금 토큰을 올렸으니 안내(_speakGuide)·카드(_playChoiceCard) 재생 루프의
+    // 리셋이 건너뛰어진다 - 그 몫을 여기서 대신 내린다. 어차피 바로 아래
+    // stop() 이 그 소리를 끊으므로 안내가 말하는 중이라는 표시는 이제 사실이
+    // 아니다. 안 내리면 박제되어 다음 턴 맞장구(_playFiller)가 물러난다.
+    _guideSpeaking = false;
+    _playingChoiceId = null;
     // 다시 듣기가 그대로 다시 틀 수 있게 적어 둡니다 - 글자·소리·실측 구간이
     // 한 묶음이라야 같은 목소리로 다시 들립니다.
     _lastSpoken = _SpokenMessage(
@@ -2215,6 +2221,19 @@ class _PlayPageState extends State<PlayPage> {
   /// 지금 나오고 있는 말과 예약된 다음 문장을 모두 끊습니다.
   void _stopSpeaking() {
     _speechToken++;
+    // 말하기 표시를 여기서 직접 내린다. 재생 루프의 finally 는
+    // `if (token == _speechToken)` 로 리셋을 막는데(새 재생이 세운 값을 옛
+    // 재생이 덮으면 안 되니까), 방금 토큰을 올렸으니 그 리셋이 건너뛰어진다 -
+    // 안 내리면 _speaking 이 true 로 박제되어 맞장구(_playFiller)가 그 뒤로
+    // 계속 무음이 된다(실사고: TTS 503 으로 자막이 타이머로 기어가는 동안
+    // 마이크를 눌러 끊으면 매 턴 재현됐다).
+    //
+    // _guideSpeaking(_speakGuide)과 _playingChoiceId(_playChoiceCard)도 같은
+    // 무늬다 - 재생 뒤의 리셋이 토큰 비교 뒤에 있어, 끊기면 건너뛰어진다.
+    // 셋 다 맞장구의 가드라 하나만 박제돼도 맞장구가 죽는다.
+    _speaking = false;
+    _guideSpeaking = false;
+    _playingChoiceId = null;
     _cancelTimingFollow();
     _questionTimer?.cancel();
     _listeningTimer?.cancel();
