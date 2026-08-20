@@ -1,0 +1,73 @@
+{
+  "engine": "gemini-2.5-flash-preview-tts",
+  "sceneVoices": {
+    "3": "Leda",
+    "5": "Puck",
+    "7": "Charon"
+  },
+  "sceneAlias": {
+    "9": 3
+  },
+  "items": [
+    {
+      "id": "f_c3_01",
+      "file": "f_c3_01.mp3",
+      "text": "음…… 그렇구나……",
+      "scene": 3,
+      "character": "며느리",
+      "engine": "gemini-2.5-flash-preview-tts",
+      "voice": "Leda",
+      "duration": 2.664
+    },
+    {
+      "id": "f_c3_02",
+      "file": "f_c3_02.mp3",
+      "text": "아…… 그랬구나……",
+      "scene": 3,
+      "character": "며느리",
+      "engine": "gemini-2.5-flash-preview-tts",
+      "voice": "Leda",
+      "duration": 2.904
+    },
+    {
+      "id": "f_c5_01",
+      "file": "f_c5_01.mp3",
+      "text": "허허…… 그렇구먼그래……",
+      "scene": 5,
+      "character": "시아버지",
+      "engine": "gemini-2.5-flash-preview-tts",
+      "voice": "Puck",
+      "duration": 3.312
+    },
+    {
+      "id": "f_c5_02",
+      "file": "f_c5_02.mp3",
+      "text": "오호…… 그런 말이구먼……",
+      "scene": 5,
+      "character": "시아버지",
+      "engine": "gemini-2.5-flash-preview-tts",
+      "voice": "Puck",
+      "duration": 4.032
+    },
+    {
+      "id": "f_c7_01",
+      "file": "f_c7_01.mp3",
+      "text": "허허…… 그런 말이구려……",
+      "scene": 7,
+      "character": "마을 이장님",
+      "engine": "gemini-2.5-flash-preview-tts",
+      "voice": "Charon",
+      "duration": 3.291
+    },
+    {
+      "id": "f_c7_02",
+      "file": "f_c7_02.mp3",
+      "text": "오호…… 그렇단 말이오……",
+      "scene": 7,
+      "character": "마을 이장님",
+      "engine": "gemini-2.5-flash-preview-tts",
+      "voice": "Charon",
+      "duration": 3.531
+    }
+  ]
+}
