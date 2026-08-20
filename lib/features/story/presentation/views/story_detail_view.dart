@@ -9,12 +9,14 @@ import '../../../../core/constants/app_icons.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/text/korean_wrap.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_shadows.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/app_canvas.dart';
 import '../../../../core/widgets/app_state_views.dart';
+import '../../../../core/widgets/completed_badge.dart';
 import '../../../../core/widgets/cosmic_backdrop.dart';
 import '../../../../core/widgets/kid_button.dart';
 import '../../../../core/widgets/kid_chips.dart';
@@ -22,6 +24,9 @@ import '../../../../core/widgets/screen_metrics.dart';
 import '../../../../core/widgets/skeleton_box.dart';
 import '../../../../core/widgets/speaker_button.dart';
 import '../../../../core/widgets/story_thumbnail.dart';
+import '../../../free_talk/domain/entities/free_talk.dart';
+import '../../../free_talk/domain/repositories/free_talk_repository.dart';
+import '../../../free_talk/presentation/widgets/free_talk_friends_card.dart';
 import '../../domain/entities/story_detail.dart';
 import '../../domain/usecases/get_story_detail_use_case.dart';
 import '../../domain/usecases/start_story_session_use_case.dart';
@@ -84,6 +89,9 @@ class StoryDetailPage extends StatelessWidget {
         getIt<GetStoryDetailUseCase>(),
         getIt<StartStorySessionUseCase>(),
         storyId: storyId,
+        // 완주한 이야기에만 뜨는 후속 자유 대화 진입점을 판별합니다.
+        // → [StoryDetailViewModel.canFreeTalk]
+        freeTalk: getIt<FreeTalkRepository>(),
       )..load(),
       child: const StoryDetailView(),
     );
@@ -126,6 +134,10 @@ class StoryDetailView extends StatelessWidget {
                           onStart: vm.isStarting
                               ? null
                               : () => _start(context, vm),
+                          // 완주한 이야기의 이 버튼은 "다시 듣기"입니다.
+                          // 하는 일은 같아도 아이에게는 다른 일이라, 이름이
+                          // 같으면 화면에서 어디까지 했는지 읽을 수 없습니다.
+                          completed: vm.isCompleted,
                         ),
                     ],
                   );
@@ -163,7 +175,7 @@ class StoryDetailView extends StatelessWidget {
         onAction: () => context.go(AppRoutes.stories),
       );
     }
-    return _Content(story: story, metrics: metrics);
+    return _Content(story: story, vm: vm, metrics: metrics);
   }
 
   Future<void> _start(BuildContext context, StoryDetailViewModel vm) async {
@@ -176,6 +188,29 @@ class StoryDetailView extends StatelessWidget {
     // (재생 화면 상단 진행바가 씁니다). → [AppRoutes.playOf]
     context.go(AppRoutes.playOf(sessionId, totalScenes: vm.story?.sceneCount));
   }
+
+  /// 친구 얼굴을 누르면 **그 친구와의 대화로 곧장** 갑니다.
+  ///
+  /// **완주 직후 완료 화면 말고 여기에도 문이 있어야 합니다.** 완료 화면은
+  /// 재생 라우트 아래 중첩이라 홈으로 나가는 순간 다시 못 옵니다. 그러면
+  /// 어제 완주한 이야기의 친구에게는 앱 안에 도달할 길이 아예 없습니다.
+  /// 자유 대화 자체는 세션과 무관하게 `storyId` 하나로 다시 열립니다.
+  ///
+  /// 인물 고르기 화면을 거치지 않습니다 — 얼굴을 누른 것이 곧 고른 것이라,
+  /// 다음 화면에서 또 고르라고 하면 같은 질문을 두 번 하는 셈입니다.
+  /// 고른 인물은 `extra` 로 실어 보냅니다(주소로 바로 들어오면 시작 응답이
+  /// 이름을 채웁니다). → `app_router.dart`
+  ///
+  /// push 가 아니라 `go` 입니다 — 이 화면 위에 대화를 쌓아 두면 대화가
+  /// 끝난 뒤 뒤로가기로 상세에 돌아와 "시작하기"를 눌러 세션이 새로 생깁니다.
+  static void _goFreeTalk(
+    BuildContext context,
+    String storyId,
+    FreeTalkCharacter character,
+  ) => context.go(
+    AppRoutes.freeTalkChatOf(storyId, character.characterId),
+    extra: character,
+  );
 }
 
 class _TopBar extends StatelessWidget {
@@ -252,9 +287,17 @@ double _coverWidthFor(BoxConstraints constraints, ScreenMetrics metrics) {
 
 /// 섹션2~5. 태블릿은 표지 | 글 2단, 폰은 세로 한 줄.
 class _Content extends StatelessWidget {
-  const _Content({required this.story, required this.metrics});
+  const _Content({
+    required this.story,
+    required this.vm,
+    required this.metrics,
+  });
 
   final StoryDetail story;
+
+  /// 완주 여부와 친구 목록을 읽습니다. 나머지 섹션은 [story] 만 봅니다.
+  final StoryDetailViewModel vm;
+
   final ScreenMetrics metrics;
 
   @override
@@ -279,9 +322,14 @@ class _Content extends StatelessWidget {
             // 접히는 곳 아래로 밀립니다. 홈 카드와 같은 16:9 로 자릅니다.
             // 표지는 주인공이 세로 가운데라 가운데 크롭이 안전합니다.
             // (`docs/COVER_ART_GUIDE.md`)
-            _Cover(story: story, aspectRatio: StoryThumbnail.wide),
+            _Cover(
+              story: story,
+              aspectRatio: StoryThumbnail.wide,
+              metrics: metrics,
+              completed: vm.isCompleted,
+            ),
             const SizedBox(height: AppSpacing.lg),
-            ..._sections(),
+            ..._sections(context),
           ],
         ),
       );
@@ -315,6 +363,8 @@ class _Content extends StatelessWidget {
                     child: _Cover(
                       story: story,
                       aspectRatio: StoryThumbnail.portrait,
+                      metrics: metrics,
+                      completed: vm.isCompleted,
                     ),
                   ),
                   const SizedBox(width: AppSpacing.xl),
@@ -327,7 +377,7 @@ class _Content extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         mainAxisSize: MainAxisSize.min,
-                        children: _sections(),
+                        children: _sections(context),
                       ),
                     ),
                   ),
@@ -340,8 +390,8 @@ class _Content extends StatelessWidget {
     );
   }
 
-  /// 섹션3~5. 2단이든 세로 한 줄이든 **읽는 순서는 같습니다.**
-  List<Widget> _sections() {
+  /// 섹션3~6. 2단이든 세로 한 줄이든 **읽는 순서는 같습니다.**
+  List<Widget> _sections(BuildContext context) {
     // 2단에서는 카드 사이를 lg 로 좁힙니다 — 오른쪽 칼럼의 세로는 화면
     // 높이로 묶여 있어서 sectionGap(64) 을 주면 역할 카드가 그만큼 스크롤
     // 밖으로 밀립니다. 폰은 어차피 세로로 흐르니 원래 간격을 유지합니다.
@@ -374,6 +424,20 @@ class _Content extends StatelessWidget {
         SizedBox(height: cardGap),
         RoleCard(role: story.role, storyId: story.storyId, metrics: metrics),
       ],
+      // 섹션6 — 친구들. **완주한 이야기에만** 뜹니다.
+      //
+      // 화면의 맨 끝입니다. 이 화면의 차례는 "무슨 이야기인지 → 내가 맡을
+      // 역할 → 시작"이고, 친구는 그 차례를 끝낸 아이에게만 있는 뒷이야기라
+      // 중간에 끼면 처음 듣는 아이의 읽는 길을 끊습니다.
+      if (vm.canFreeTalk) ...<Widget>[
+        SizedBox(height: cardGap),
+        FreeTalkFriendsCard(
+          characters: vm.freeTalkCharacters,
+          metrics: metrics,
+          onTapCharacter: (FreeTalkCharacter character) =>
+              StoryDetailView._goFreeTalk(context, story.storyId, character),
+        ),
+      ],
     ];
   }
 }
@@ -385,10 +449,19 @@ class _Content extends StatelessWidget {
 /// 표지가 없는 이야기는 [StoryThumbnail] 이 제목 표지 → 코드 표지 순으로
 /// 대신 그립니다 — 같은 비율의 면이라 레이아웃은 그대로입니다.
 class _Cover extends StatelessWidget {
-  const _Cover({required this.story, required this.aspectRatio});
+  const _Cover({
+    required this.story,
+    required this.aspectRatio,
+    required this.metrics,
+    required this.completed,
+  });
 
   final StoryDetail story;
   final double aspectRatio;
+  final ScreenMetrics metrics;
+
+  /// 완주한 이야기면 표지 위에 도장을 찍습니다. → [CompletedBadge]
+  final bool completed;
 
   @override
   Widget build(BuildContext context) {
@@ -401,11 +474,23 @@ class _Cover extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppRadius.xl),
-        child: StoryThumbnail(
-          image: story.coverImage,
-          fallbackIcon: AppIcons.stories,
-          aspectRatio: aspectRatio,
-          title: story.title,
+        child: Stack(
+          children: <Widget>[
+            StoryThumbnail(
+              image: story.coverImage,
+              fallbackIcon: AppIcons.stories,
+              aspectRatio: aspectRatio,
+              title: story.title,
+            ),
+            // 왼쪽 위입니다. 표지 원본은 주인공이 가운데~아래에 서 있어서
+            // (`docs/COVER_ART_GUIDE.md`) 위쪽 구석이 가장 안 가립니다.
+            if (completed)
+              Positioned(
+                top: AppSpacing.md,
+                left: AppSpacing.md,
+                child: CompletedBadge(metrics: metrics),
+              ),
+          ],
         ),
       ),
     );
@@ -460,7 +545,8 @@ class _SummaryLine extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: AppSizes.bubbleMaxWidth),
         child: Text(
-          text,
+          text.keepWords,
+          semanticsLabel: text,
           // 18sp 인 kidLabel 을 굵기만 풀어 씁니다. 3인칭 설명문이라
           // 라벨 굵기(700)면 제목처럼 보이고, 아이 본문 크기(24sp)면
           // 도입문과 구분이 안 됩니다.
@@ -505,7 +591,8 @@ class _IntroCard extends StatelessWidget {
                 maxWidth: AppSizes.bubbleMaxWidth,
               ),
               child: Text(
-                story.introText,
+                story.introText.keepWords,
+                semanticsLabel: story.introText,
                 style: metrics.text(AppTypography.kidBody),
               ),
             ),
@@ -540,12 +627,25 @@ class _IntroCard extends StatelessWidget {
   }
 }
 
-/// 하단 고정 액션 바. 스크롤해도 "시작하기"가 사라지지 않습니다.
+/// 하단 고정 액션 바. 스크롤해도 이 버튼이 사라지지 않습니다.
+///
+/// **버튼은 언제나 하나입니다.** 후속 자유 대화 진입점을 여기 나란히 놓아
+/// 봤지만, 아이 화면의 하단 바는 "지금 할 일"을 가리키는 자리라 둘이 서면
+/// 무엇이 이 화면의 일인지 흐려집니다. 친구는 본문의 카드로 올라갔습니다.
+/// → [FreeTalkFriendsCard]
+///
+/// [completed] 면 이름만 "다시 듣기"로 바뀝니다. 하는 일(세션 시작)은 같아도
+/// 아이에게는 다른 일이고, 글자가 같으면 화면에서 어디까지 했는지 못 읽습니다.
 class _StartBar extends StatelessWidget {
-  const _StartBar({required this.metrics, required this.onStart});
+  const _StartBar({
+    required this.metrics,
+    required this.onStart,
+    required this.completed,
+  });
 
   final ScreenMetrics metrics;
   final VoidCallback? onStart;
+  final bool completed;
 
   @override
   Widget build(BuildContext context) {
@@ -564,8 +664,10 @@ class _StartBar extends StatelessWidget {
           boxShadow: AppShadows.lift,
         ),
         child: KidPrimaryButton(
-          icon: AppIcons.play,
-          label: StoryDetailStrings.start,
+          icon: completed ? AppIcons.replay : AppIcons.play,
+          label: completed
+              ? StoryDetailStrings.restart
+              : StoryDetailStrings.start,
           labelStyle: metrics.text(AppTypography.kidButton),
           expand: true,
           onPressed: onStart,

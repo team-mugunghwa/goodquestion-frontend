@@ -19,6 +19,7 @@ import 'package:goodquestion/features/mypage/domain/entities/my_page_summary.dar
 import 'package:goodquestion/features/mypage/domain/repositories/my_page_repository.dart';
 import 'package:goodquestion/features/mypage/domain/usecases/my_page_use_cases.dart';
 import 'package:provider/provider.dart';
+import '../../../../support/kid_text.dart';
 
 class _StubRepository implements HomeRepository {
   _StubRepository({this.summary, this.error});
@@ -141,7 +142,7 @@ void main() {
     // 히어로에 올린 한 편은 아래 목록에서 빠집니다 — 같은 표지가 한 화면에
     // 두 번 나오면 아이는 서로 다른 이야기로 셉니다.
     expect(find.text('의좋은 형제'), findsOneWidget);
-    expect(find.text('해와 달이 된 오누이'), findsOneWidget);
+    expect(findKidText('해와 달이 된 오누이'), findsOneWidget);
   });
 
   /// 이 화면이 한 번 반려된 이유가 **표지 잘림**이었습니다. 원칙은
@@ -225,7 +226,7 @@ void main() {
       find.text(HomeStrings.recommendedTitle, findRichText: true),
       findsOneWidget,
     );
-    expect(find.text('해와 달이 된 오누이'), findsOneWidget);
+    expect(findKidText('해와 달이 된 오누이'), findsOneWidget);
     expect(find.text(NavStrings.planet), findsOneWidget);
     expect(find.byType(AppBottomNav), findsOneWidget);
   });

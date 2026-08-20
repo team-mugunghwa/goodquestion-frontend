@@ -19,6 +19,7 @@ import '../../../../core/widgets/skeleton_box.dart';
 import '../../../../core/widgets/story_card.dart';
 import '../../domain/entities/story_summary.dart';
 import '../../domain/entities/story_topic.dart';
+import '../../domain/usecases/get_completed_stories_use_case.dart';
 import '../../domain/usecases/get_story_catalog_use_case.dart';
 import '../viewmodels/story_list_view_model.dart';
 import '../widgets/topic_chip_bar.dart';
@@ -30,6 +31,12 @@ import '../widgets/topic_chip_bar.dart';
 /// **고르기까지만.** 시작 결정(세션 생성)은 상세의 몫입니다. 카드에 난이도·
 /// 요약·이어하기 배지를 얹고 싶어지는데, 그 순간 카드가 "읽는 것"이 되고
 /// 아이는 그림으로 고르지 못합니다. (PRD F-03)
+///
+/// **완주 도장은 예외입니다.** 저 셋은 고를 때 견주어 보는 *정보*라 얹는
+/// 만큼 카드가 읽을거리가 되지만, 완주 도장은 아이가 *한 일*이고 표지 위에
+/// 찍힌 그림 한 조각입니다 — 견주지 않고 눈에만 걸립니다. 여덟 편이 다
+/// 비슷해 보이는 목록에서 "어디까지 했지"를 알 길이 여기 말고는 없습니다.
+/// → `CompletedBadge`
 ///
 /// | 섹션 | 내용 |
 /// |---|---|
@@ -43,8 +50,11 @@ class StoryListPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<StoryListViewModel>(
-      create: (_) =>
-          StoryListViewModel(getIt<GetStoryCatalogUseCase>())..load(),
+      create: (_) => StoryListViewModel(
+        getIt<GetStoryCatalogUseCase>(),
+        // 완주한 이야기에 도장을 찍습니다. → [StoryListViewModel.isCompleted]
+        completedStories: getIt<GetCompletedStoriesUseCase>(),
+      )..load(),
       child: const StoryListView(),
     );
   }
@@ -161,6 +171,7 @@ class StoryListView extends StatelessWidget {
       stories: vm.visibleStories,
       topics: vm.topics,
       metrics: metrics,
+      completed: vm.isCompleted,
     );
   }
 }
@@ -211,11 +222,15 @@ class _Grid extends StatelessWidget {
     required this.stories,
     required this.topics,
     required this.metrics,
+    required this.completed,
   });
 
   final List<StorySummary> stories;
   final List<StoryTopic> topics;
   final ScreenMetrics metrics;
+
+  /// 이미 끝까지 들은 이야기인지. 카드가 표지 위에 도장을 찍습니다.
+  final bool Function(StorySummary story) completed;
 
   @override
   Widget build(BuildContext context) {
@@ -252,6 +267,7 @@ class _Grid extends StatelessWidget {
           // 제목이 잘려 "방귀 뀌는 ..." 이 되면 아이가 이야기를 못 알아봅니다.
           // 두 줄까지 허용해 전체 제목을 보여 줍니다.
           titleMaxLines: 2,
+          completed: completed(story),
           // go 가 아니라 push — 목록을 스택에 남겨야 상세에서 돌아왔을 때
           // 고른 필터가 그대로입니다.
           onTap: () => context.push(AppRoutes.storyDetailOf(story.storyId)),
