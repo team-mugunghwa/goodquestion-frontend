@@ -23,8 +23,6 @@ import '../../../../core/widgets/kid_speech_bubble.dart';
 import '../../../../core/widgets/screen_metrics.dart';
 import '../../../story/domain/repositories/story_repository.dart';
 import '../../data/dialogue_word_capture.dart';
-import '../../data/filler_catalog.dart';
-import '../../data/filler_selector.dart';
 import '../../data/stt_choice_catalog.dart';
 import '../../data/stt_choice_selector.dart';
 import '../../domain/entities/play_session.dart';
@@ -189,27 +187,6 @@ class _PlayPageState extends State<PlayPage> {
   /// 안내 음성이 나오는 중. 이때는 마이크를 못 누르게 막습니다 - 안 막으면
   /// 캐릭터 목소리가 그대로 녹음됩니다.
   bool _guideSpeaking = false;
-
-  /// 이번에 어떤 맞장구를 낼지 고르는 규칙. 세션 내내 들고 있어야 "같은 것이
-  /// 연달아 나오지 않는다"가 성립합니다 - 턴마다 새로 만들면 매번 백이
-  /// 초기화돼 그냥 무작위가 됩니다. → [_playFiller]
-  final FillerSelector _fillerSelector = FillerSelector();
-
-  /// 지금 나가고 있는 맞장구의 재생. 진짜 대사를 내보내기 전에 이것이 끝나기를
-  /// 잠깐 기다립니다. → [_awaitFillerTail]
-  Future<void>? _fillerPlayback;
-
-  /// 맞장구를 내기 전 뜸을 재는 타이머와 그 문. → [_waitFillerLeadIn]
-  ///
-  /// Future.delayed 로 두면 화면을 떠난 뒤에도 살아 있어 나간 화면의 맞장구가
-  /// 뒤늦게 터집니다(테스트도 "Timer is still pending" 으로 죽습니다).
-  /// [dispose] 에서 끊을 수 있게 들고 있습니다.
-  Timer? _fillerLeadInTimer;
-  Completer<void>? _fillerLeadInGate;
-
-  /// 맞장구가 **소리를 내기 시작했는가.** 뜸만 재고 있는 상태와 가릅니다 —
-  /// 아직 안 났으면 접어도 잃는 것이 없습니다. → [_awaitFillerTail]
-  bool _fillerStarted = false;
 
   /// 아이의 확인을 기다리는 변환 결과. null 이 아니면 확인 화면이 뜨고
   /// 마이크는 잠깁니다.
@@ -401,7 +378,6 @@ class _PlayPageState extends State<PlayPage> {
     _wordNoticeTimer?.cancel();
     _confirmTimer?.cancel();
     _recapHandoffTimer?.cancel();
-    _cancelFillerLeadIn();
     // 화면을 떠나면 기다리던 발화 루프들도 풀어 줍니다 - 안 풀면 취소된
     // 타이머·닫힌 문 앞에서 영영 매달린 채로 남습니다.
     _releaseSpeechWait();
@@ -562,15 +538,6 @@ class _PlayPageState extends State<PlayPage> {
   /// 걸리므로, 말풍선 한 줄만 띄우던 시절의 2.5초로는 버튼을 보기도 전에
   /// 화면이 바뀝니다. 반대로 더 늘리면 버튼을 누를 줄 아는 아이가 기다립니다.
   static const Duration _recapHandoffDelay = Duration(milliseconds: 4500);
-
-  /// 맞장구가 끝나기를 기다려 주는 상한. → [_awaitFillerTail]
-  ///
-  /// 실측한 맞장구 길이가 2.6~4.03초라 넉넉히 덮습니다(뜸 1초는 별도).
-  /// 상한이 있어야 하는
-  /// 이유는 [DeviceStoryAudioPlayer] 의 감시 타이머가 45초여서, 재생 완료
-  /// 신호가 영영 안 오면 대사가 45초 늦기 때문입니다. 맞장구를 다시 뽑아
-  /// 길이가 늘면 **이 값도 같이 올려야** 말끝이 잘립니다.
-  static const Duration _fillerTailLimit = Duration(seconds: 5);
 
   /// 말하기 후 활동으로 넘어가기 전, 전환 화면을 띄웁니다.
   ///
@@ -764,21 +731,6 @@ class _PlayPageState extends State<PlayPage> {
       _lastChildText = normalized;
       _lastSttLowConfidence = lowConfidence;
     });
-    // 아이 말이 서버로 떠나는 순간 맞장구를 던집니다. 여기서부터 캐릭터
-    // 목소리가 나올 때까지 6초 남짓이 비는데(분석 LLM + 캐릭터 LLM + TTS 왕복),
-    // 화면은 thinking 으로 바뀌지만 **소리가 없어서** 아이는 못 들은 줄 압니다.
-    //
-    // **절대 await 하지 않습니다** - 기다리면 맞장구 길이만큼 서버 왕복이
-    // 통째로 밀려서, 지연을 덮으려다 지연을 더합니다.
-    //
-    // 이 자리인 이유: 위 조기 반환(빈 문자열·중복 제출)을 이미 통과했고,
-    // 확인 화면([_confirmTranscription])과 선택지 카드([_chooseSentence])가
-    // **둘 다 이 함수를 지나가서** 한 자리로 두 경로가 덮입니다. STT 가
-    // 끝나는 자리에 걸면 안 됩니다 - 거기서 아이가 "다시 말할래요"를 누르면
-    // [_retryTranscription] 이 곧바로 마이크를 켜서 맞장구가 그대로 녹음됩니다.
-    final Future<void> filler = _playFiller();
-    _fillerPlayback = filler;
-    unawaited(filler);
     try {
       final PlayTurnResult result = await _submitUtteranceWithRetry(
         text: normalized,
@@ -798,10 +750,6 @@ class _PlayPageState extends State<PlayPage> {
         _fixedDialogue = false;
         _pendingWord = null;
       });
-      // thinking 표시를 먼저 풀고 나서 기다립니다 - 순서를 바꾸면 맞장구가
-      // 끝나기를 기다리는 동안 화면이 굳어 보입니다.
-      await _awaitFillerTail();
-      if (!mounted) return;
       await _presentTurnResult(result);
     } on Failure catch (error) {
       if (!mounted) return;
@@ -1166,117 +1114,6 @@ class _PlayPageState extends State<PlayPage> {
     }
     if (!mounted || token != _speechToken) return;
     setState(() => _guideSpeaking = false);
-  }
-
-  /// 아이 말이 서버로 떠난 직후 캐릭터가 내는 짧은 맞장구("음, 그렇구나…").
-  ///
-  /// [_speakGuide] 와 같은 모양이되 **자막을 띄우지 않습니다.** 아이가 무슨
-  /// 말을 했는지 모르는 상태에서 트는 소리라 말풍선에 올릴 내용이 아니고,
-  /// 올리면 곧 도착할 진짜 대사가 그 자리를 다시 덮어써 말풍선이 두 번
-  /// 바뀝니다. 그래서 [_characterSentences]·[_characterReply] 를 건드리지
-  /// 않고, [_followTimings] 도 부르지 않습니다 - 부르면 [_timingSub] 를
-  /// 갈아치워 **진짜 대사의 자막이 첫 문장에 멈춥니다**
-  /// ([_stopFollowingTimings] 에 적힌 실제 사고입니다).
-  ///
-  /// [_speechToken] 을 **올리지 않습니다.** 올리면 재생을 기다리던 대사 루프가
-  /// 스스로 빠져나갑니다([_togglePause] 에 같은 주의가 적혀 있습니다). 재생이
-  /// 끝난 뒤에 하는 일이 없어서 토큰으로 취소를 확인할 것도 없습니다 -
-  /// 겹침은 [_playCharacterMessage] 가 `stop()` 으로 직접 끊어 막습니다.
-  ///
-  /// [_guideSpeaking] 도 세우지 않습니다. 이 구간은 마이크가 이미
-  /// [_submittingUtterance] 로 잠겨 있고([_toggleVoiceAnswer]), 굳이 세우면
-  /// 재생이 실패했을 때 마이크가 잠긴 채 남습니다.
-  /// 아이 말이 끝나고 맞장구를 내기 전에 두는 뜸.
-  ///
-  /// 곧바로 튀어나오면 **듣고 반응한 것이 아니라 버튼이 눌린 것처럼** 들립니다.
-  /// 사람도 한 박자 쉬고 "음, 그렇구나" 합니다. 이 사이에 아이가 다시 말하려
-  /// 하거나 화면을 떠나면 아래 재확인에서 걸러집니다.
-  static const Duration _fillerLeadIn = Duration(seconds: 1);
-
-  /// 뜸이 다 차기를 기다립니다. [_cancelFillerLeadIn] 이 끊으면 곧바로 풀립니다 -
-  /// 풀어 주지 않으면 화면을 떠난 뒤 이 await 가 영영 매달립니다.
-  Future<void> _waitFillerLeadIn() {
-    _cancelFillerLeadIn();
-    _fillerStarted = false;
-    final Completer<void> gate = Completer<void>();
-    _fillerLeadInGate = gate;
-    _fillerLeadInTimer = Timer(_fillerLeadIn, () {
-      _fillerLeadInTimer = null;
-      _fillerLeadInGate = null;
-      if (!gate.isCompleted) gate.complete();
-    });
-    return gate.future;
-  }
-
-  /// 뜸을 끊습니다. 기다리던 쪽은 풀어 주되, 그쪽의 `mounted` 재확인이
-  /// 재생을 막습니다 - 여기서 재생 여부까지 판단하지 않습니다.
-  void _cancelFillerLeadIn() {
-    _fillerLeadInTimer?.cancel();
-    _fillerLeadInTimer = null;
-    final Completer<void>? gate = _fillerLeadInGate;
-    _fillerLeadInGate = null;
-    if (gate != null && !gate.isCompleted) gate.complete();
-  }
-
-  Future<void> _playFiller() async {
-    // 멈춰 둔 상태에서 새 소리가 튀어나오면 안 됩니다.
-    if (_phase == DialoguePhase.paused) return;
-    // 다른 캐릭터 목소리가 아직 나오는 중이면 겹칩니다. 특히 3회 실패 안내
-    // ("이 중에서 골라 볼래?")는 아이가 카드를 탭하는 순간에도 재생 중이라,
-    // 여기서 막지 않으면 캐릭터가 자기 말을 자르고 혼잣말을 두 번 합니다.
-    if (_guideSpeaking || _speaking || _playingChoiceId != null) return;
-
-    final DialogueFiller? filler = _fillerSelector.next(
-      _snapshot?.currentScene?.sceneOrder,
-    );
-    // 음성이 준비된 장면(3·5·7·9)이 아니면 아무 소리도 내지 않습니다 - 없는
-    // 장면에서 남의 캐릭터 목소리를 트느니 예전처럼 조용히 기다리는 편이 낫습니다.
-    if (filler == null) return;
-
-    await _waitFillerLeadIn();
-
-    // 뜸을 두는 사이에 상황이 바뀔 수 있습니다. 화면을 떠났거나, 아이가 다시
-    // 말하려고 마이크를 켰거나, 진짜 대사가 벌써 도착해 재생 중일 수 있습니다.
-    // **그때 맞장구가 뒤늦게 터지면 말이 겹칩니다.** 위에서 한 번 봤더라도
-    // 여기서 다시 봅니다 - 1초 전의 판단이라 그대로 믿을 수 없습니다.
-    if (!mounted) return;
-    if (_phase == DialoguePhase.paused) return;
-    if (_guideSpeaking || _speaking || _playingChoiceId != null) return;
-    if (_isListening || _recordingVoice) return;
-
-    _fillerStarted = true;
-    try {
-      await _audioPlayer.playUrl(filler.assetPath);
-    } on Object {
-      // 소리가 안 나도 대화는 그대로 이어집니다 - 맞장구는 덤입니다.
-    }
-  }
-
-  /// 진짜 대사를 내보내기 전에 맞장구가 끝나기를 잠깐 기다립니다.
-  ///
-  /// **자르지 않는 이유**: [StoryAudioPlayer.stop] 에는 페이드가 없어서
-  /// "음, 그렇—" 하고 뚝 끊깁니다. 아이는 그것을 고장으로 읽습니다. 맞장구가
-  /// 1.5초 남짓이라(실측 1.01~1.44초) 서버 왕복 6초가 훨씬 길고, 그래서
-  /// **대부분의 턴에서 여기서 기다리는 시간은 실제로 0입니다.** 마무리 턴은
-  /// [_applyCharacterState] 의 표정 전이(1200ms)가 어차피 먼저 흐릅니다.
-  ///
-  /// **상한을 두는 이유**: [DeviceStoryAudioPlayer] 의 감시 타이머가 45초라,
-  /// 플랫폼이 재생 완료를 안 쏘면 대사가 45초 늦습니다. 상한을 넘기면 그냥
-  /// 진행하고, 남은 소리는 [_playCharacterMessage] 의 `stop()` 이 정리합니다.
-  /// 일시정지 중이라 재생이 멈춰 있을 때도 이 상한이 풀어 줍니다.
-  Future<void> _awaitFillerTail() async {
-    final Future<void>? playback = _fillerPlayback;
-    // 들고 있던 것을 비웁니다 - 이 턴에서 상한에 걸려 버려두고 간 재생을
-    // 다음 턴이 다시 기다리면 안 됩니다.
-    _fillerPlayback = null;
-    if (playback == null) return;
-    // 아직 뜸만 재고 있었다면 접습니다. 맞장구는 **기다림을 덮으려고** 내는
-    // 소리인데, 기다릴 것이 없어진 뒤에 내면 진짜 대사를 그만큼 밀어냅니다.
-    if (!_fillerStarted) {
-      _cancelFillerLeadIn();
-      return;
-    }
-    await playback.timeout(_fillerTailLimit, onTimeout: () {});
   }
 
   /// 카드 문장을 소리로 들려줍니다. 초1~3 은 읽기가 느려서, 소리가 없으면

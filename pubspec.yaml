@@ -124,12 +124,6 @@ flutter:
     # → docs/이야기_전개_가이드.md 3.4
     - assets/audio/choices/
 
-    # 아이 말이 서버로 떠난 직후 캐릭터가 내는 짧은 맞장구(mp3 16개, 70KB).
-    # 캐릭터가 대답하기까지 6초 남짓 비는 동안 그 앞머리를 덮습니다.
-    # choices/ 와 같은 방식입니다 - manifest.json 이 문장 원본이고, 코드가
-    # 읽는 것은 그걸 옮겨 둔 Dart 상수 테이블입니다(런타임 파싱 안 함).
-    - assets/audio/fillers/
-
     # 화면별 더미 JSON. 서버가 나오면 화면 코드가 아니라 이 폴더가 사라집니다.
     # → docs/DECISIONS.md 015
     - assets/dummy/
