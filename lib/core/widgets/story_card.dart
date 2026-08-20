@@ -3,10 +3,13 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../constants/app_icons.dart';
+import '../constants/app_strings.dart';
+import '../text/korean_wrap.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_shadows.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
+import 'completed_badge.dart';
 import 'kid_chips.dart';
 import 'press_scale.dart';
 import 'screen_metrics.dart';
@@ -43,6 +46,7 @@ class StoryCard extends StatelessWidget {
     required this.metrics,
     required this.onTap,
     this.titleMaxLines = 2,
+    this.completed = false,
   });
 
   final String title;
@@ -53,6 +57,13 @@ class StoryCard extends StatelessWidget {
   final VoidCallback onTap;
 
   final int titleMaxLines;
+
+  /// 이미 끝까지 들은 이야기. 표지 위에 도장을 찍습니다.
+  ///
+  /// **카드에 정보를 더 얹는 게 아닙니다** — 시간·주제 칩 옆에 글자를
+  /// 보태면 카드가 읽을 거리가 되지만, 이건 그림 위의 도장이라 아이가
+  /// 훑는 동안 눈에만 걸립니다. → [CompletedBadge]
+  final bool completed;
 
   /// 표지 아래 글자 블록(제목 + 칩 + 안쪽 여백)의 높이.
   ///
@@ -137,7 +148,12 @@ class StoryCard extends StatelessWidget {
           // Flexible 이면 그 몇 px 때문에 넘치는 대신 줄 수가 줄어듭니다.
           Flexible(
             child: Text(
-              title,
+              // 두 줄까지 접히는 자리라 "방귀 뀌는 며 / 느리" 가 나옵니다.
+              // 어절로 묶어 띄어쓰기에서만 줄이 바뀌게 합니다.
+              title.keepWords,
+              // 읽어 주는 기계에는 이음 문자가 없는 원문을 줍니다 — 글자마다
+              // 끼어 있으면 한 자씩 또박또박 읽습니다.
+              semanticsLabel: title,
               maxLines: titleMaxLines,
               overflow: TextOverflow.ellipsis,
               // 화면 제목 크기(kidTitle 32)를 카드 안에 그대로 쓰면 좁은 셀에서
@@ -182,7 +198,12 @@ class StoryCard extends StatelessWidget {
     return PressScale(
       onTap: onTap,
       borderRadius: AppRadius.xl,
-      semanticLabel: '$title · $estimatedMinutes분 · $topicLabel',
+      semanticLabel: <String>[
+        title,
+        '$estimatedMinutes분',
+        topicLabel,
+        if (completed) StoryDetailStrings.completedBadge,
+      ].join(' · '),
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
@@ -197,7 +218,20 @@ class StoryCard extends StatelessWidget {
             // 표지는 **비율로만** 높이가 정해집니다. 예전처럼 남는 높이를
             // 먹게 두면 제목이 한 줄인 카드의 표지만 길어져서, 한 줄에
             // 늘어놓은 카드들의 그림 높이가 제각각이 됩니다.
-            thumbnail,
+            // 도장은 표지 **위**입니다. 글자 블록에 넣으면 카드마다 높이가
+            // 달라져 고정 높이 그리드가 넘칩니다.
+            completed
+                ? Stack(
+                    children: <Widget>[
+                      thumbnail,
+                      Positioned(
+                        top: AppSpacing.sm,
+                        left: AppSpacing.sm,
+                        child: CompletedBadge(metrics: metrics, compact: true),
+                      ),
+                    ],
+                  )
+                : thumbnail,
             // 대신 글자 블록이 남는 높이를 가져갑니다. 제목이 짧으면 아래가
             // 비고, 길어도 셀 밖으로 넘치지 않습니다.
             Flexible(child: body),

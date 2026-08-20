@@ -33,6 +33,10 @@ class StoryRepositoryMock implements StoryRepository {
   /// 목업이라 세션을 만들지 않고 **이야기 id 에서 유도한 가짜 sessionId** 를
   /// 돌려줍니다. 매번 다른 값을 주면 새로고침마다 세션이 늘어나 보여서,
   /// 재현 가능하게 고정했습니다. 서버가 붙으면 `POST /sessions` 응답으로 바뀝니다.
+  /// 더미에는 완주 기록이 없습니다. 도장을 하나도 안 찍습니다.
+  @override
+  Future<Set<String>> getCompletedStoryIds() async => const <String>{};
+
   @override
   Future<String> startSession(String storyId) async {
     await Future<void>.delayed(latency);

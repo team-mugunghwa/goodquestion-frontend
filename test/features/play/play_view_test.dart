@@ -2534,6 +2534,9 @@ class _RestartStorySpyRepository implements StoryRepository {
       throw UnimplementedError();
 
   @override
+  Future<Set<String>> getCompletedStoryIds() async => const <String>{};
+
+  @override
   Future<String> startSession(String storyId) async {
     startedStoryIds.add(storyId);
     final Failure? error = failure;

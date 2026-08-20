@@ -218,6 +218,9 @@ class _PreviewStoryRepository implements StoryRepository {
       throw UnimplementedError();
 
   @override
+  Future<Set<String>> getCompletedStoryIds() async => const <String>{};
+
+  @override
   Future<String> startSession(String storyId) async {
     await Future<void>.delayed(const Duration(milliseconds: 900));
     _issued++;

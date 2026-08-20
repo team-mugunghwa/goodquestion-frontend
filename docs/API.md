@@ -487,6 +487,7 @@ _(도메인별 코드는 기능 추가 시 여기에 계속 채웁니다)_
 | GET | `/api/stories` | `?topic=` (선택) | `StoryListResponse` | ✅ |
 | GET | `/api/stories/{storyId}` | — | `StoryDetailResponse` | ✅ |
 | GET | `/api/stories/{storyId}/scenes` | — | `List<SceneContentResponse>` | ✅ |
+| GET | `/api/children/{childId}/stories/completed` | — | `{ storyIds: [] }` | ⏳ |
 | GET | `/api/topics` | — | `List<TopicResponse>` | ✅ |
 
 ### 2.7 세션
@@ -531,11 +532,11 @@ _(도메인별 코드는 기능 추가 시 여기에 계속 채웁니다)_
 
 | 메서드 | 경로 | 요청 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
-| GET | `/api/children/{childId}/stories/{storyId}/free-talk/characters` | — | `List<FreeTalkCharacterResponse>` | ⛔ |
-| POST | `/api/children/{childId}/free-talk` | `{ storyId, characterId }` | `FreeTalkStartResponse` | ⛔ |
-| POST | `/api/free-talk/{freeTalkId}/messages` | `{ text }` + `Idempotency-Key` | `FreeTalkTurnResponse` | ⛔ |
-| POST | `/api/free-talk/{freeTalkId}/end` | — | `{ closing }` | ⛔ |
-| POST | `/api/free-talk/{freeTalkId}/leave` | — | — (204) | ⛔ |
+| GET | `/api/children/{childId}/stories/{storyId}/free-talk/characters` | — | `List<FreeTalkCharacterResponse>` | ✅ |
+| POST | `/api/children/{childId}/free-talk` | `{ storyId, characterId }` | `FreeTalkStartResponse` | ✅ |
+| POST | `/api/free-talk/{freeTalkId}/messages` | `{ text }` + `Idempotency-Key` | `FreeTalkTurnResponse` | ✅ |
+| POST | `/api/free-talk/{freeTalkId}/end` | — | `{ closing }` | ✅ |
+| POST | `/api/free-talk/{freeTalkId}/leave` | — | — (204) | ✅ |
 
 - `FreeTalkCharacterResponse` — `characterId` · `name` · `characterKey` ·
   `thumbnailUrl`(선택) · `lastTalkedAt`(선택)
@@ -558,6 +559,18 @@ _(도메인별 코드는 기능 추가 시 여기에 계속 채웁니다)_
   대조해 확인했습니다(2026-08-19). 한쪽만 고치면 기능이 통째로 죽는 자리라,
   바꿀 때는 이 표와 `free_talk_remote_data_source.dart`, 백엔드 컨트롤러를
   같이 고칩니다.
+
+- `GET /api/children/{childId}/stories/completed` — **이 아이가 완주한 이야기의 id 들.**
+  목록 카드의 "끝냈어" 도장이 이걸로 그려집니다. 완주한 게 없으면 빈 배열(404 아님).
+  서버 판정 근거는 COMPLETED 세션이고 **후속 자유 대화의 진입 조건과 같습니다** —
+  갈리면 도장은 찍혔는데 친구는 못 만나는 화면이 나옵니다.
+  → 백엔드 PR [#125](https://github.com/team-mugunghwa/goodquestion-backend/pull/125)
+  (머지·배포 전까지 프런트는 리포트 제목 매칭으로 폴백합니다.
+  → `GetCompletedStoriesUseCase`)
+
+  이야기 **한 편**의 완주 여부만 알면 될 때는 자유 대화 인물 목록(미완주면 404)으로도
+  압니다 — 이야기 상세가 그 방법을 씁니다. 그쪽은 이야기당 한 번씩 물어야 해서
+  목록에는 못 씁니다.
 
 ### 2.11 리포트
 
