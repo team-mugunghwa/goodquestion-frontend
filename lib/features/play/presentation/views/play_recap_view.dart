@@ -76,7 +76,9 @@ class RecapSceneCard {
 ///
 /// 2단계(다시 말하기)는 **채팅 로그**라 스크롤이 정상입니다. 대신
 /// [_RetellStep.sceneImageMinHeight] 로 장면 그림이 작아지는 것만 막습니다 —
-/// 아이는 말하는 내내 그 그림을 봅니다.
+/// 아이는 말하는 내내 그 그림을 봅니다. 로그에 그만큼도 안 남는 짧은 화면
+/// (폰 가로)에서는 하한을 낮춥니다. 반쯤 잘린 큰 그림보다 통째로 보이는 작은
+/// 그림이 낫습니다. ([_RetellStepState._sceneImageHeight])
 class PlayRecapPage extends StatefulWidget {
   const PlayRecapPage({
     required this.sessionId,
@@ -1887,10 +1889,30 @@ class _RetellStep extends StatefulWidget {
   ///
   /// 채팅 로그는 스크롤을 허용하므로 예전처럼 세로 예산을 역산할 필요는
   /// 없지만, **그림이 작아지는 것만은 막습니다** — 아이는 말하는 내내 이
-  /// 그림을 봅니다. 폰 가로(844×390)처럼 세로가 짧은 화면에서는 하한을
-  /// 지키고 로그가 스크롤되는 쪽을 고릅니다.
+  /// 그림을 봅니다.
+  ///
+  /// 단 이 하한은 **로그가 그만큼 보일 때**의 이야기입니다. 짧은 화면에서는
+  /// [_RetellStepState._sceneImageHeight] 가 하한을 낮춥니다.
   static const double sceneImageMinHeight = 140;
   static const double sceneImageMaxHeight = 280;
+
+  /// 그림 아래 낱말 띠가 카드 안에서 쓰는 세로 — 칩 한 줄과 카드 안쪽 여백.
+  ///
+  /// 짧은 화면에서 그림 하한을 정할 때 **먼저 떼어 둡니다.** 재 보면 칩 한 줄이
+  /// 64(글자 1.3배면 70)이라 여유를 조금 얹은 값입니다. 그림이 이 몫까지
+  /// 먹으면, 로그가 맨 아래로 내려왔을 때 잘리는 건 늘 그림 윗부분입니다.
+  static const double keywordBandHeight = 72;
+
+  /// 로그 맨 아래 여백. 마지막 말풍선이 하단 조작에 달라붙지 않게 합니다.
+  ///
+  /// 낱말 띠와 같이 **짧은 화면의 그림 몫에서 빠집니다** — 로그가 맨 아래로
+  /// 내려와도 이만큼은 늘 카드 아래에 남아 있어서, 그림이 쓸 수 있는 높이가
+  /// 아닙니다.
+  static const double logBottomPadding = AppSpacing.md;
+
+  /// 로그가 아무리 짧아도 그림은 여기까지만 줄입니다. 이보다 작아지면
+  /// 장면을 알아볼 수 없어서, 차라리 로그를 스크롤하는 쪽이 낫습니다.
+  static const double sceneImageMinHeightShort = 56;
 
   /// 로그가 보이는 높이 중 그림에 내주는 몫. 나머지는 말풍선 몫입니다.
   ///
@@ -1991,15 +2013,32 @@ class _RetellStepState extends State<_RetellStep> {
   }
 
   /// 장면 그림 세로. 로그가 보이는 높이와 폭 양쪽에서 깎은 뒤 하한을 지킵니다.
+  ///
+  /// **하한은 화면에 따라 달라집니다.** 140 은 로그가 넉넉히 보일 때의 값이고,
+  /// 폰 가로(844×390)처럼 로그에 150 밖에 안 남는 화면에서는 그 하한을 지키는
+  /// 순간 그림+낱말(≈204)이 보이는 높이를 넘겨서, 로그가 맨 아래로 내려오면
+  /// **그림 윗부분이 잘려 나갑니다.** 아이는 그 그림을 보며 말해야 하므로,
+  /// 그림이 작아지더라도 한 장이 통째로 보이는 쪽을 고릅니다.
+  ///
+  /// 낱말 띠([_RetellStep.keywordBandHeight])와 로그 아래 여백
+  /// ([_RetellStep.logBottomPadding])을 먼저 떼고 남는 만큼이 새 하한입니다.
+  /// 로그가 넉넉한 화면에서는 이 값이 140 보다 커서 아무것도 달라지지 않습니다
+  /// — 1280×720·1024×768·390×844 의 그림 크기는 그대로입니다.
   double _sceneImageHeight(double viewportHeight, double contentWidth) {
     final double byHeight = viewportHeight * _RetellStep.sceneImageShare;
     final double byWidth = contentWidth * 9 / 16;
+    final double minHeight = math.max(
+      _RetellStep.sceneImageMinHeightShort,
+      math.min(
+        _RetellStep.sceneImageMinHeight,
+        viewportHeight -
+            _RetellStep.keywordBandHeight -
+            _RetellStep.logBottomPadding,
+      ),
+    );
     return math
         .min(byHeight, byWidth)
-        .clamp(
-          _RetellStep.sceneImageMinHeight,
-          _RetellStep.sceneImageMaxHeight,
-        );
+        .clamp(minHeight, _RetellStep.sceneImageMaxHeight);
   }
 
   /// 방금 붙은 말풍선을 스크린리더가 따라 읽게 합니다.
@@ -2114,12 +2153,15 @@ class _RetellStepState extends State<_RetellStep> {
                 AppBreakpoints.maxContentWidth,
               );
               return SingleChildScrollView(
+                // 테스트가 "보이는 로그"의 사각형을 집어야 합니다 - 그림이
+                // 이 안에 통째로 들어오는지가 짧은 화면의 유일한 판정입니다.
+                key: const ValueKey<String>('recap-log'),
                 controller: _log,
                 padding: EdgeInsets.fromLTRB(
                   widget.metrics.screenPadding,
                   0,
                   widget.metrics.screenPadding,
-                  AppSpacing.md,
+                  _RetellStep.logBottomPadding,
                 ),
                 child: ContentContainer(
                   child: Column(
@@ -2257,12 +2299,27 @@ class _SceneStage extends StatelessWidget {
   /// 화면이 좁으면 이쪽이 먼저 걸립니다.
   final double maxWidth;
 
+  /// 카드 폭의 아래 끝 — **그림이 하한(140)일 때의 폭**입니다.
+  ///
+  /// 카드 폭은 보통 그림이 정합니다. 그런데 세로가 짧은 화면에서 그림이 하한
+  /// 아래로 작아지면, 그 폭에 낱말까지 눌려서 글자가 잘립니다. 낱말은 이
+  /// 활동의 과제라 잘리면 안 됩니다 — 작아지는 건 그림뿐이고, 카드는 낱말이
+  /// 읽히는 폭을 지킵니다.
+  static const double minCardWidth = _RetellStep.sceneImageMinHeight * 16 / 9;
+
   @override
   Widget build(BuildContext context) {
+    // 그림은 언제나 16:9 입니다. 카드가 낱말 때문에 넓어져도 그림까지 늘어나면
+    // 장면이 좌우로 잘려 나갑니다.
+    final double imageWidth =
+        math.min(maxWidth, imageHeight * 16 / 9) - AppSpacing.xs * 2;
     return Center(
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxWidth: math.min(maxWidth, imageHeight * 16 / 9),
+          maxWidth: math.min(
+            maxWidth,
+            math.max(imageHeight * 16 / 9, minCardWidth),
+          ),
         ),
         child: Container(
           padding: const EdgeInsets.all(AppSpacing.xs),
@@ -2277,6 +2334,7 @@ class _SceneStage extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               SizedBox(
+                width: imageWidth,
                 height: imageHeight,
                 child: Stack(
                   children: <Widget>[

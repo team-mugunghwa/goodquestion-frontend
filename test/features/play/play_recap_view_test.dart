@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:goodquestion/core/constants/app_strings.dart';
 import 'package:goodquestion/core/theme/app_spacing.dart';
@@ -556,6 +557,66 @@ void main() {
     expect(mic.top, greaterThanOrEqualTo(0));
     expect(mic.bottom, lessThanOrEqualTo(720));
   });
+
+  /// 로그 하나가 통째로 잘리는지 보려면 **보이는 사각형**이 필요합니다.
+  Finder logView() => find.byKey(const ValueKey<String>('recap-log'));
+
+  /// 폰 가로는 로그에 150 밖에 안 남습니다. 그 안에 그림 한 장이 통째로
+  /// 들어가야 합니다 — 아이는 말하는 내내 그 그림을 봅니다. 하한 140 을
+  /// 고집하면 그림+낱말이 204 가 되고, 로그가 맨 아래로 내려온 순간
+  /// **그림 윗부분이 스크롤 위로 잘려 나갑니다.**
+  for (final double scale in <double>[1, 1.3]) {
+    testWidgets('폰 가로 844x390 — 로그 맨 아래에서 장면 그림이 잘리지 않는다 (글자 $scale배)', (
+      WidgetTester tester,
+    ) async {
+      await pumpRecap(tester, size: const Size(844, 390), textScale: scale);
+      await goToRetell(tester);
+      // 다음 장면으로 넘어가면 로그가 스스로 맨 아래로 내려갑니다. 그림이
+      // 잘리던 바로 그 순간입니다.
+      await speakAndNext(tester);
+      await tester.pumpAndSettle();
+
+      final Rect log = tester.getRect(logView());
+      final Rect image = tester.getRect(
+        find
+            .descendant(
+              of: sceneImage(2, _defaults.sceneCards[1].title),
+              matching: find.byType(Image),
+            )
+            .first,
+      );
+      expect(
+        image.top,
+        greaterThanOrEqualTo(log.top),
+        reason: '장면 그림 윗부분이 스크롤 위로 잘렸습니다',
+      );
+      expect(
+        image.bottom,
+        lessThanOrEqualTo(log.bottom),
+        reason: '장면 그림 아랫부분이 로그 밖으로 나갔습니다',
+      );
+
+      // 낱말 칩은 그림 **아래에 붙어** 함께 보입니다. 그림만 끼워 넣으려고
+      // 낱말을 밀어내면 아이가 무슨 말을 써야 하는지 알 수 없습니다.
+      final Rect chip = tester.getRect(anyKeywordChip('쫓겨나다').first);
+      expect(chip.top, greaterThanOrEqualTo(image.bottom));
+      expect(chip.bottom, lessThanOrEqualTo(log.bottom));
+
+      // 그림이 작아졌다고 카드 폭까지 줄면 낱말이 그 폭에 눌려 글자가
+      // 잘립니다. 낱말은 이 활동의 과제라 **끝까지 읽혀야** 합니다.
+      final RenderParagraph word = tester.renderObject(find.text('쫓겨나다'));
+      expect(
+        word.size.width,
+        greaterThanOrEqualTo(word.getMaxIntrinsicWidth(double.infinity) - .5),
+        reason: '낱말이 카드 폭에 눌려 잘렸습니다',
+      );
+
+      // 그림이 줄어도 하단 조작은 늘 화면 안 같은 자리입니다.
+      final Rect mic = tester.getRect(micButton());
+      expect(mic.height, AppSizes.mic);
+      expect(mic.bottom, lessThanOrEqualTo(390));
+    });
+  }
 
   testWidgets('폰 세로 — 말하기 전과 후에 마이크 자리가 같다', (WidgetTester tester) async {
     // 폰 세로는 마이크 아래에 다음 버튼을 쌓습니다. 버튼이 생겼다고 마이크가
