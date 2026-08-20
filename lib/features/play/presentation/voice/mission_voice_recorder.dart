@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:record/record.dart';
 
+import 'web_sample_rate.dart';
+
 /// 한 번의 녹음 상한(초).
 ///
 /// 서버 멀티파트 한도가 10MB인데 웹은 48kHz로 녹음해서(초당 약 94KB) 109초부터
@@ -33,18 +35,32 @@ class DeviceMissionVoiceRecorder implements MissionVoiceRecorder {
   /// 충분하고 파일도 작습니다)를 그대로 받습니다.
   ///
   /// 웹은 다릅니다 - `record_web`은 `getUserMedia`로 마이크를 연 뒤 **브라우저가
-  /// 실제로 협상한 샘플레이트**(`MediaTrackSettings.sampleRate`, 보통 오디오
-  /// 하드웨어 기본값인 48000)로 `AudioContext`를 다시 엽니다. 16000을
-  /// 요청해도 이 값으로 조용히 바뀌는데, 그 바뀐 값을 앱 코드가 조회할
-  /// 공개 API가 없습니다 - 그래서 실제로 녹음되는 값과 우리가 WAV 헤더에
-  /// 적어 보내는 값(16000)이 어긋나, 서버는 48kHz 데이터를 16kHz로 잘못
-  /// 해석해 알아듣지 못했습니다(재생 속도가 3배 느려진 것과 같은 효과).
+  /// 실제로 협상한 샘플레이트**(`MediaTrackSettings.sampleRate`)로
+  /// `AudioContext`를 다시 엽니다. 16000을 요청해도 이 값으로 조용히
+  /// 바뀌는데, 그 바뀐 값을 앱 코드가 조회할 공개 API가 record 패키지에
+  /// 없습니다 - 그래서 실제로 녹음되는 값과 우리가 WAV 헤더에 적어 보내는
+  /// 값이 어긋나면, 서버는 잘못된 샘플레이트로 데이터를 해석해 알아듣지
+  /// 못합니다(예: 48kHz 데이터를 16kHz로 해석하면 재생 속도가 3배 느려진
+  /// 것과 같은 효과).
   ///
-  /// 고쳐야 할 근본 원인은 "브라우저가 다른 값을 쓴다"가 아니라 "우리가 그
-  /// 값을 안 따라간다"입니다. 처음부터 브라우저 쪽에 맞는 값을 요청하면
-  /// 위 불일치 자체가 생기지 않습니다.
-  static const int _sampleRate = kIsWeb ? 48000 : 16000;
+  /// 한때는 "웹은 보통 48000"이라 보고 하드코딩했지만, **협상값은 기기마다
+  /// 다릅니다** - 데스크톱은 대개 48000이지만 안드로이드 폰은 44100인 기기가
+  /// 흔해서, 그 폰들에서 48000 헤더가 44100 데이터에 붙어 서버가 못
+  /// 알아들었습니다. 고쳐야 할 근본 원인은 "브라우저가 다른 값을 쓴다"가
+  /// 아니라 "우리가 그 값을 안 따라간다"이므로, `web_sample_rate.dart`로
+  /// `getUserMedia`가 실제로 연 트랙에서 협상값을 직접 읽어 따라갑니다
+  /// (`start()`에서 한 번 정해 [_sampleRate]에 담습니다. 못 읽으면 이전
+  /// 동작과 같은 48000으로 되돌아갑니다).
+  int _sampleRate = defaultSampleRateFor(isWeb: kIsWeb);
   static const int _channels = 1;
+
+  /// [_sampleRate]의 시작값. 네이티브는 늘 이 값 그대로 쓰이고, 웹은 이
+  /// 값을 임시로 쓰다가 `start()`에서 실제 협상값을 읽으면 덮어씁니다(읽기에
+  /// 실패하면 이 값 그대로 남습니다). `@visibleForTesting`으로 열어 플랫폼별
+  /// 기본값을 실제 녹음기 인스턴스 없이도 확인할 수 있게 합니다.
+  @visibleForTesting
+  static int defaultSampleRateFor({required bool isWeb}) =>
+      isWeb ? 48000 : 16000;
 
   AudioRecorder? _recorder;
   AudioRecorder get _deviceRecorder => _recorder ??= AudioRecorder();
@@ -55,10 +71,18 @@ class DeviceMissionVoiceRecorder implements MissionVoiceRecorder {
   @override
   Future<bool> start() async {
     if (!await _deviceRecorder.hasPermission()) return false;
+    if (kIsWeb) {
+      // 권한은 위에서 이미 허용됐으므로 팝업 없이 조용히 실제 협상값을 읽는다.
+      // 못 읽으면(예외·null) 예전과 같은 48000으로 되돌아간다.
+      _sampleRate = await readWebMicSampleRate() ?? 48000;
+    }
+    if (kDebugMode) {
+      debugPrint('MissionVoiceRecorder: sampleRate=$_sampleRate (web=$kIsWeb)');
+    }
     _audioBytes = BytesBuilder(copy: false);
     _streamDone = Completer<void>();
     final Stream<Uint8List> stream = await _deviceRecorder.startStream(
-      const RecordConfig(
+      RecordConfig(
         encoder: AudioEncoder.pcm16bits,
         sampleRate: _sampleRate,
         numChannels: _channels,
@@ -93,7 +117,7 @@ class DeviceMissionVoiceRecorder implements MissionVoiceRecorder {
     // 인식에 보태는 것 없이 환각 확률과 업로드 크기만 키운다.
     final Uint8List? gated = trimSilence(pcm, _sampleRate);
     if (gated == null) return null;
-    return _withWavHeader(gated);
+    return withWavHeader(gated, sampleRate: _sampleRate, channels: _channels);
   }
 
   /// 앞뒤 무음을 걷어내고, 걷어낸 뒤 목소리가 사실상 없으면 null.
@@ -177,7 +201,18 @@ class DeviceMissionVoiceRecorder implements MissionVoiceRecorder {
     _audioBytes = null;
   }
 
-  Uint8List _withWavHeader(Uint8List pcm) {
+  /// [pcm]에 WAV(RIFF) 헤더를 붙인다.
+  ///
+  /// [sampleRate]는 반드시 [pcm]을 실제로 녹음할 때 쓴 값과 같아야 한다 -
+  /// 여기서 어긋나면 서버가 잘못된 속도로 데이터를 해석한다(이번에 고친
+  /// 버그가 정확히 이 어긋남이었다). `@visibleForTesting`으로 열어 헤더
+  /// 바이트가 실제로 넘긴 값과 일치하는지 테스트에서 직접 확인한다.
+  @visibleForTesting
+  static Uint8List withWavHeader(
+    Uint8List pcm, {
+    required int sampleRate,
+    required int channels,
+  }) {
     const int bitsPerSample = 16;
     const int headerSize = 44;
     final ByteData header = ByteData(headerSize);
@@ -193,14 +228,14 @@ class DeviceMissionVoiceRecorder implements MissionVoiceRecorder {
     ascii(12, 'fmt ');
     header.setUint32(16, 16, Endian.little);
     header.setUint16(20, 1, Endian.little);
-    header.setUint16(22, _channels, Endian.little);
-    header.setUint32(24, _sampleRate, Endian.little);
+    header.setUint16(22, channels, Endian.little);
+    header.setUint32(24, sampleRate, Endian.little);
     header.setUint32(
       28,
-      _sampleRate * _channels * bitsPerSample ~/ 8,
+      sampleRate * channels * bitsPerSample ~/ 8,
       Endian.little,
     );
-    header.setUint16(32, _channels * bitsPerSample ~/ 8, Endian.little);
+    header.setUint16(32, channels * bitsPerSample ~/ 8, Endian.little);
     header.setUint16(34, bitsPerSample, Endian.little);
     ascii(36, 'data');
     header.setUint32(40, pcm.length, Endian.little);
