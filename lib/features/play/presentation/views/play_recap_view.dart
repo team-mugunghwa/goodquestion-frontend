@@ -6,10 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_assets.dart';
+import '../../../../core/constants/app_breakpoints.dart';
 import '../../../../core/constants/app_icons.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/error/failure.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/text/korean_keyword_match.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_shadows.dart';
@@ -20,6 +22,7 @@ import '../../../../core/widgets/app_state_views.dart';
 import '../../../../core/widgets/kid_button.dart';
 import '../../../../core/widgets/kid_speech_bubble.dart';
 import '../../../../core/widgets/press_scale.dart';
+import '../../../../core/widgets/responsive_layout.dart';
 import '../../../../core/widgets/screen_metrics.dart';
 import '../../../../core/widgets/story_cover.dart';
 import '../../domain/entities/play_session.dart';
@@ -66,12 +69,16 @@ class RecapSceneCard {
 /// 스크롤되고 **하단 조작은 늘 같은 자리**에 남습니다. 폰 가로(844×390)처럼
 /// 세로가 짧은 화면에서 "넓은 화면"으로 분류돼 무너지는 일이 없습니다.
 ///
-/// ## 세로 예산은 역산으로 짭니다
+/// ## 두 단계가 세로를 다르게 씁니다
 ///
-/// 1280×720에서 "장면 그림 + 받아쓰기 + 마이크 120 + 스크롤 없음"은 그냥
-/// 쌓아서는 성립하지 않습니다. 그래서 [_sceneImageMinHeight] 를 **먼저 보장**하고,
-/// 남은 높이를 받아쓰기 줄 수([_transcriptMinLines]~[_transcriptMaxLines])로
-/// 환산한 뒤, 그러고도 남는 높이를 다시 장면 그림에 돌려줍니다.
+/// 1단계(순서 맞추기)는 **한 화면 안에** 자리와 트레이를 다 담아야 해서 세로
+/// 예산을 역산합니다 — 카드를 끌어다 놓는 활동이라 스크롤이 곧 오조작입니다.
+///
+/// 2단계(다시 말하기)는 **채팅 로그**라 스크롤이 정상입니다. 대신
+/// [_RetellStep.sceneImageMinHeight] 로 장면 그림이 작아지는 것만 막습니다 —
+/// 아이는 말하는 내내 그 그림을 봅니다. 로그에 그만큼도 안 남는 짧은 화면
+/// (폰 가로)에서는 하한을 낮춥니다. 반쯤 잘린 큰 그림보다 통째로 보이는 작은
+/// 그림이 낫습니다. ([_RetellStepState._sceneImageHeight])
 class PlayRecapPage extends StatefulWidget {
   const PlayRecapPage({
     required this.sessionId,
@@ -176,6 +183,50 @@ class _RecapDragData {
   final int? fromSlot;
 }
 
+/// 장면 하나에 대한 아이의 답변.
+///
+/// 장면마다 따로 녹음하므로 발화·낱말 체크가 **장면 단위로 갈립니다** -
+/// 재녹음해도 다른 장면 답변은 건드리지 않고, 체크도 그 장면의 최신
+/// 텍스트로만 다시 계산합니다(이전 것과 합집합하지 않습니다).
+class _SceneAnswer {
+  const _SceneAnswer({
+    required this.text,
+    this.rawText,
+    this.usedKeywords = const <String>{},
+  });
+
+  /// 확정 텍스트. 데모 모드에서는 고정 문장, 서버 모드에서는 STT 교정 결과.
+  final String text;
+
+  /// STT 원문(서버가 교정하기 전). 없으면(데모 모드 등) `null`.
+  final String? rawText;
+
+  /// 이 장면 텍스트에서 실제로 매칭된 낱말.
+  final Set<String> usedKeywords;
+}
+
+/// [sceneIndex] 번째 장면에 붙는 낱말 목록입니다.
+///
+/// 낱말이 장면보다 적으면 남는 장면은 빈 목록(낱말 없음)이고, 많으면 남는
+/// 낱말을 **마지막 장면에 몰아 붙입니다.** 조용히 버리면 어휘가 화면에서
+/// 사라진 걸 아무도 모르고, 새 줄을 만들면 참고자료 칩 줄이 도로 생깁니다.
+///
+/// `_SceneStrip`(화면에 뭘 그릴지)과 `_PlayRecapPageState`(무엇을 매칭
+/// 판정에 쓸지) 양쪽이 **이 함수 하나**를 부릅니다. 규칙이 두 군데로
+/// 갈라지면 화면과 판정이 어긋납니다.
+List<String> _keywordsForScene(
+  List<String> keywords,
+  int sceneIndex,
+  int sceneCount,
+) {
+  if (sceneIndex >= keywords.length) return const <String>[];
+  final bool isLast = sceneIndex == sceneCount - 1;
+  if (isLast && keywords.length > sceneCount) {
+    return keywords.sublist(sceneIndex);
+  }
+  return <String>[keywords[sceneIndex]];
+}
+
 class _PlayRecapPageState extends State<PlayRecapPage> {
   /// 트레이에 놓이는 순서. 한 번 정하면 바뀌지 않아서, 자리에 놓았다가
   /// 되돌린 카드가 늘 같은 위치로 돌아옵니다.
@@ -207,12 +258,20 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
   bool _transcribing = false;
   bool _isSaving = false;
 
-  /// 아이가 말한 내용. **null 이면 아직 말하기 전**입니다. 데모 모드에서는
-  /// 마이크를 누르는 순간 고정 문장이 들어옵니다.
-  String? _transcript;
+  /// 장면별 답변. 길이는 늘 **정답 순서 장면 수와 같습니다** - 이야기마다
+  /// 장면이 4~5장으로 다를 수 있어 길이를 박아 두지 않고 [_enterRetell]
+  /// 에서 그때그때 만듭니다. `null` = 아직 그 장면을 말하지 않았습니다.
+  List<_SceneAnswer?> _answers = const <_SceneAnswer?>[];
 
-  /// STT 원문(서버가 교정하기 전). 완료 제출의 `sttRawText` 로 되올립니다.
-  String? _sttRawText;
+  /// 지금 답하는 장면. **뒤로 가는 길은 없습니다** - 막히면 [_skipScene] 로
+  /// 빠져나갑니다.
+  int _sceneIndex = 0;
+
+  /// 지금 장면에서 STT 가 연속으로 실패한 횟수. 2번 연속 실패하면
+  /// [_skipScene] 를 쓸 수 있습니다 - 마이크가 계속 안 되는 아이가 활동에
+  /// 갇히지 않게 하는 탈출구입니다. 장면을 넘어가거나 그 장면이 성공하면
+  /// 0으로 돌아갑니다.
+  int _sceneFailCount = 0;
 
   /// 말풍선에 띄우는 한 줄 안내. 재녹음·재시도처럼 **아이가 그 자리에서
   /// 풀 수 있는** 상황을 화면 전체 에러로 바꾸지 않기 위한 자리입니다.
@@ -234,9 +293,23 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
   /// 끕니다 — 화면을 나간 뒤 `setState` 가 불리면 위젯 테스트가 죽습니다.
   Timer? _saveTimer;
 
-  static const String _demoTranscript =
-      '며느리가 방귀를 참다가 시아버지 갓을 날려서 쫓겨났어요. '
-      '그런데 방귀로 배를 우수수 떨어뜨려서 마을 사람들이 고마워했어요.';
+  /// 데모 모드 전용 고정 문장. **장면 수만큼 쪼갭니다** - 한 덩어리를 계속
+  /// 보여 주면 장면마다 다른 말을 하는 척도 안 나고, 재녹음해도 늘 같은
+  /// 전체 줄거리만 반복됩니다.
+  ///
+  /// 장면이 이 목록보다 많으면(콘텐츠가 늘어난 경우) **순환시키지 않고
+  /// 마지막 문장을 그대로 재사용**합니다. 순환시키면 뒷장면에 앞장면
+  /// 문장이 다시 붙어서 "어라, 아까 그 말인데?" 하고 아이가 헷갈릴 수
+  /// 있습니다 - 이야기가 끝나가는 느낌은 마지막 문장을 밀어 쓰는 쪽이 낫습니다.
+  static const List<String> _demoTranscripts = <String>[
+    '며느리가 방귀를 참다가 시무룩하게 서 있었어요.',
+    '방귀 때문에 시아버지 갓이 날아가서 화가 났어요.',
+    '며느리가 방귀로 배나무의 배를 우수수 떨어뜨렸어요.',
+    '마을 사람들이 배를 얻고 며느리에게 고마워했어요.',
+  ];
+
+  String _demoTextFor(int sceneIndex) =>
+      _demoTranscripts[math.min(sceneIndex, _demoTranscripts.length - 1)];
 
   @override
   void initState() {
@@ -434,6 +507,15 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
       _selectedCardId = null;
       _showRetryHint = false;
       _hint = null;
+      // 장면 수는 이야기마다 다릅니다(4~5장) - 길이를 박지 않고 정답 순서
+      // 카드 수에서 그대로 파생시킵니다.
+      _answers = List<_SceneAnswer?>.filled(
+        _orderedCards.length,
+        null,
+        growable: false,
+      );
+      _sceneIndex = 0;
+      _sceneFailCount = 0;
     });
     // 마이크를 대신 눌러 주지 않습니다. 아이가 직접 누르는 게 "내 차례"의
     // 신호이고, 자동으로 켜면 "말하기 전" 상태가 한순간만 존재합니다. (PRD F-04)
@@ -445,10 +527,22 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
     if (_transcribing || _isSaving) return;
     final PlayRepository? repository = widget.repository;
     if (repository == null) {
-      // 데모 모드 - 녹음도 STT 도 없이 고정 문장을 보여 줍니다.
+      // 데모 모드 - 녹음도 STT 도 없이 고정 문장을 보여 줍니다. **시작하는
+      // 순간**(눌러서 듣는 상태로 바뀌는 순간) 곧바로 채웁니다 - 이미 답한
+      // 장면이면 이 시작이 곧 재녹음이라, 덮어써서 새로 받습니다.
       setState(() {
-        _isListening = !_isListening;
-        _transcript ??= _demoTranscript;
+        final bool startingNow = !_isListening;
+        _isListening = startingNow;
+        if (startingNow) {
+          final String text = _demoTextFor(_sceneIndex);
+          _answers[_sceneIndex] = _SceneAnswer(
+            text: text,
+            usedKeywords: matchedKeywords(
+              text,
+              _keywordsForScene(_keywords, _sceneIndex, _answers.length),
+            ),
+          );
+        }
       });
       return;
     }
@@ -493,8 +587,17 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
       if (!mounted) return;
       setState(() {
         _transcribing = false;
-        _transcript = transcription.text;
-        _sttRawText = transcription.rawText;
+        _sceneFailCount = 0;
+        // 재녹음이면 그 장면의 이전 답과 체크를 덮어씁니다 - 합집합하지
+        // 않습니다. 장면끼리는 서로 영향을 주지 않습니다.
+        _answers[_sceneIndex] = _SceneAnswer(
+          text: transcription.text,
+          rawText: transcription.rawText,
+          usedKeywords: matchedKeywords(
+            transcription.text,
+            _keywordsForScene(_keywords, _sceneIndex, _answers.length),
+          ),
+        );
         _hint = null;
       });
     } on Failure catch (error) {
@@ -503,15 +606,46 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
       // 말풍선으로만 안내한 뒤 그 자리에서 다시 녹음하게 둡니다.
       setState(() {
         _transcribing = false;
+        _sceneFailCount++;
         _hint = _voiceRetryHint(error) ?? error.message;
       });
     } on Object {
       if (!mounted) return;
       setState(() {
         _transcribing = false;
+        _sceneFailCount++;
         _hint = RecapStrings.micFailed;
       });
     }
+  }
+
+  /// 이 장면에서 STT 가 2번 연속 실패했을 때만 켜집니다.
+  bool get _canSkipScene =>
+      _sceneFailCount >= 2 && _answers[_sceneIndex] == null;
+
+  /// 다음 장면으로. **이전 장면으로 돌아가는 길은 없습니다** - 이번 범위 밖입니다.
+  void _nextScene() {
+    if (_answers[_sceneIndex] == null) return;
+    setState(() {
+      _sceneIndex++;
+      _isListening = false;
+      _sceneFailCount = 0;
+      _hint = null;
+    });
+  }
+
+  /// 마이크가 계속 안 되는 아이를 위한 탈출구. 이 장면은 `null` 로 남습니다.
+  /// 마지막 장면이면 넘어갈 다음 장면이 없으니 곧바로 완료를 시도합니다.
+  void _skipScene() {
+    if (!_canSkipScene) return;
+    final bool isLast = _sceneIndex == _answers.length - 1;
+    setState(() {
+      _sceneFailCount = 0;
+      _hint = null;
+      _isListening = false;
+      if (!isLast) _sceneIndex++;
+    });
+    if (isLast) unawaited(_completeActivity());
   }
 
   /// 마이크 옆 안내로 처리할 실패인지. (`play_view.dart` 와 같은 표)
@@ -528,8 +662,21 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
   }
 
   /// 완료. **이 한 번의 호출로 세션 완료·별가루·아이템 해금이 끝납니다.**
+  /// `/retelling` 은 여기서 **정확히 한 번**만 불립니다 - 장면마다 부르지
+  /// 않고, 말한 장면을 다 모아 한 번에 보냅니다.
   Future<void> _completeActivity() async {
     if (_isSaving) return;
+    // 말한 장면만 순서대로 모읍니다. 건너뛴(=null) 장면은 빠집니다.
+    final List<_SceneAnswer> spoken = <_SceneAnswer>[
+      for (final _SceneAnswer? answer in _answers)
+        if (answer != null) answer,
+    ];
+    // 답이 하나도 없으면(전부 건너뛴 경우 포함) 보낼 것이 없습니다.
+    if (spoken.isEmpty) {
+      setState(() => _hint = RecapStrings.sttEmpty);
+      return;
+    }
+
     final PlayRepository? repository = widget.repository;
     if (repository == null) {
       setState(() {
@@ -547,12 +694,22 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
       return;
     }
 
-    final String text = _transcript?.trim() ?? '';
-    // 빈 텍스트는 서버가 400 으로 막습니다. 그 전에 아이에게 말을 겁니다.
-    if (text.isEmpty) {
-      setState(() => _hint = RecapStrings.sttEmpty);
-      return;
-    }
+    final String text = spoken
+        .map((_SceneAnswer answer) => answer.text)
+        .join(' ')
+        .trim();
+    // 원문이 하나라도 있으면 같은 방식으로 이어 붙이고, 전부 없으면(데모
+    // 등) sttRawText 자체를 보내지 않습니다.
+    final bool hasRawText = spoken.any(
+      (_SceneAnswer answer) => answer.rawText != null,
+    );
+    final String? sttRawText = hasRawText
+        ? spoken
+              .map((_SceneAnswer answer) => answer.rawText ?? answer.text)
+              .join(' ')
+              .trim()
+        : null;
+
     setState(() {
       _isListening = false;
       _isSaving = true;
@@ -562,7 +719,7 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
       final PlayRetellingResult result = await repository.submitRetelling(
         widget.sessionId,
         text: text,
-        sttRawText: _sttRawText,
+        sttRawText: sttRawText,
       );
       if (!mounted) return;
       setState(() {
@@ -693,9 +850,13 @@ class _PlayRecapPageState extends State<PlayRecapPage> {
         isTranscribing: _transcribing,
         isSaving: _isSaving,
         hint: _hint,
-        transcript: _transcript,
+        answers: _answers,
+        sceneIndex: _sceneIndex,
+        canSkip: _canSkipScene,
         onMic: () => unawaited(_toggleListening()),
+        onNextScene: _nextScene,
         onComplete: () => unawaited(_completeActivity()),
+        onSkip: _skipScene,
       ),
       _RecapStep.completed => _CompletedStep(
         key: const ValueKey<String>('completed'),
@@ -1646,18 +1807,31 @@ class _SceneImageFallback extends StatelessWidget {
 // 2단계 — 다시 말하기
 // ─────────────────────────────────────────────────────────
 
-/// 정답 순서 그림을 보며 이야기를 다시 말합니다. **낱말은 장면에 붙어 있습니다.**
+/// 장면 하나씩 묻고 답하는 **채팅**입니다.
 ///
-/// 낱말을 그림 아래 별도의 칩 줄로 모아 두면 아이에게 "참고자료"로 읽혀서
-/// 안 쓰고 넘어갑니다. 이 활동의 목표가 어휘 사용이므로, 낱말은 장면 카드
-/// 안에 들어가 **"이 장면을 말할 땐 이 말을 쓰는 것"** 이 돼야 합니다.
+/// ```
+/// ← 1번째 그림이야. 무슨 일이 있었어?          지나간 장면은
+///            며느리가 방귀를 참았어요. →       질문과 답만 남습니다
+/// ← 2번째 그림이야. 무슨 일이 있었어?
+///        ┌────────────────┐
+///        │    장면 그림    │                  지금 말할 장면만
+///        │ ✓참다  ○쫓겨나다 │                  크게 그립니다
+///        └────────────────┘
+/// ```
 ///
-/// 다만 **판정하지는 않습니다.** 낱말을 다 쓰지 않아도 완료를 막지 않습니다 —
-/// 아이 화면에 실패는 없고, 안내문도 "똑같이 말하지 않아도 괜찮아요"입니다.
+/// **그림은 현재 장면 한 장뿐입니다.** 지나간 장면 그림까지 다 남기면 로그가
+/// 끝없이 길어지고, 아이가 "지금 어느 그림을 말할 차례인지"를 놓칩니다.
+/// 대신 지나간 장면은 답변 말풍선 안에 작은 썸네일을 달아, 어느 그림에 한
+/// 말인지 되짚을 수 있게 합니다.
 ///
-/// 좌우 2단을 쓰지 않는 이유: 참고판과 받아쓰기가 **둘 다 폭을 원하는 요소**라
-/// 좌우로 자르면 양쪽 폭이 반토막 나고, 정작 모자란 세로는 아무도 쓰지 않습니다.
-class _RetellStep extends StatelessWidget {
+/// **낱말은 그림 바로 아래**에 칩으로 붙어 있습니다. 별도의 칩 줄로 모아 두면
+/// 아이에게 "참고자료"로 읽혀서 안 쓰고 넘어갑니다. 실제로 쓴 낱말은 체크가
+/// 켜지지만 **판정이 아니라 격려**입니다 — 체크가 하나도 안 켜져도 다음으로
+/// 갈 수 있고, 안 썼다고 막거나 되돌리지 않습니다.
+///
+/// **스크롤되는 것은 채팅 로그뿐입니다.** 마이크와 다음/다 했어는 늘 같은
+/// 자리에 남습니다. (파일 상단 배치 규칙)
+class _RetellStep extends StatefulWidget {
   const _RetellStep({
     required this.metrics,
     required this.cards,
@@ -1666,9 +1840,13 @@ class _RetellStep extends StatelessWidget {
     required this.isTranscribing,
     required this.isSaving,
     required this.hint,
-    required this.transcript,
+    required this.answers,
+    required this.sceneIndex,
+    required this.canSkip,
     required this.onMic,
+    required this.onNextScene,
     required this.onComplete,
+    required this.onSkip,
     super.key,
   });
 
@@ -1683,134 +1861,315 @@ class _RetellStep extends StatelessWidget {
   final bool isSaving;
 
   /// 다시 녹음·다시 저장처럼 **아이가 그 자리에서 풀 수 있는** 안내.
+  /// 채팅에서는 캐릭터가 뒤이어 거는 말풍선으로 로그 맨 아래에 붙습니다.
   final String? hint;
 
-  /// 아이가 말한 내용. `null` 이면 아직 말하기 전입니다.
-  final String? transcript;
+  /// 장면별 답변. 길이는 [cards] 와 같습니다. `null` = 아직 그 장면을
+  /// 말하지 않았습니다.
+  final List<_SceneAnswer?> answers;
+
+  /// 지금 답하는 장면. 로그는 여기까지만 그립니다 - 아직 묻지 않은 장면을
+  /// 미리 보여 주면 그림이 곧 다음 질문의 정답이 됩니다.
+  final int sceneIndex;
+
+  /// 지금 장면에서 STT 가 2번 연속 실패해 건너뛸 수 있는 상태인지.
+  final bool canSkip;
   final VoidCallback onMic;
+
+  /// 지금 장면 답을 확정하고 다음 장면으로. 마지막 장면이 아닐 때만 씁니다.
+  final VoidCallback onNextScene;
+
+  /// 마지막 장면까지 다 답했을 때 - 여기서만 `/retelling` 을 부릅니다.
   final VoidCallback onComplete;
 
-  /// 장면 **그림**(카드 테와 낱말 띠를 뺀 순수 그림) 한 장의 세로 하한.
-  /// 예산을 짤 때 이걸 먼저 확보하고, 남은 높이를 받아쓰기 줄 수로 환산합니다.
+  /// 마이크가 계속 안 되는 아이를 위한 탈출구.
+  final VoidCallback onSkip;
+
+  /// 장면 그림 한 장의 세로 하한·상한.
   ///
-  /// 카드 기준이 아니라 그림 기준인 이유: 카드 안에 낱말 띠가 들어오면서
-  /// 카드 높이와 그림 높이가 갈라졌습니다. 아이가 보는 건 그림이므로
-  /// 하한도 그림에 겁니다.
-  static const double _sceneImageMinHeight = 100;
-  static const double _sceneImageMaxHeight = 200;
+  /// 채팅 로그는 스크롤을 허용하므로 예전처럼 세로 예산을 역산할 필요는
+  /// 없지만, **그림이 작아지는 것만은 막습니다** — 아이는 말하는 내내 이
+  /// 그림을 봅니다.
+  ///
+  /// 단 이 하한은 **로그가 그만큼 보일 때**의 이야기입니다. 짧은 화면에서는
+  /// [_RetellStepState._sceneImageHeight] 가 하한을 낮춥니다.
+  static const double sceneImageMinHeight = 140;
+  static const double sceneImageMaxHeight = 280;
 
-  /// 받아쓰기는 최소 2줄을 보장하고 3줄까지만 키웁니다. 더 키우면 그만큼
-  /// 장면 그림이 작아지는데, 말할 때 아이가 보는 건 그림입니다.
-  static const int _transcriptMinLines = 2;
-  static const int _transcriptMaxLines = 3;
+  /// 그림 아래 낱말 띠가 카드 안에서 쓰는 세로 — 칩 한 줄과 카드 안쪽 여백.
+  ///
+  /// 짧은 화면에서 그림 하한을 정할 때 **먼저 떼어 둡니다.** 재 보면 칩 한 줄이
+  /// 64(글자 1.3배면 70)이라 여유를 조금 얹은 값입니다. 그림이 이 몫까지
+  /// 먹으면, 로그가 맨 아래로 내려왔을 때 잘리는 건 늘 그림 윗부분입니다.
+  static const double keywordBandHeight = 72;
 
-  static const EdgeInsets _bubblePadding = EdgeInsets.all(AppSpacing.lg);
+  /// 로그 맨 아래 여백. 마지막 말풍선이 하단 조작에 달라붙지 않게 합니다.
+  ///
+  /// 낱말 띠와 같이 **짧은 화면의 그림 몫에서 빠집니다** — 로그가 맨 아래로
+  /// 내려와도 이만큼은 늘 카드 아래에 남아 있어서, 그림이 쓸 수 있는 높이가
+  /// 아닙니다.
+  static const double logBottomPadding = AppSpacing.md;
 
-  /// 장면 사이 화살표가 차지하는 폭.
-  static const double _arrowWidth = AppSizes.iconInline + AppSpacing.sm * 2;
+  /// 로그가 아무리 짧아도 그림은 여기까지만 줄입니다. 이보다 작아지면
+  /// 장면을 알아볼 수 없어서, 차라리 로그를 스크롤하는 쪽이 낫습니다.
+  static const double sceneImageMinHeightShort = 56;
+
+  /// 로그가 보이는 높이 중 그림에 내주는 몫. 나머지는 말풍선 몫입니다.
+  ///
+  /// 1280×720 에서 "인사 + 질문 + 그림 + 아이 답 + 칭찬"이 딱 한 번의 스크롤
+  /// 안에 들어오는 값입니다. 더 키우면 답하고 나서 그림 윗부분이 잘립니다.
+  static const double sceneImageShare = .4;
 
   /// 마이크 옆에 완료 버튼을 놓으려면 한쪽에 이만큼은 있어야 합니다.
   /// (아이콘 40 + 여백 + "다 했어")
   static const double _finishSlot = 190;
 
   @override
+  State<_RetellStep> createState() => _RetellStepState();
+}
+
+class _RetellStepState extends State<_RetellStep> {
+  final ScrollController _log = ScrollController();
+
+  /// 직전 프레임의 [_tail]. **`oldWidget` 과 비교하면 안 됩니다** — 답변
+  /// 목록은 화면 상태가 제자리에서 고쳐 쓰는 같은 [List] 인스턴스라,
+  /// `oldWidget.answers` 도 이미 새 답을 들고 있습니다.
+  ///
+  /// `late … = _tail` 로 두면 안 됩니다 — `late` 초기화는 **처음 읽을 때**
+  /// 실행돼서, 첫 비교 시점에 새 값으로 채워지고 늘 "안 바뀌었다"가 됩니다.
+  String _lastTail = '';
+
+  /// 로그 맨 아래가 지금 무엇인지. 이 값이 바뀌면 말풍선이 새로 붙은 것이라
+  /// 아래로 따라 내려갑니다.
+  ///
+  /// **듣는 중·받아쓰는 중은 넣지 않습니다.** 말하는 동안 로그가 따라 내려가면
+  /// 아이가 보고 말하던 그림이 위로 밀려 올라갑니다. 그 두 상태는 마이크가
+  /// 이미 크게 알려 주고 있고, 정작 봐야 할 그림을 뺏을 이유가 없습니다.
+  String get _tail => <String>[
+    '${widget.sceneIndex}',
+    for (final _SceneAnswer? answer in widget.answers) answer?.text ?? '',
+    widget.hint ?? '',
+  ].join('|');
+
+  @override
+  void initState() {
+    super.initState();
+    // 들어온 첫 프레임은 따라갈 것이 없습니다 - 기준선만 잡아 둡니다.
+    _lastTail = _tail;
+  }
+
+  @override
+  void didUpdateWidget(covariant _RetellStep oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final String tail = _tail;
+    if (tail == _lastTail) return;
+    _lastTail = tail;
+    _followLog();
+  }
+
+  @override
+  void dispose() {
+    _log.dispose();
+    super.dispose();
+  }
+
+  /// 새 말풍선이 붙으면 로그를 아래 끝으로 내립니다. 화면 밖에서 대화가
+  /// 이어지면 아이는 자기가 한 말이 어디로 갔는지 모릅니다.
+  ///
+  /// 스크린리더는 스크롤을 따라오지 않으므로, 새로 붙는 말풍선 쪽에서
+  /// `liveRegion` 으로 함께 읽어 줍니다. ([_live])
+  void _followLog() {
+    WidgetsBinding.instance.addPostFrameCallback((Duration _) {
+      if (!mounted || !_log.hasClients) return;
+      final ScrollPosition position = _log.position;
+      if (!position.hasContentDimensions) return;
+      final Duration duration = respect(context, AppDurations.normal);
+      // "동작 줄이기" 설정에서는 respect 가 0을 돌려주는데, 0으로 animateTo
+      // 를 부르면 프레임워크 단언에 걸립니다.
+      if (duration == Duration.zero) {
+        position.jumpTo(position.maxScrollExtent);
+        return;
+      }
+      unawaited(
+        position.animateTo(
+          position.maxScrollExtent,
+          duration: duration,
+          curve: AppCurves.standard,
+        ),
+      );
+    });
+  }
+
+  /// 로그 맨 아래에 붙는 캐릭터의 상태 한마디. 없으면 아무 말도 하지
+  /// 않습니다 — 아직 말하기 전에는 질문과 그림만으로 할 일이 분명합니다.
+  String? get _status {
+    if (widget.hint != null) return widget.hint;
+    if (widget.isListening) return RecapStrings.retellListening;
+    if (widget.isTranscribing) return RecapStrings.retellTranscribing;
+    if (widget.answers[widget.sceneIndex] != null) {
+      return RecapStrings.retellSpoken;
+    }
+    return null;
+  }
+
+  /// 장면 그림 세로. 로그가 보이는 높이와 폭 양쪽에서 깎은 뒤 하한을 지킵니다.
+  ///
+  /// **하한은 화면에 따라 달라집니다.** 140 은 로그가 넉넉히 보일 때의 값이고,
+  /// 폰 가로(844×390)처럼 로그에 150 밖에 안 남는 화면에서는 그 하한을 지키는
+  /// 순간 그림+낱말(≈204)이 보이는 높이를 넘겨서, 로그가 맨 아래로 내려오면
+  /// **그림 윗부분이 잘려 나갑니다.** 아이는 그 그림을 보며 말해야 하므로,
+  /// 그림이 작아지더라도 한 장이 통째로 보이는 쪽을 고릅니다.
+  ///
+  /// 낱말 띠([_RetellStep.keywordBandHeight])와 로그 아래 여백
+  /// ([_RetellStep.logBottomPadding])을 먼저 떼고 남는 만큼이 새 하한입니다.
+  /// 로그가 넉넉한 화면에서는 이 값이 140 보다 커서 아무것도 달라지지 않습니다
+  /// — 1280×720·1024×768·390×844 의 그림 크기는 그대로입니다.
+  double _sceneImageHeight(double viewportHeight, double contentWidth) {
+    final double byHeight = viewportHeight * _RetellStep.sceneImageShare;
+    final double byWidth = contentWidth * 9 / 16;
+    final double minHeight = math.max(
+      _RetellStep.sceneImageMinHeightShort,
+      math.min(
+        _RetellStep.sceneImageMinHeight,
+        viewportHeight -
+            _RetellStep.keywordBandHeight -
+            _RetellStep.logBottomPadding,
+      ),
+    );
+    return math
+        .min(byHeight, byWidth)
+        .clamp(minHeight, _RetellStep.sceneImageMaxHeight);
+  }
+
+  /// 방금 붙은 말풍선을 스크린리더가 따라 읽게 합니다.
+  ///
+  /// [_GuideBubble] 은 1단계와 함께 쓰는 위젯이라 건드리지 않고 밖에서
+  /// 감쌉니다. `excludeSemantics` 로 안쪽 글자 노드를 접어야 같은 문장이
+  /// 두 번 읽히지 않습니다.
+  Widget _live(String label, Widget child) => Semantics(
+    container: true,
+    liveRegion: true,
+    label: label,
+    excludeSemantics: true,
+    child: child,
+  );
+
+  /// 장면 질문. **[RecapSceneCard.title] 을 그리지 않습니다** — 그건 장면
+  /// 설명이고 곧 정답이라, 읽을 수 있는 아이에게 답을 그대로 줍니다.
+  Widget _question(int index) {
+    final bool isCurrent = index == widget.sceneIndex;
+    final String message = index == widget.answers.length - 1
+        ? RecapStrings.sceneQuestionLast
+        : RecapStrings.sceneQuestion(index + 1);
+    final Widget bubble = _GuideBubble(
+      metrics: widget.metrics,
+      message: message,
+    );
+    return isCurrent ? _live(message, bubble) : bubble;
+  }
+
+  /// 채팅 로그 한 벌. 위에서 아래로 시간 순입니다.
+  List<Widget> _entries(double imageHeight, double contentWidth) {
+    final List<Widget> log = <Widget>[
+      // 첫 인사. 낱말이 과제의 일부라는 걸 여기서 한 번만 말합니다.
+      _GuideBubble(metrics: widget.metrics, message: RecapStrings.retellGuide),
+    ];
+    for (int i = 0; i <= widget.sceneIndex; i++) {
+      final bool isCurrent = i == widget.sceneIndex;
+      log.add(_question(i));
+      if (isCurrent) {
+        log.add(
+          _SceneStage(
+            metrics: widget.metrics,
+            card: widget.cards[i],
+            order: i + 1,
+            keywords: _keywordsForScene(
+              widget.keywords,
+              i,
+              widget.cards.length,
+            ),
+            used: widget.answers[i]?.usedKeywords ?? const <String>{},
+            imageHeight: imageHeight,
+            maxWidth: contentWidth,
+          ),
+        );
+      }
+      final _SceneAnswer? answer = widget.answers[i];
+      if (answer != null) {
+        log.add(
+          _AnswerBubble(
+            metrics: widget.metrics,
+            text: answer.text,
+            // 지나간 장면은 큰 그림이 로그에서 사라지므로, 어느 그림에 한
+            // 말인지 되짚을 실마리를 답변 안에 남깁니다.
+            thumbnail: isCurrent ? null : widget.cards[i],
+            live: isCurrent,
+          ),
+        );
+      } else if (!isCurrent) {
+        log.add(_SkippedNote(metrics: widget.metrics));
+      }
+    }
+    final String? status = _status;
+    if (status != null) {
+      log.add(
+        _live(
+          status,
+          _GuideBubble(
+            metrics: widget.metrics,
+            message: status,
+            caution: widget.hint != null,
+          ),
+        ),
+      );
+    }
+
+    return <Widget>[
+      for (int i = 0; i < log.length; i++) ...<Widget>[
+        if (i > 0) const SizedBox(height: AppSpacing.md),
+        log[i],
+      ],
+    ];
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // 말하기를 한 번이라도 마쳤는지는 **받아쓴 글자**로 판별합니다. 녹음
-    // 시간이나 마이크 상태에서 파생시키면, 0초에 멈춘 아이의 화면에서 띠가
-    // 접히고 완료 버튼이 죽습니다.
-    final bool hasSpoken = transcript != null;
-    final String message =
-        hint ??
-        (isListening
-            ? RecapStrings.retellListening
-            : isTranscribing
-            ? RecapStrings.retellTranscribing
-            : hasSpoken
-            ? RecapStrings.retellSpoken
-            : RecapStrings.retellGuide);
+    // 말하기를 한 번이라도 마쳤는지는 **이 장면의 받아쓴 글자**로 판별합니다.
+    // 녹음 시간이나 마이크 상태에서 파생시키면, 0초에 멈춘 아이의 화면에서
+    // 다음/완료 버튼이 죽습니다.
+    final bool hasSpoken = widget.answers[widget.sceneIndex] != null;
+    final bool isLastScene = widget.sceneIndex == widget.answers.length - 1;
 
     return Column(
       children: <Widget>[
         Expanded(
           child: LayoutBuilder(
             builder: (BuildContext context, BoxConstraints constraints) {
-              final double contentWidth =
-                  constraints.maxWidth - metrics.screenPadding * 2;
-              final double guide = _GuideBubble.heightOf(context, metrics);
-              final double lineHeight = metrics.lineHeight(
-                context,
-                AppTypography.kidTranscript,
+              // 태블릿에서 로그를 화면 끝까지 늘리지 않습니다. 말풍선이 좌우
+              // 끝으로 흩어지면 가운데 장면 그림과 따로 노는 세 덩어리가 되고,
+              // 한 줄도 길어져 아이가 눈으로 줄을 놓칩니다.
+              final double logWidth = math.min(
+                constraints.maxWidth - widget.metrics.screenPadding * 2,
+                AppBreakpoints.maxContentWidth,
               );
-              final double bubbleChrome = KidSpeechBubble.chromeOf(
-                _bubblePadding,
-              );
-              // 낱말 띠는 장면 카드 **안에** 있으므로 그림이 아니라 카드 테에
-              // 얹힙니다. 낱말이 하나도 없으면 띠 자리를 잡지 않습니다.
-              final double cardChrome =
-                  AppSpacing.xs * 2 +
-                  (keywords.isEmpty
-                      ? 0
-                      : AppSpacing.xs +
-                            _KeywordBand.heightOf(context, metrics));
-
-              // 세로 예산 역산 — 안내와 가름 여백을 먼저 빼고, 장면 카드의
-              // 하한(그림 하한 + 카드 테)을 확보한 뒤 남은 높이를 줄 수로 바꿉니다.
-              // 낱말 칩 줄(31.4 + 간격 16)이 사라진 자리를 카드 테(43.4)가
-              // 일부만 도로 먹어서, 합치면 12px 이 남습니다 — 그림이 그만큼 큽니다.
-              final double free =
-                  constraints.maxHeight - guide - AppSpacing.md * 2;
-              final int lines =
-                  ((free - _sceneImageMinHeight - cardChrome - bubbleChrome) /
-                          lineHeight)
-                      .floor()
-                      .clamp(_transcriptMinLines, _transcriptMaxLines);
-              final double bubbleHeight = lines * lineHeight + bubbleChrome;
-
-              // 그러고도 남는 높이는 장면 그림에 돌려줍니다. 단, 폭이 허락하는
-              // 크기를 넘기면 그림이 잘리므로 가로 기준으로도 한 번 깎습니다.
-              // (카드 좌우 테를 뺀 뒤 16:9 로 되돌려야 그림이 정확히 16:9 입니다)
-              final double byWidth =
-                  ((contentWidth - _arrowWidth * (cards.length - 1)) /
-                          cards.length -
-                      AppSpacing.xs * 2) *
-                  9 /
-                  16;
-              final double sceneImageHeight = math
-                  .min(free - bubbleHeight - cardChrome, byWidth)
-                  .clamp(_sceneImageMinHeight, _sceneImageMaxHeight);
-
               return SingleChildScrollView(
-                padding: EdgeInsets.symmetric(
-                  horizontal: metrics.screenPadding,
+                // 테스트가 "보이는 로그"의 사각형을 집어야 합니다 - 그림이
+                // 이 안에 통째로 들어오는지가 짧은 화면의 유일한 판정입니다.
+                key: const ValueKey<String>('recap-log'),
+                controller: _log,
+                padding: EdgeInsets.fromLTRB(
+                  widget.metrics.screenPadding,
+                  0,
+                  widget.metrics.screenPadding,
+                  _RetellStep.logBottomPadding,
                 ),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: ContentContainer(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      _GuideBubble(
-                        metrics: metrics,
-                        message: message,
-                        caution: hint != null,
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      _SceneStrip(
-                        metrics: metrics,
-                        cards: cards,
-                        keywords: keywords,
-                        imageHeight: sceneImageHeight,
-                        cardHeight: sceneImageHeight + cardChrome,
-                        available: contentWidth,
-                        arrowWidth: _arrowWidth,
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      _TranscriptBubble(
-                        metrics: metrics,
-                        text: transcript,
-                        height: bubbleHeight,
-                        padding: _bubblePadding,
-                      ),
-                    ],
+                    children: _entries(
+                      _sceneImageHeight(constraints.maxHeight, logWidth),
+                      logWidth,
+                    ),
                   ),
                 ),
               );
@@ -1818,31 +2177,52 @@ class _RetellStep extends StatelessWidget {
           ),
         ),
         _BottomBar(
-          metrics: metrics,
+          metrics: widget.metrics,
           child: LayoutBuilder(
             builder: (BuildContext context, BoxConstraints constraints) {
               final Widget mic = _MicButton(
-                metrics: metrics,
-                listening: isListening,
-                onTap: isSaving || isTranscribing ? null : onMic,
+                metrics: widget.metrics,
+                listening: widget.isListening,
+                onTap: widget.isSaving || widget.isTranscribing
+                    ? null
+                    : widget.onMic,
               );
-              // 말하기 전에는 완료 버튼을 내보내지 않습니다. 한 화면에서
+              // 말하기 전에는 다음/완료 버튼을 내보내지 않습니다. 한 화면에서
               // 아이가 고를 것을 하나로 줄이면 다음 행동이 분명해집니다.
-              final Widget? finish = transcript != null
+              // 마지막 장면이면 "다 했어", 아니면 "다음" - 같은 자리를 씁니다.
+              final Widget? finish = hasSpoken
                   ? KidPrimaryButton(
                       icon: AppIcons.done,
-                      label: isSaving
-                          ? RecapStrings.saving
-                          : RecapStrings.finish,
-                      labelStyle: metrics.text(AppTypography.kidButton),
-                      onPressed: isSaving ? null : onComplete,
+                      label: isLastScene
+                          ? (widget.isSaving
+                                ? RecapStrings.saving
+                                : RecapStrings.finish)
+                          : RecapStrings.next,
+                      labelStyle: widget.metrics.text(AppTypography.kidButton),
+                      onPressed: widget.isSaving
+                          ? null
+                          : (isLastScene
+                                ? widget.onComplete
+                                : widget.onNextScene),
                     )
-                  : null;
+                  // 말하기 전인데 이 장면에서 STT 가 2번 연속 실패했으면
+                  // 같은 자리에 건너뛰기가 뜹니다 - 마이크에 갇히지 않게.
+                  : (widget.canSkip
+                        ? KidSecondaryButton(
+                            icon: AppIcons.next,
+                            label: RecapStrings.skipScene,
+                            labelStyle: widget.metrics.text(
+                              AppTypography.kidButton,
+                            ),
+                            onPressed: widget.onSkip,
+                          )
+                        : null);
 
               // 마이크는 **늘 화면 한가운데**입니다. 완료 버튼이 나타났다고
               // 마이크가 옆으로 밀리면, 아이 손이 기억한 자리가 어긋납니다.
               // 양옆에 같은 폭의 칸을 두면 오른쪽이 비어도 중심이 안 움직입니다.
-              if (constraints.maxWidth >= AppSizes.mic + _finishSlot * 2) {
+              if (constraints.maxWidth >=
+                  AppSizes.mic + _RetellStep._finishSlot * 2) {
                 return Row(
                   children: <Widget>[
                     const Expanded(child: SizedBox.shrink()),
@@ -1864,14 +2244,18 @@ class _RetellStep extends StatelessWidget {
                 );
               }
               // 폰 세로처럼 옆에 둘 수 없는 폭에서만 아래로 내립니다.
+              // **버튼이 없어도 자리는 비워 둡니다** - 접었다 폈다 하면 마이크가
+              // 위아래로 움직이고, 그만큼 채팅 로그 높이도 흔들려서 장면 그림이
+              // 말할 때마다 커졌다 작아졌다 합니다.
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   mic,
-                  if (finish != null) ...<Widget>[
-                    const SizedBox(height: AppSpacing.md),
-                    finish,
-                  ],
+                  const SizedBox(height: AppSpacing.md),
+                  SizedBox(
+                    height: AppSizes.tapChildPrimary,
+                    child: Center(child: finish ?? const SizedBox.shrink()),
+                  ),
                 ],
               );
             },
@@ -1882,238 +2266,319 @@ class _RetellStep extends StatelessWidget {
   }
 }
 
-/// 정답 순서대로 놓인 장면 카드 줄. **한 장이 그림 + 낱말 한 덩어리**입니다.
+/// 지금 말할 장면. 그림 한 장과 그 장면의 낱말 칩이 한 덩어리입니다.
 ///
-/// ```
-/// ┌───────────────┐   ┌───────────────┐
-/// │ ①             │   │ ②             │
-/// │   장면 그림    │ › │   장면 그림    │ › …
-/// │               │   │               │
-/// │ ╭───────────╮ │   │ ╭───────────╮ │
-/// │ │   참다     │ │   │ │  쫓겨나다  │ │
-/// │ ╰───────────╯ │   │ ╰───────────╯ │
-/// └───────────────┘   └───────────────┘
-/// ```
-///
-/// 낱말은 그림 **위에 얹지 않습니다.** 아이는 말하는 내내 그림을 보고 있어서,
+/// 낱말을 그림 **위에** 얹지 않습니다. 아이는 말하는 내내 그림을 보고 있어서,
 /// 조금이라도 가리면 이야기의 단서가 사라집니다.
-class _SceneStrip extends StatelessWidget {
-  const _SceneStrip({
+class _SceneStage extends StatelessWidget {
+  const _SceneStage({
     required this.metrics,
-    required this.cards,
+    required this.card,
+    required this.order,
     required this.keywords,
+    required this.used,
     required this.imageHeight,
-    required this.cardHeight,
-    required this.available,
-    required this.arrowWidth,
+    required this.maxWidth,
   });
 
   final ScreenMetrics metrics;
-  final List<RecapSceneCard> cards;
+  final RecapSceneCard card;
 
-  /// **정답 순서와 같은 순서**로 들어옵니다 — `keywords[i]` 가 i 번째 장면의
-  /// 낱말입니다. (`docs/BACKEND_REQUESTS_POST_ACTIVITY.md` 3장)
+  /// 정답 순서에서 몇 번째인지. 배지와 스크린리더 라벨에 씁니다.
+  final int order;
+
+  /// 이 장면에 붙는 낱말. 없을 수 있습니다. ([_keywordsForScene])
   final List<String> keywords;
 
-  /// 낱말 띠를 뺀 순수 그림의 높이.
+  /// 이 장면 답변에서 **실제로 쓴** 낱말. 체크가 여기서 켜집니다.
+  final Set<String> used;
+
   final double imageHeight;
 
-  /// 카드 전체 높이. 낱말이 없는 장면은 그림이 이 높이를 다 씁니다.
-  final double cardHeight;
-  final double available;
-  final double arrowWidth;
+  /// 카드가 쓸 수 있는 최대 폭. 그림이 16:9 라 세로에서 폭이 나오지만,
+  /// 화면이 좁으면 이쪽이 먼저 걸립니다.
+  final double maxWidth;
 
-  /// [index] 장면에 붙는 낱말. 없으면 `null`.
+  /// 카드 폭의 아래 끝 — **그림이 하한(140)일 때의 폭**입니다.
   ///
-  /// 개수는 어긋날 수 있습니다 — 둘 다 **콘텐츠 오류이지 예외가 아닙니다.**
-  /// - 낱말이 적으면: 남는 장면은 낱말 없이 그립니다.
-  /// - 낱말이 많으면: 남는 낱말을 마지막 장면에 몰아 붙입니다. 조용히 버리면
-  ///   어휘가 화면에서 사라진 걸 아무도 모르고, 새 줄을 만들면 이번에 없앤
-  ///   "참고자료 칩 줄"이 그대로 돌아옵니다.
-  String? _keywordFor(int index) {
-    if (index >= keywords.length) return null;
-    final bool isLast = index == cards.length - 1;
-    if (isLast && keywords.length > cards.length) {
-      return keywords.sublist(index).join(' · ');
-    }
-    return keywords[index];
-  }
+  /// 카드 폭은 보통 그림이 정합니다. 그런데 세로가 짧은 화면에서 그림이 하한
+  /// 아래로 작아지면, 그 폭에 낱말까지 눌려서 글자가 잘립니다. 낱말은 이
+  /// 활동의 과제라 잘리면 안 됩니다 — 작아지는 건 그림뿐이고, 카드는 낱말이
+  /// 읽히는 폭을 지킵니다.
+  static const double minCardWidth = _RetellStep.sceneImageMinHeight * 16 / 9;
 
   @override
   Widget build(BuildContext context) {
-    final double cardWidth = imageHeight * 16 / 9 + AppSpacing.xs * 2;
-    final double content =
-        cardWidth * cards.length + arrowWidth * (cards.length - 1);
-    // 다 들어가면 가운데로 모으고, 넘치면 가로로 스크롤합니다.
-    final double sidePad = math.max(0, (available - content) / 2);
-
-    return SizedBox(
-      height: cardHeight,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.symmetric(horizontal: sidePad),
-        itemCount: cards.length,
-        separatorBuilder: (BuildContext context, int index) => SizedBox(
-          width: arrowWidth,
-          child: const Center(
-            child: Icon(
-              AppIcons.next,
-              size: AppSizes.iconInline,
-              color: AppColors.ink300,
-            ),
+    // 그림은 언제나 16:9 입니다. 카드가 낱말 때문에 넓어져도 그림까지 늘어나면
+    // 장면이 좌우로 잘려 나갑니다.
+    final double imageWidth =
+        math.min(maxWidth, imageHeight * 16 / 9) - AppSpacing.xs * 2;
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: math.min(
+            maxWidth,
+            math.max(imageHeight * 16 / 9, minCardWidth),
           ),
         ),
-        itemBuilder: (BuildContext context, int index) {
-          final RecapSceneCard card = cards[index];
-          final String? word = _keywordFor(index);
-          return Semantics(
-            // 장면과 낱말을 한 덩어리로 읽어 줍니다. 낱말을 따로 떼어 읽으면
-            // 화면에서 붙여 놓은 뜻이 스크린리더에서만 사라집니다.
-            //
-            // `container` + `excludeSemantics` 가 그 "한 덩어리"를 만듭니다.
-            // 빼지 않으면 번호 배지와 낱말 띠가 각자 노드가 돼서
-            // "1", "1번째 장면 …", "참다" 로 세 번 끊겨 읽힙니다.
-            container: true,
-            excludeSemantics: true,
-            label: word == null
-                ? RecapStrings.sceneOrder(index + 1, card.title)
-                : RecapStrings.sceneOrderWithKeyword(
-                    index + 1,
-                    card.title,
-                    word,
-                  ),
-            child: SizedBox(
-              width: cardWidth,
-              child: Stack(
-                children: <Widget>[
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(AppRadius.lg),
-                        boxShadow: AppShadows.soft,
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(AppSpacing.xs),
-                        child: Column(
-                          children: <Widget>[
-                            // 낱말이 없는 장면은 그림이 띠 자리까지 씁니다.
-                            // 빈 흰 칸을 남기면 그 카드만 고장 난 것처럼 보입니다.
-                            Expanded(
-                              child: _SceneImage(
-                                card: card,
-                                fallbackLabel: '${index + 1}',
-                                radius: AppRadius.md,
-                              ),
-                            ),
-                            if (word != null) ...<Widget>[
-                              const SizedBox(height: AppSpacing.xs),
-                              _KeywordBand(metrics: metrics, word: word),
-                            ],
-                          ],
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.xs),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            // 이 화면에서 그림은 한 장뿐이고, 지금 아이가 보아야 할
+            // 하나입니다. 떠 있는 그림자로 로그 위에 세웁니다.
+            boxShadow: AppShadows.lift,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              SizedBox(
+                width: imageWidth,
+                height: imageHeight,
+                child: Stack(
+                  children: <Widget>[
+                    Positioned.fill(
+                      // 제목은 **스크린리더에만** 갑니다. 화면에 그리면 그게
+                      // 곧 정답입니다.
+                      child: Semantics(
+                        image: true,
+                        label: RecapStrings.sceneOrder(order, card.title),
+                        child: _SceneImage(
+                          card: card,
+                          fallbackLabel: '$order',
+                          radius: AppRadius.md,
                         ),
                       ),
                     ),
-                  ),
-                  Positioned(
-                    left: AppSpacing.sm,
-                    top: AppSpacing.sm,
-                    child: _OrderBadge(order: index + 1),
-                  ),
-                ],
+                    Positioned(
+                      left: AppSpacing.sm,
+                      top: AppSpacing.sm,
+                      // 배지는 그림 라벨("1번째 장면, …")이 이미 말해 주는
+                      // 숫자입니다. 그대로 두면 스크린리더가 "1" 을 따로 한 번
+                      // 더 읽습니다.
+                      child: ExcludeSemantics(child: _OrderBadge(order: order)),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          );
-        },
+              if (keywords.isNotEmpty) ...<Widget>[
+                const SizedBox(height: AppSpacing.sm),
+                Padding(
+                  padding: const EdgeInsets.only(
+                    left: AppSpacing.xs,
+                    right: AppSpacing.xs,
+                    bottom: AppSpacing.xs,
+                  ),
+                  child: Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.sm,
+                    children: <Widget>[
+                      for (final String word in keywords)
+                        _KeywordChip(
+                          metrics: metrics,
+                          word: word,
+                          used: used.contains(word),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
-/// 장면 카드 맨 아래의 낱말 띠.
+/// 장면 그림 아래의 낱말 칩. 말하기 전에는 "이 말을 써 보자"는 안내이고,
+/// 실제로 쓰면 체크가 켜집니다.
 ///
-/// 노란색을 쓰지 않습니다. 노랑은 별가루(보상) 전용이라, 낱말에 쓰면 아이가
+/// **판정이 아닙니다.** 체크가 하나도 안 켜져도 다음으로 갈 수 있고, 못 쓴
+/// 낱말을 빨강이나 경고로 표시하지 않습니다. 아이 화면에 실패는 없습니다.
+///
+/// 노란색을 쓰지 않습니다 — 노랑은 별가루(보상) 전용이라 낱말에 쓰면 아이가
 /// 낱말을 보상으로 오해합니다. (`docs/DESIGN_SYSTEM.md` 3장)
-///
-/// 글자는 [AppColors.brandBlueDeep] 입니다 — 흰 카드 위 옅은 파랑 면에서
-/// [AppColors.ink700] 보다 낱말이 먼저 눈에 들어옵니다.
-class _KeywordBand extends StatelessWidget {
-  const _KeywordBand({required this.metrics, required this.word});
-
-  final ScreenMetrics metrics;
-  final String word;
-
-  /// 띠 한 줄의 높이. 세로 예산 계산에 씁니다. 한 줄로 고정하지 않으면
-  /// 낱말이 길어질 때 카드마다 높이가 달라져 줄이 들쭉날쭉해집니다.
-  static double heightOf(BuildContext context, ScreenMetrics metrics) =>
-      metrics.lineHeight(context, AppTypography.kidLabel) + AppSpacing.xs * 2;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
-        vertical: AppSpacing.xs,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.brandBlueSurface,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: Text(
-        word,
-        textAlign: TextAlign.center,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: metrics
-            .text(AppTypography.kidLabel)
-            .copyWith(color: AppColors.brandBlueDeep),
-      ),
-    );
-  }
-}
-
-/// 아이가 말한 내용. **아이 발화라 말풍선입니다** — 오른쪽, 아이 면 색.
-class _TranscriptBubble extends StatelessWidget {
-  const _TranscriptBubble({
+/// 켜짐/꺼짐은 **면 색·글자색·아이콘 세 가지가 함께** 바뀝니다. 색만 바꾸면
+/// 색을 구분하기 어려운 아이에게는 아무 일도 일어나지 않습니다.
+class _KeywordChip extends StatelessWidget {
+  const _KeywordChip({
     required this.metrics,
-    required this.text,
-    required this.height,
-    required this.padding,
+    required this.word,
+    required this.used,
   });
 
   final ScreenMetrics metrics;
-
-  /// `null` 이면 아직 말하기 전입니다.
-  final String? text;
-  final double height;
-  final EdgeInsets padding;
+  final String word;
+  final bool used;
 
   @override
   Widget build(BuildContext context) {
-    final String? spoken = text;
+    final Duration duration = respect(context, AppDurations.quick);
+    return Semantics(
+      container: true,
+      excludeSemantics: true,
+      label: used
+          ? RecapStrings.keywordUsed(word)
+          : RecapStrings.keywordUnused(word),
+      child: AnimatedContainer(
+        duration: duration,
+        curve: AppCurves.standard,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: used
+              ? AppColors.brandGreenSurface
+              : AppColors.brandBlueSurface,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          // 테두리는 켜졌을 때만 보이지만 자리는 늘 차지합니다. 두께가
+          // 오가면 칩 폭이 흔들려서 줄바꿈이 튑니다.
+          border: Border.all(
+            color: used ? AppColors.brandGreenDeep : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            AnimatedSwitcher(
+              duration: duration,
+              // 체크가 켜질 때만 살짝 튑니다. 아이 화면의 등장 곡선입니다.
+              transitionBuilder: (Widget child, Animation<double> animation) =>
+                  ScaleTransition(
+                    scale: animation.drive(
+                      CurveTween(curve: AppCurves.playful),
+                    ),
+                    child: FadeTransition(opacity: animation, child: child),
+                  ),
+              child: Icon(
+                used ? AppIcons.checked : AppIcons.unchecked,
+                key: ValueKey<bool>(used),
+                size: AppSizes.iconInline,
+                color: used ? AppColors.brandGreenDeep : AppColors.ink300,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            Flexible(
+              child: Text(
+                word,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: metrics
+                    .text(AppTypography.kidLabel)
+                    .copyWith(
+                      color: used
+                          ? AppColors.brandGreenDeep
+                          : AppColors.brandBlueDeep,
+                    ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 아이가 한 말. **아이 발화라 말풍선입니다** — 오른쪽, 아이 면 색.
+class _AnswerBubble extends StatelessWidget {
+  const _AnswerBubble({
+    required this.metrics,
+    required this.text,
+    required this.thumbnail,
+    required this.live,
+  });
+
+  final ScreenMetrics metrics;
+  final String text;
+
+  /// 지나간 장면의 그림. 로그에서 큰 그림이 사라진 뒤 어느 장면에 한 말인지
+  /// 되짚는 실마리입니다. 지금 장면은 바로 위에 그림이 있어 `null` 입니다.
+  final RecapSceneCard? thumbnail;
+
+  /// 방금 붙은 말풍선인지. 스크린리더가 새 답변을 따라 읽게 합니다.
+  final bool live;
+
+  /// 썸네일 폭. 16:9 라 세로는 여기서 나옵니다.
+  static const double _thumbnailWidth = 72;
+
+  static const EdgeInsets _padding = EdgeInsets.symmetric(
+    horizontal: AppSpacing.lg,
+    vertical: AppSpacing.md,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final RecapSceneCard? scene = thumbnail;
     return KidSpeechBubble(
       speaker: KidSpeaker.child,
-      padding: padding,
-      height: height,
+      padding: _padding,
       child: Semantics(
-        liveRegion: true,
-        child: spoken == null
-            ? Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  RecapStrings.transcriptEmpty,
-                  style: metrics
-                      .text(AppTypography.kidTranscript)
-                      .copyWith(color: AppColors.ink500),
-                ),
-              )
-            : SingleChildScrollView(
-                child: Text(
-                  spoken,
-                  style: metrics.text(AppTypography.kidTranscript),
+        container: true,
+        liveRegion: live,
+        excludeSemantics: true,
+        label: RecapStrings.myAnswer(text),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            if (scene != null) ...<Widget>[
+              SizedBox(
+                width: _thumbnailWidth,
+                height: _thumbnailWidth * 9 / 16,
+                child: _SceneImage(
+                  card: scene,
+                  fallbackLabel: '',
+                  radius: AppRadius.xs,
                 ),
               ),
+              const SizedBox(width: AppSpacing.sm),
+            ],
+            Flexible(
+              child: Text(
+                text,
+                style: metrics.text(AppTypography.kidTranscript),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 건너뛴 장면 자리에 남는 조용한 표시.
+///
+/// 아이 말풍선으로 두면 하지 않은 말을 한 것처럼 보이고, 아무것도 안 두면
+/// 질문만 덩그러니 남아 답을 잃어버린 것처럼 보입니다. 그래서 화자가 없는
+/// 가운데 정렬 꼬리표입니다.
+class _SkippedNote extends StatelessWidget {
+  const _SkippedNote({required this.metrics});
+
+  final ScreenMetrics metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.ink100,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+        ),
+        child: Text(
+          RecapStrings.sceneSkipped,
+          style: metrics
+              .text(AppTypography.kidLabel)
+              .copyWith(color: AppColors.ink700),
+        ),
       ),
     );
   }

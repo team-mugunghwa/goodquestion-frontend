@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:goodquestion/core/constants/app_strings.dart';
 import 'package:goodquestion/core/error/failure.dart';
 import 'package:goodquestion/core/router/app_routes.dart';
 import 'package:goodquestion/core/theme/app_theme.dart';
@@ -70,13 +71,27 @@ void main() {
     await tester.pump();
   }
 
-  /// 마이크를 눌러 녹음하고 다시 눌러 STT 까지 받습니다.
+  /// 마이크를 눌러 녹음하고 다시 눌러 STT 까지 받습니다. **장면 하나만**
+  /// 채웁니다 - 실패·재시도처럼 한 장면 안에서의 상태만 볼 때 씁니다.
   Future<void> speak(WidgetTester tester) async {
     await tester.tap(find.text('말하기'));
     await tester.pump();
     await tester.tap(find.text('멈추기'));
     await tester.pump();
     await tester.pump();
+  }
+
+  /// [count] 장면을 순서대로 다 채웁니다. 마지막이 아니면 "다음"을 눌러
+  /// 다음 장면으로 넘어갑니다 - `submitOrder` 로 채운 4장 기준입니다.
+  Future<void> speakAllScenes(WidgetTester tester, {int count = 4}) async {
+    for (int i = 0; i < count; i++) {
+      await speak(tester);
+      final bool isLast = i == count - 1;
+      if (!isLast) {
+        await tester.tap(find.text(RecapStrings.next));
+        await tester.pump();
+      }
+    }
   }
 
   testWidgets('카드를 서버에서 받아 온다 - 받기 전에는 카드를 깔지 않는다', (
@@ -174,8 +189,24 @@ void main() {
     await submitOrder(tester);
 
     expect(find.text('그림 아래 낱말을 넣어서 들려줄래?'), findsOneWidget);
-    for (final String word in <String>['참다', '쫓겨나다', '떨어뜨리다', '자신감']) {
-      expect(find.text(word), findsOneWidget);
+    // 낱말은 **그 장면을 말할 차례에** 그 장면 그림 아래에서 나옵니다.
+    // 네 개를 한 줄에 몰아 두면 아직 묻지도 않은 그림의 단서가 새어 나갑니다.
+    const List<String> words = <String>['참다', '쫓겨나다', '떨어뜨리다', '자신감'];
+    for (int i = 0; i < words.length; i++) {
+      expect(
+        find.text(words[i]),
+        findsOneWidget,
+        reason: '${i + 1}번째 장면에 서버가 준 낱말이 없습니다',
+      );
+      for (int j = i + 1; j < words.length; j++) {
+        expect(find.text(words[j]), findsNothing);
+      }
+      if (i < words.length - 1) {
+        await speak(tester);
+        await tester.tap(find.text(RecapStrings.next));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+      }
     }
   });
 
@@ -204,7 +235,8 @@ void main() {
     expect(recorder.stops, 1);
     expect(repository.transcribeCalls, 1);
     expect(find.textContaining('며느리가 방귀를 참다가'), findsOneWidget);
-    expect(buttonWith(tester, '다 했어').onPressed, isNotNull);
+    // 카드 4장 - 첫 장면은 마지막이 아니니 "다 했어"가 아니라 "다음"입니다.
+    expect(buttonWith(tester, RecapStrings.next).onPressed, isNotNull);
   });
 
   testWidgets('무음(STT_EMPTY_TEXT)이면 다시 말하라고 안내하고 그 자리에서 재녹음한다', (
@@ -242,16 +274,20 @@ void main() {
     await pumpRecap(tester, repository: repository);
     await tester.pump();
     await submitOrder(tester);
-    await speak(tester);
+    await speakAllScenes(tester);
 
     await tester.tap(find.text('다 했어'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
-    expect(repository.retellingTexts, <String>['며느리가 방귀를 참다가 배를 떨어뜨렸어요.']);
+    // 이 가짜 서버는 장면마다 같은 텍스트를 돌려줍니다 - 4장면을 다 말하면
+    // 그 텍스트가 4번 이어 붙어서 한 번만(/retelling 한 번) 올라갑니다.
+    expect(repository.retellingTexts, <String>[
+      List<String>.filled(4, '며느리가 방귀를 참다가 배를 떨어뜨렸어요.').join(' '),
+    ]);
     expect(repository.retellingRawTexts, <String?>[
-      '며느리가 방구를 참다가 배를 떨어뜨렸어요.',
-    ], reason: '교정 전 원문을 sttRawText 로 되올려야 합니다');
+      List<String>.filled(4, '며느리가 방구를 참다가 배를 떨어뜨렸어요.').join(' '),
+    ], reason: '교정 전 원문을 이어 붙여 sttRawText 로 되올려야 합니다');
     // 완료 화면은 한 덩어리 문구입니다 - 칭찬 아래에 실제 지급 수치가 붙습니다.
     expect(find.textContaining('이야기를 멋지게 들려줬어!'), findsOneWidget);
     expect(find.textContaining('별가루 3개'), findsOneWidget);
@@ -266,14 +302,16 @@ void main() {
     await pumpRecap(tester, repository: repository);
     await tester.pump();
     await submitOrder(tester);
-    await speak(tester);
+    await speakAllScenes(tester);
 
     await tester.tap(find.text('다 했어'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.textContaining('다시 눌러'), findsOneWidget);
-    expect(find.textContaining('며느리가 방귀를 참다가'), findsOneWidget);
+    // 네 장면 답이 채팅 로그에 그대로 남아 있습니다. (이 가짜 서버는 장면마다
+    // 같은 텍스트를 돌려줍니다) 하나라도 날아가면 아이는 다시 말해야 합니다.
+    expect(find.textContaining('며느리가 방귀를 참다가'), findsNWidgets(4));
     expect(
       buttonWith(tester, '다 했어').onPressed,
       isNotNull,
@@ -300,7 +338,7 @@ void main() {
     await pumpRecap(tester, repository: repository);
     await tester.pump();
     await submitOrder(tester);
-    await speak(tester);
+    await speakAllScenes(tester);
 
     await tester.tap(find.text('다 했어'));
     await tester.pump();
@@ -324,7 +362,7 @@ void main() {
     await pumpRecap(tester, repository: repository);
     await tester.pump();
     await submitOrder(tester);
-    await speak(tester);
+    await speakAllScenes(tester);
 
     await tester.tap(find.text('다 했어'));
     await tester.pump();
@@ -372,7 +410,7 @@ void main() {
     );
     await tester.pump();
     await submitOrder(tester);
-    await speak(tester);
+    await speakAllScenes(tester);
     await tester.tap(find.text('다 했어'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));

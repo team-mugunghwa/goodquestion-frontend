@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:goodquestion/core/constants/app_strings.dart';
+import 'package:goodquestion/core/theme/app_spacing.dart';
 import 'package:goodquestion/core/theme/app_theme.dart';
 import 'package:goodquestion/core/widgets/kid_button.dart';
+import 'package:goodquestion/core/widgets/kid_speech_bubble.dart';
+import 'package:goodquestion/core/widgets/press_scale.dart';
 import 'package:goodquestion/features/play/presentation/views/play_recap_view.dart';
 
 /// 5장. **4를 가정한 레이아웃을 잡아내려고** 기본값과 개수를 다르게 둡니다.
@@ -58,21 +62,48 @@ void main() {
     await tester.pump();
   }
 
-  /// 2단계의 장면 카드. **낱말까지 합친 한 덩어리 라벨**로 찾습니다 —
-  /// 낱말이 따로 떨어져 나가면 이 finder 부터 깨집니다.
-  Finder sceneCard(int order, String title, String? keyword) =>
+  /// 2단계 채팅 로그에서 **지금 말할 장면 그림**. 제목은 화면에 그리지 않고
+  /// 스크린리더 라벨로만 가므로, 그 라벨로 찾습니다.
+  Finder sceneImage(int order, String title) => find.byWidgetPredicate(
+    (Widget widget) =>
+        widget is Semantics &&
+        widget.properties.label == RecapStrings.sceneOrder(order, title),
+  );
+
+  /// 낱말 칩. **체크 상태가 라벨에 들어 있습니다** — 켜짐과 꺼짐을 다른
+  /// finder 로 찾아야 "안 쓴 낱말에 체크가 켜졌다"를 잡을 수 있습니다.
+  Finder keywordChip(String word, {required bool used}) =>
       find.byWidgetPredicate(
         (Widget widget) =>
             widget is Semantics &&
             widget.properties.label ==
-                (keyword == null
-                    ? RecapStrings.sceneOrder(order, title)
-                    : RecapStrings.sceneOrderWithKeyword(
-                        order,
-                        title,
-                        keyword,
-                      )),
+                (used
+                    ? RecapStrings.keywordUsed(word)
+                    : RecapStrings.keywordUnused(word)),
       );
+
+  /// 체크 상태를 가리지 않는 낱말 칩. "이 장면에 이 낱말이 있는가"만 봅니다.
+  Finder anyKeywordChip(String word) => find.byWidgetPredicate(
+    (Widget widget) =>
+        widget is Semantics &&
+        (widget.properties.label == RecapStrings.keywordUsed(word) ||
+            widget.properties.label == RecapStrings.keywordUnused(word)),
+  );
+
+  /// 아이 발화 말풍선. 오른쪽·아이 면 색으로 그려집니다.
+  Finder answerBubble() => find.byWidgetPredicate(
+    (Widget widget) =>
+        widget is KidSpeechBubble && widget.speaker == KidSpeaker.child,
+  );
+
+  /// 마이크 버튼 전체(지름 120). 라벨 글자가 아니라 누르는 원을 잽니다.
+  /// 듣는 중에는 라벨이 "멈추기"로 바뀌므로 둘 다 받습니다.
+  Finder micButton() => find.byWidgetPredicate(
+    (Widget widget) =>
+        widget is PressScale &&
+        (widget.semanticLabel == RecapStrings.speak ||
+            widget.semanticLabel == RecapStrings.stopSpeaking),
+  );
 
   Finder slot(int index) => find.byKey(ValueKey<String>('recap-slot-$index'));
   Finder trayCard(String id) => find.byKey(ValueKey<String>('recap-tray-$id'));
@@ -139,6 +170,16 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
+  }
+
+  /// 지금 장면을 말하고 다음 장면으로 넘어갑니다. (데모 모드는 마이크를
+  /// 누르는 순간 고정 문장이 채워집니다)
+  Future<void> speakAndNext(WidgetTester tester) async {
+    await tester.tap(find.text(RecapStrings.speak));
+    await tester.pump();
+    await tester.tap(find.text(RecapStrings.next));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
   }
 
   // ── 1단계 ────────────────────────────────────────────────
@@ -237,97 +278,145 @@ void main() {
 
   // ── 2단계 ────────────────────────────────────────────────
 
-  testWidgets('정답이면 낱말이 붙은 장면 카드와 말풍선이 나온다', (WidgetTester tester) async {
+  testWidgets('정답이면 첫 장면 질문과 그림·낱말 칩이 채팅으로 나온다', (WidgetTester tester) async {
     await pumpRecap(tester);
     await goToRetell(tester);
     // 안내문이 낱말을 과제로 지목합니다.
     expect(find.text('그림 아래 낱말을 넣어서 들려줄래?'), findsOneWidget);
-    expect(find.text('참다'), findsOneWidget);
-    expect(find.text('쫓겨나다'), findsOneWidget);
-    // 아직 말하기 전이라 받아쓰기는 빈 말풍선입니다.
-    expect(find.text('여기에 네 이야기가 글자로 보여'), findsOneWidget);
+    // 캐릭터가 첫 장면을 묻습니다. 장면 설명(정답)은 묻지 않습니다.
+    expect(find.text(RecapStrings.sceneQuestion(1)), findsOneWidget);
+    expect(find.text(_defaults.sceneCards[0].title), findsNothing);
+    // 지금 말할 장면 그림 한 장과 그 장면 낱말만 있습니다.
+    expect(sceneImage(1, _defaults.sceneCards[0].title), findsOneWidget);
+    expect(sceneImage(2, _defaults.sceneCards[1].title), findsNothing);
+    // 말하기 전이라 체크는 꺼져 있습니다 - 이건 "이 말을 써 보자"는 안내입니다.
+    expect(keywordChip('참다', used: false), findsOneWidget);
+    expect(keywordChip('참다', used: true), findsNothing);
+    // 아직 아이 말풍선은 없습니다.
+    expect(answerBubble(), findsNothing);
     expect(find.text('말하기'), findsOneWidget);
   });
 
-  testWidgets('낱말은 장면 카드 안에, 정답 순서대로, 그림 아래에 붙는다', (WidgetTester tester) async {
+  testWidgets('낱말은 지금 말할 장면 것만, 그 장면 그림 아래에 붙는다', (WidgetTester tester) async {
     await pumpRecap(tester);
     await goToRetell(tester);
 
     const List<String> words = <String>['참다', '쫓겨나다', '떨어뜨리다', '자신감'];
     for (int i = 0; i < words.length; i++) {
-      // ① 낱말이 i 번째 장면 카드의 **자식**입니다. 별도의 칩 줄이 아닙니다.
-      //    (장면과 낱말이 한 덩어리로 읽히는지도 여기서 함께 봅니다)
-      final Finder scene = sceneCard(
-        i + 1,
-        _defaults.sceneCards[i].title,
-        words[i],
-      );
+      final Finder scene = sceneImage(i + 1, _defaults.sceneCards[i].title);
+      expect(scene, findsOneWidget, reason: '${i + 1}번째 장면 그림이 없습니다');
+
+      // ① 지금 장면의 낱말만 화면에 있습니다. 다음 장면 낱말이 미리 보이면
+      //    아직 묻지도 않은 그림의 단서가 새어 나갑니다.
       expect(
-        scene,
+        anyKeywordChip(words[i]),
         findsOneWidget,
         reason: '${i + 1}번째 장면에 ${words[i]} 가 없습니다',
       );
-      expect(
-        find.descendant(of: scene, matching: find.text(words[i])),
-        findsOneWidget,
-      );
+      for (int j = 0; j < words.length; j++) {
+        if (j == i) continue;
+        expect(
+          anyKeywordChip(words[j]),
+          findsNothing,
+          reason: '${i + 1}번째 장면에 ${j + 1}번째 낱말이 보입니다',
+        );
+      }
 
-      // ② 그림을 가리지 않습니다 — 낱말 띠가 그림 **아래**에 있습니다.
+      // ② 그림을 가리지 않습니다 — 낱말 칩이 그림 **아래**에 있습니다.
       final Rect image = tester.getRect(
         find.descendant(of: scene, matching: find.byType(Image)).first,
       );
-      final Rect band = tester.getRect(
-        find.descendant(of: scene, matching: find.text(words[i])),
-      );
-      expect(band.top, greaterThanOrEqualTo(image.bottom));
+      final Rect chip = tester.getRect(find.text(words[i]));
+      expect(chip.top, greaterThanOrEqualTo(image.bottom));
+
+      if (i < words.length - 1) await speakAndNext(tester);
     }
   });
 
-  testWidgets('받아쓰기 띠는 말하기 시작 이후로 계속 남는다', (WidgetTester tester) async {
+  testWidgets('아이 말풍선은 말한 뒤에 붙고 로그에 그대로 남는다', (WidgetTester tester) async {
     await pumpRecap(tester);
     await goToRetell(tester);
 
-    // ① 말하기 전 — 완료 버튼이 아직 없습니다.
-    expect(find.widgetWithText(KidPrimaryButton, '다 했어'), findsNothing);
+    // ① 말하기 전 — 아이 말풍선도 다음 버튼도 아직 없습니다. (기본 카드
+    //    4장 - 첫 장면은 마지막이 아니니 다 말해도 "다 했어"가 아니라 "다음")
+    expect(answerBubble(), findsNothing);
+    expect(
+      find.widgetWithText(KidPrimaryButton, RecapStrings.next),
+      findsNothing,
+    );
     expect(find.textContaining('며느리가 방귀를 참다가'), findsNothing);
 
-    // ② 말하는 중.
+    // ② 말하는 중 — 오른쪽 아이 말풍선이 붙습니다.
     await tester.tap(find.text('말하기'));
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('멈추기'), findsOneWidget);
+    expect(answerBubble(), findsOneWidget);
     expect(find.textContaining('며느리가 방귀를 참다가'), findsOneWidget);
-    expect(buttonWith(tester, '다 했어').onPressed, isNotNull);
+    expect(buttonWith(tester, RecapStrings.next).onPressed, isNotNull);
 
-    // ③ 곧바로 멈춰도 띠가 접히거나 완료 버튼이 죽지 않습니다.
+    // ③ 곧바로 멈춰도 말풍선이 사라지거나 다음 버튼이 죽지 않습니다.
     await tester.tap(find.text('멈추기'));
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('말하기'), findsOneWidget);
     expect(find.textContaining('며느리가 방귀를 참다가'), findsOneWidget);
-    expect(buttonWith(tester, '다 했어').onPressed, isNotNull);
+    expect(buttonWith(tester, RecapStrings.next).onPressed, isNotNull);
+
+    // ④ 다음 장면으로 넘어가도 지나간 질문과 답은 로그에 남습니다.
+    await tester.tap(find.text(RecapStrings.next));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text(RecapStrings.sceneQuestion(1)), findsOneWidget);
+    expect(find.textContaining('며느리가 방귀를 참다가'), findsOneWidget);
+    expect(find.text(RecapStrings.sceneQuestion(2)), findsOneWidget);
+    // 다만 **그림은 지금 장면 하나뿐**입니다.
+    expect(sceneImage(1, _defaults.sceneCards[0].title), findsNothing);
+    expect(sceneImage(2, _defaults.sceneCards[1].title), findsOneWidget);
   });
 
-  testWidgets('발화 완료 후 저장 완료 화면을 보여준다', (WidgetTester tester) async {
+  testWidgets('새 말풍선이 붙으면 로그가 아래로 따라 내려간다', (WidgetTester tester) async {
     await pumpRecap(tester);
     await goToRetell(tester);
-    await tester.tap(find.text('말하기'));
+    final ScrollableState log = tester.state<ScrollableState>(
+      find.byType(Scrollable).first,
+    );
+    expect(log.position.pixels, 0);
+
+    await tester.tap(find.text(RecapStrings.speak));
     await tester.pump();
-    await tester.tap(find.text('다 했어'));
-    await tester.pump(const Duration(milliseconds: 800));
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('이야기를 멋지게 들려줬어!'), findsOneWidget);
+    await tester.pumpAndSettle();
+
+    // 답변이 화면 밖에 남으면 아이는 자기가 한 말이 어디로 갔는지 모릅니다.
+    //
+    // 답변 목록은 화면 상태가 **제자리에서 고쳐 쓰는 같은 List** 라서,
+    // `didUpdateWidget` 에서 `oldWidget.answers` 와 비교하면 이미 같은 값이고
+    // 여기서 스크롤이 0에 머무릅니다.
+    expect(log.position.pixels, greaterThan(0));
+    expect(log.position.pixels, log.position.maxScrollExtent);
   });
 
   // ── 후속 자유 대화 진입점 ──────────────────────────────
 
-  /// 순서 맞추기 → 다시 말하기 → 완료까지 한 번에 밀어 줍니다.
-  Future<void> goToCompleted(WidgetTester tester) async {
+  /// 순서 맞추기 → 다시 말하기(장면마다 한 번씩 말하기) → 완료까지 밀어 줍니다.
+  Future<void> goToCompleted(WidgetTester tester, {int sceneCount = 4}) async {
     await goToRetell(tester);
-    await tester.tap(find.text('말하기'));
-    await tester.pump();
-    await tester.tap(find.text('다 했어'));
+    for (int i = 0; i < sceneCount; i++) {
+      await tester.tap(find.text('말하기'));
+      await tester.pump();
+      final bool isLast = i == sceneCount - 1;
+      await tester.tap(
+        find.text(isLast ? RecapStrings.finish : RecapStrings.next),
+      );
+      await tester.pump();
+    }
     await tester.pump(const Duration(milliseconds: 800));
     await tester.pump(const Duration(milliseconds: 400));
   }
+
+  testWidgets('발화 완료 후 저장 완료 화면을 보여준다', (WidgetTester tester) async {
+    await pumpRecap(tester);
+    await goToCompleted(tester);
+    expect(find.text('이야기를 멋지게 들려줬어!'), findsOneWidget);
+  });
 
   testWidgets('완료 화면에 "○○와 더 이야기하기" 진입점이 뜬다', (WidgetTester tester) async {
     await pumpRecap(tester, storyId: 'story-1', lastCharacterName: '시아버지');
@@ -373,7 +462,13 @@ void main() {
     const List<String> titles = <String>['가', '나', '다', '라', '마'];
     const List<String> words = <String>['하나', '둘', '셋', '넷', '다섯'];
     for (int i = 0; i < 5; i++) {
-      expect(sceneCard(i + 1, titles[i], words[i]), findsOneWidget);
+      expect(
+        sceneImage(i + 1, titles[i]),
+        findsOneWidget,
+        reason: '${i + 1}번째 장면에서 그림이 안 바뀌었습니다',
+      );
+      expect(anyKeywordChip(words[i]), findsOneWidget);
+      if (i < 4) await speakAndNext(tester);
     }
   });
 
@@ -382,20 +477,26 @@ void main() {
     await goToRetell(tester, <String>['a', 'b', 'c', 'd', 'e']);
     expect(tester.takeException(), isNull);
 
+    const List<String> titles = <String>['가', '나', '다', '라', '마'];
     // 앞의 두 장면에만 낱말이 붙습니다.
-    expect(sceneCard(1, '가', '하나'), findsOneWidget);
-    expect(sceneCard(2, '나', '둘'), findsOneWidget);
-    // 남는 장면은 낱말 없는 라벨이고, 카드 높이는 그대로입니다(줄이 들쭉날쭉하지 않음).
+    expect(anyKeywordChip('하나'), findsOneWidget);
+    await speakAndNext(tester);
+    expect(anyKeywordChip('둘'), findsOneWidget);
+
+    // 남는 장면은 칩 없이 그림만 그립니다. 빈 칩 자리를 남기면 그 장면만
+    // 고장 난 것처럼 보입니다.
     for (int i = 2; i < 5; i++) {
-      expect(
-        sceneCard(i + 1, <String>['가', '나', '다', '라', '마'][i], null),
-        findsOneWidget,
-      );
+      await speakAndNext(tester);
+      expect(tester.takeException(), isNull);
+      expect(sceneImage(i + 1, titles[i]), findsOneWidget);
+      for (final String word in twoKeywords) {
+        expect(
+          anyKeywordChip(word),
+          findsNothing,
+          reason: '${i + 1}번째 장면에 남의 낱말이 붙었습니다',
+        );
+      }
     }
-    expect(
-      tester.getSize(sceneCard(1, '가', '하나')).height,
-      tester.getSize(sceneCard(5, '마', null)).height,
-    );
   });
 
   testWidgets('낱말이 장면보다 많으면 남는 낱말이 마지막 장면에 붙는다', (WidgetTester tester) async {
@@ -403,14 +504,15 @@ void main() {
     await goToRetell(tester, <String>['a', 'b', 'c', 'd', 'e']);
     expect(tester.takeException(), isNull);
 
-    // 조용히 버리지 않습니다 — 화면에도, 스크린리더에도 남습니다.
-    expect(find.text('다섯 · 여섯'), findsOneWidget);
-    expect(sceneCard(5, '마', '다섯 · 여섯'), findsOneWidget);
-    // 그래도 줄 높이는 그대로입니다 — 띠는 한 줄로 고정입니다.
-    expect(
-      tester.getSize(sceneCard(1, '가', '하나')).height,
-      tester.getSize(sceneCard(5, '마', '다섯 · 여섯')).height,
-    );
+    for (int i = 0; i < 4; i++) {
+      await speakAndNext(tester);
+    }
+    expect(tester.takeException(), isNull);
+
+    // 조용히 버리지 않습니다 — 마지막 장면에 칩 두 개로 함께 붙습니다.
+    expect(sceneImage(5, '마'), findsOneWidget);
+    expect(anyKeywordChip('다섯'), findsOneWidget);
+    expect(anyKeywordChip('여섯'), findsOneWidget);
   });
 
   testWidgets('좁은 폭에서는 트레이가 가로로 스크롤된다', (WidgetTester tester) async {
@@ -428,31 +530,105 @@ void main() {
 
   // ── 세로 예산 ────────────────────────────────────────────
 
-  testWidgets('1280x720 — 2단계가 스크롤 없이 닫히고 그림이 하한 위에 있다', (
+  /// 채팅 로그는 **스크롤이 정상입니다.** 그래서 지키는 것이 둘로 바뀝니다 —
+  /// 장면 그림이 하한 밑으로 내려가지 않을 것, 그리고 하단 마이크가 늘 화면
+  /// 안에 있을 것.
+  testWidgets('1280x720 — 장면 그림이 하한 위에 있고 마이크가 화면 안에 있다', (
     WidgetTester tester,
   ) async {
     await pumpRecap(tester);
     await goToRetell(tester);
 
-    // 본문 스크롤뷰(장면 줄의 가로 ListView 보다 위에 있습니다).
-    final ScrollableState body = tester.state<ScrollableState>(
-      find.byType(Scrollable).first,
-    );
-    expect(body.position.maxScrollExtent, 0, reason: '2단계에 세로 스크롤이 생겼습니다');
-
-    // 낱말 칩 줄(31.4+16)을 없애고 카드 테(43.4)로 바꾼 순증감은 -12 입니다.
-    // 그림이 전보다 작아졌다면 예산 계산이 틀린 것입니다. (이전 139.4 → 149.6)
     final double image = tester
         .getSize(
           find
               .descendant(
-                of: sceneCard(1, _defaults.sceneCards[0].title, '참다'),
+                of: sceneImage(1, _defaults.sceneCards[0].title),
                 matching: find.byType(Image),
               )
               .first,
         )
         .height;
-    expect(image, greaterThanOrEqualTo(139.4));
+    // 그림 하한(140)보다 크고, 예전 한 줄 배치(149.6)보다도 큽니다.
+    expect(image, greaterThanOrEqualTo(140));
+
+    final Rect mic = tester.getRect(micButton());
+    expect(mic.height, AppSizes.mic);
+    expect(mic.top, greaterThanOrEqualTo(0));
+    expect(mic.bottom, lessThanOrEqualTo(720));
+  });
+
+  /// 로그 하나가 통째로 잘리는지 보려면 **보이는 사각형**이 필요합니다.
+  Finder logView() => find.byKey(const ValueKey<String>('recap-log'));
+
+  /// 폰 가로는 로그에 150 밖에 안 남습니다. 그 안에 그림 한 장이 통째로
+  /// 들어가야 합니다 — 아이는 말하는 내내 그 그림을 봅니다. 하한 140 을
+  /// 고집하면 그림+낱말이 204 가 되고, 로그가 맨 아래로 내려온 순간
+  /// **그림 윗부분이 스크롤 위로 잘려 나갑니다.**
+  for (final double scale in <double>[1, 1.3]) {
+    testWidgets('폰 가로 844x390 — 로그 맨 아래에서 장면 그림이 잘리지 않는다 (글자 $scale배)', (
+      WidgetTester tester,
+    ) async {
+      await pumpRecap(tester, size: const Size(844, 390), textScale: scale);
+      await goToRetell(tester);
+      // 다음 장면으로 넘어가면 로그가 스스로 맨 아래로 내려갑니다. 그림이
+      // 잘리던 바로 그 순간입니다.
+      await speakAndNext(tester);
+      await tester.pumpAndSettle();
+
+      final Rect log = tester.getRect(logView());
+      final Rect image = tester.getRect(
+        find
+            .descendant(
+              of: sceneImage(2, _defaults.sceneCards[1].title),
+              matching: find.byType(Image),
+            )
+            .first,
+      );
+      expect(
+        image.top,
+        greaterThanOrEqualTo(log.top),
+        reason: '장면 그림 윗부분이 스크롤 위로 잘렸습니다',
+      );
+      expect(
+        image.bottom,
+        lessThanOrEqualTo(log.bottom),
+        reason: '장면 그림 아랫부분이 로그 밖으로 나갔습니다',
+      );
+
+      // 낱말 칩은 그림 **아래에 붙어** 함께 보입니다. 그림만 끼워 넣으려고
+      // 낱말을 밀어내면 아이가 무슨 말을 써야 하는지 알 수 없습니다.
+      final Rect chip = tester.getRect(anyKeywordChip('쫓겨나다').first);
+      expect(chip.top, greaterThanOrEqualTo(image.bottom));
+      expect(chip.bottom, lessThanOrEqualTo(log.bottom));
+
+      // 그림이 작아졌다고 카드 폭까지 줄면 낱말이 그 폭에 눌려 글자가
+      // 잘립니다. 낱말은 이 활동의 과제라 **끝까지 읽혀야** 합니다.
+      final RenderParagraph word = tester.renderObject(find.text('쫓겨나다'));
+      expect(
+        word.size.width,
+        greaterThanOrEqualTo(word.getMaxIntrinsicWidth(double.infinity) - .5),
+        reason: '낱말이 카드 폭에 눌려 잘렸습니다',
+      );
+
+      // 그림이 줄어도 하단 조작은 늘 화면 안 같은 자리입니다.
+      final Rect mic = tester.getRect(micButton());
+      expect(mic.height, AppSizes.mic);
+      expect(mic.bottom, lessThanOrEqualTo(390));
+    });
+  }
+
+  testWidgets('폰 세로 — 말하기 전과 후에 마이크 자리가 같다', (WidgetTester tester) async {
+    // 폰 세로는 마이크 아래에 다음 버튼을 쌓습니다. 버튼이 생겼다고 마이크가
+    // 위로 밀리면, 아이 손이 기억한 자리가 어긋납니다.
+    await pumpRecap(tester, size: const Size(390, 844));
+    await goToRetell(tester);
+    final Rect before = tester.getRect(micButton());
+
+    await tester.tap(find.text(RecapStrings.speak));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.widgetWithText(KidPrimaryButton, RecapStrings.next), findsOne);
+    expect(tester.getRect(micButton()), before);
   });
 
   // ── 오버플로 0 ───────────────────────────────────────────

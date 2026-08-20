@@ -65,6 +65,10 @@ dev_dependencies:
   # 테스트용 mock (코드 생성 불필요)
   mocktail: ^1.0.4
 
+  # 타이머를 실제로 기다리지 않고 가상 시계로 감습니다. ScriptedLiveTranscriber
+  # 처럼 Timer 로 조각을 흘리는 코드를 위젯 트리 없이 테스트할 때 씁니다
+  fake_async: ^1.3.3
+
   # 린트 규칙. analysis_options.yaml 에서 확장합니다
   flutter_lints: ^5.0.0
 
