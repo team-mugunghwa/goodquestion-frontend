@@ -10,9 +10,9 @@ import 'package:goodquestion/features/play/domain/repositories/play_repository.d
 import 'package:goodquestion/features/play/presentation/views/play_recap_view.dart';
 import 'package:goodquestion/features/play/presentation/voice/mission_voice_recorder.dart';
 
-/// 2단계 "다시 말하기"를 **장면 하나씩 녹음**하는 새 상태 모델만 봅니다.
-/// 배치(카드가 한 줄로 늘어서는 것 등)는 `play_recap_view_test.dart` 가
-/// 지킵니다 - 이번 단계에서 레이아웃은 바꾸지 않았습니다.
+/// 2단계 "다시 말하기"를 **장면 하나씩 녹음**하는 상태 모델과, 그 답변에서
+/// 켜지는 **낱말 체크**를 봅니다. 배치(채팅 로그가 어떻게 쌓이는지)는
+/// `play_recap_view_test.dart` 가 지킵니다.
 void main() {
   Future<void> pumpRecap(
     WidgetTester tester, {
@@ -114,6 +114,18 @@ void main() {
     await tester.pump();
   }
 
+  /// 낱말 칩. **체크 상태가 스크린리더 라벨에 들어 있습니다** — 켜짐과 꺼짐을
+  /// 다른 finder 로 찾아야 "안 쓴 낱말에 체크가 켜졌다"를 잡을 수 있습니다.
+  Finder keywordChip(String word, {required bool used}) =>
+      find.byWidgetPredicate(
+        (Widget widget) =>
+            widget is Semantics &&
+            widget.properties.label ==
+                (used
+                    ? RecapStrings.keywordUsed(word)
+                    : RecapStrings.keywordUnused(word)),
+      );
+
   testWidgets('장면 4개를 차례로 답하면 /retelling 이 한 번만, 이어 붙인 텍스트로 호출된다', (
     WidgetTester tester,
   ) async {
@@ -209,11 +221,8 @@ void main() {
     expect(find.textContaining('둘째 장면 첫 시도'), findsOneWidget);
 
     // 같은 장면에서 마이크를 다시 누르면 재녹음입니다 - 이전 답은 지워지고
-    // 새 텍스트로 통째로 덮어써집니다. `_SceneAnswer` 는 텍스트와 낱말
-    // 체크를 한 덩어리로 새로 만들어 교체하므로(합집합하지 않음), 텍스트가
-    // 완전히 바뀌는 이 흐름이 곧 낱말 체크도 새 텍스트 기준으로 다시
-    // 계산된다는 증거입니다 - 체크는 화면에 그리지 않아 직접 관찰할 수는
-    // 없지만, 같은 교체 경로를 씁니다.
+    // 새 텍스트로 통째로 덮어써집니다. (낱말 체크도 같이 다시 계산되는지는
+    // 아래 "재녹음해서 낱말을 빼면 체크가 꺼진다" 가 화면에서 확인합니다)
     await speak(tester);
     expect(find.textContaining('둘째 장면 다시 말한 답'), findsOneWidget);
     expect(find.textContaining('둘째 장면 첫 시도'), findsNothing);
@@ -355,6 +364,90 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.text('이야기를 멋지게 들려줬어!'), findsOneWidget);
+  });
+
+  // ── 낱말 체크 ────────────────────────────────────────────
+  //
+  // **판정이 아니라 격려 장식입니다.** 체크가 안 켜져도 다음으로 갈 수 있어야
+  // 하고, 안 쓴 낱말에 체크가 켜지는 오탐이 못 쓴 것보다 훨씬 나쁩니다.
+
+  testWidgets('낱말을 쓴 답변에는 체크가 켜지고, 안 쓴 답변에는 안 켜진다', (
+    WidgetTester tester,
+  ) async {
+    final _ScriptedRepository repository = _ScriptedRepository()
+      ..script.addAll(<PlayTranscription>[
+        // 장면 0 낱말 "참다" - 활용형으로 썼습니다.
+        const PlayTranscription(
+          text: '며느리가 방귀를 참았어요.',
+          confidence: .9,
+          lowConfidence: false,
+        ),
+        // 장면 1 낱말 "쫓겨나다" - 뜻은 맞지만 그 낱말은 안 썼습니다.
+        const PlayTranscription(
+          text: '시아버지가 집에서 나가라고 했어요.',
+          confidence: .9,
+          lowConfidence: false,
+        ),
+      ]);
+    await pumpRecap(tester, repository: repository);
+    await submitOrder(tester);
+
+    // 말하기 전에는 "이 말을 써 보자"는 안내입니다 - 체크는 꺼져 있습니다.
+    expect(keywordChip('참다', used: false), findsOneWidget);
+    expect(keywordChip('참다', used: true), findsNothing);
+
+    await speak(tester);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(keywordChip('참다', used: true), findsOneWidget);
+    expect(keywordChip('참다', used: false), findsNothing);
+
+    // 체크가 켜졌다고 다음으로 가는 조건이 되지는 않습니다 - 다음 버튼은
+    // 말하기만 하면 삽니다.
+    await tester.tap(find.text(RecapStrings.next));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    await speak(tester);
+    await tester.pump(const Duration(milliseconds: 400));
+    // 낱말을 안 썼어도 체크만 꺼져 있을 뿐, 막지도 혼내지도 않습니다.
+    expect(keywordChip('쫓겨나다', used: false), findsOneWidget);
+    expect(keywordChip('쫓겨나다', used: true), findsNothing);
+    expect(
+      find.text(RecapStrings.next),
+      findsOneWidget,
+      reason: '낱말을 안 썼다고 다음으로 가는 길을 막으면 안 됩니다',
+    );
+  });
+
+  testWidgets('재녹음해서 낱말을 빼면 체크가 꺼진다', (WidgetTester tester) async {
+    final _ScriptedRepository repository = _ScriptedRepository()
+      ..script.addAll(<PlayTranscription>[
+        const PlayTranscription(
+          text: '며느리가 방귀를 참았어요.',
+          confidence: .9,
+          lowConfidence: false,
+        ),
+        // 같은 장면 재녹음 - 이번엔 낱말이 빠졌습니다.
+        const PlayTranscription(
+          text: '그냥 서 있었어요.',
+          confidence: .9,
+          lowConfidence: false,
+        ),
+      ]);
+    await pumpRecap(tester, repository: repository);
+    await submitOrder(tester);
+
+    await speak(tester);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(keywordChip('참다', used: true), findsOneWidget);
+
+    // 체크는 그 장면의 **최신 텍스트로만** 다시 계산합니다 - 이전 답과
+    // 합집합하면 지운 말이 체크로 남습니다.
+    await speak(tester);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.textContaining('그냥 서 있었어요'), findsOneWidget);
+    expect(keywordChip('참다', used: true), findsNothing);
+    expect(keywordChip('참다', used: false), findsOneWidget);
   });
 }
 

@@ -79,6 +79,7 @@
 | `brandBlueDeep` | `#2A6E9E` | **글자·아이콘·주 버튼** |
 | `brandGreenDeep` | `#387C4C` | **글자·아이콘·성공** |
 | `brandBlueSurface` | `brandBlue` 10% | 아이 발화 말풍선·미션 배너·칩·선택된 탭의 면 |
+| `brandGreenSurface` | `brandGreen` 10% | **해낸 것**의 면. 쓴 낱말 칩처럼 파란 면과 갈라져야 할 때만 |
 
 > 흰 카드 위에 한 겹 더 얹는 옅은 면이 필요하면 **알파를 직접 정하지 말고**
 > `brandBlueSurface` 를 쓰세요. 각자 8%·12%·15% 를 고르면 같은 뜻의 면이

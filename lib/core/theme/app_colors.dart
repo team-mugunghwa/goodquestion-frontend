@@ -46,6 +46,14 @@ abstract final class AppColors {
   /// 다른 색이 됩니다. 이 값 하나만 쓰세요.
   static const Color brandBlueSurface = Color(0x1A83B9DD);
 
+  /// [brandGreen] 10% 면. **해낸 것**을 흰 카드 위에서 표시하는 자리에만
+  /// 씁니다 — 말하기 후 활동에서 아이가 실제로 쓴 낱말 칩이 여기서
+  /// [brandBlueSurface] 로부터 갈라집니다.
+  ///
+  /// 파스텔 초록을 그대로 면으로 깔면 [brandGreenDeep] 글자와 대비가
+  /// 2.8:1 로 떨어져 안 읽힙니다. 흰 면에 10% 로 얹으면 4.7:1 입니다.
+  static const Color brandGreenSurface = Color(0x1AA0CE99);
+
   /// Material 3 팔레트 생성용 시드.
   ///
   /// 로고 색을 그대로 시드로 쓰면 채도가 너무 낮아 버튼·텍스트 대비가

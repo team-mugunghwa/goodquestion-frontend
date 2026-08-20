@@ -243,8 +243,29 @@ abstract final class RecapStrings {
   static const String speak = '말하기';
   static const String stopSpeaking = '멈추기';
 
-  /// 아직 말하기 전의 말풍선 안내.
-  static const String transcriptEmpty = '여기에 네 이야기가 글자로 보여';
+  /// 장면마다 캐릭터가 거는 질문. **서버가 주지 않아서 프런트 템플릿입니다.**
+  ///
+  /// 장면 설명([RecapSceneCard.title])을 그대로 물으면 그게 곧 정답이라
+  /// 아이가 따라 읽고 끝납니다. 그래서 번호만 부르고 "무슨 일이 있었어?"로
+  /// 아이 말을 기다립니다.
+  static String sceneQuestion(int order) => '$order번째 그림이야. 무슨 일이 있었어?';
+
+  /// 마지막 장면. 남은 그림이 없다는 걸 문장으로 알려 줍니다 - 진행 표시를
+  /// 읽지 못하는 아이도 "이제 끝"을 압니다.
+  static const String sceneQuestionLast = '마지막이야. 어떻게 끝났어?';
+
+  /// 아이 답변 말풍선의 스크린리더 라벨. 오른쪽·아이 면 색으로 구분한 화자를
+  /// 소리로도 알려 줍니다.
+  static String myAnswer(String text) => '내가 한 말, $text';
+
+  /// 낱말 칩의 체크 상태. 체크는 색과 아이콘으로만 켜지므로, 그대로 두면
+  /// 스크린리더에서 사라집니다.
+  static String keywordUsed(String word) => '$word, 사용함';
+  static String keywordUnused(String word) => '$word, 아직 안 썼어';
+
+  /// 건너뛴 장면 자리에 남는 조용한 표시. 빈 자리로 두면 답을 잃어버린 것처럼
+  /// 보이고, 아이 말풍선으로 두면 하지 않은 말을 한 것처럼 보입니다.
+  static const String sceneSkipped = '이건 다음에 말하기로 했어';
 
   static const String finish = '다 했어';
   static const String saving = '저장 중';
@@ -274,14 +295,6 @@ abstract final class RecapStrings {
   static String saveFailed(String reason) => '$reason 다시 눌러 볼까?';
 
   static String sceneOrder(int order, String title) => '$order번째 장면, $title';
-
-  /// 낱말이 붙은 장면. 장면과 낱말을 **한 덩어리**로 읽어 줍니다 — 따로 읽으면
-  /// 화면에서 붙여 놓은 뜻("이 장면을 말할 땐 이 말을 쓴다")이 사라집니다.
-  static String sceneOrderWithKeyword(
-    int order,
-    String title,
-    String keyword,
-  ) => '$order번째 장면, $title, 낱말 $keyword';
 
   // ── 완료 ──
   static const String completed = '이야기를 멋지게 들려줬어!';

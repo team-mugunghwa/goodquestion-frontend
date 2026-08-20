@@ -189,8 +189,24 @@ void main() {
     await submitOrder(tester);
 
     expect(find.text('그림 아래 낱말을 넣어서 들려줄래?'), findsOneWidget);
-    for (final String word in <String>['참다', '쫓겨나다', '떨어뜨리다', '자신감']) {
-      expect(find.text(word), findsOneWidget);
+    // 낱말은 **그 장면을 말할 차례에** 그 장면 그림 아래에서 나옵니다.
+    // 네 개를 한 줄에 몰아 두면 아직 묻지도 않은 그림의 단서가 새어 나갑니다.
+    const List<String> words = <String>['참다', '쫓겨나다', '떨어뜨리다', '자신감'];
+    for (int i = 0; i < words.length; i++) {
+      expect(
+        find.text(words[i]),
+        findsOneWidget,
+        reason: '${i + 1}번째 장면에 서버가 준 낱말이 없습니다',
+      );
+      for (int j = i + 1; j < words.length; j++) {
+        expect(find.text(words[j]), findsNothing);
+      }
+      if (i < words.length - 1) {
+        await speak(tester);
+        await tester.tap(find.text(RecapStrings.next));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+      }
     }
   });
 
@@ -293,7 +309,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.textContaining('다시 눌러'), findsOneWidget);
-    expect(find.textContaining('며느리가 방귀를 참다가'), findsOneWidget);
+    // 네 장면 답이 채팅 로그에 그대로 남아 있습니다. (이 가짜 서버는 장면마다
+    // 같은 텍스트를 돌려줍니다) 하나라도 날아가면 아이는 다시 말해야 합니다.
+    expect(find.textContaining('며느리가 방귀를 참다가'), findsNWidgets(4));
     expect(
       buttonWith(tester, '다 했어').onPressed,
       isNotNull,
