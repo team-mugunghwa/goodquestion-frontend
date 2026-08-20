@@ -1,6 +1,7 @@
 import '../../../../core/config/app_config.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failure.dart';
+import '../../../../core/storage/selected_child_store.dart';
 import '../../domain/entities/auth_options.dart';
 import '../../domain/entities/auth_outcome.dart';
 import '../../domain/repositories/auth_repository.dart';
@@ -10,12 +11,22 @@ import '../datasources/auth_token_store.dart';
 import '../datasources/oauth_code_provider.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
-  AuthRepositoryImpl(this._local, this._remote, this._tokens, this._oauth);
+  AuthRepositoryImpl(
+    this._local,
+    this._remote,
+    this._tokens,
+    this._oauth,
+    this._selectedChild,
+  );
 
   final AuthLocalDataSource _local;
   final AuthRemoteDataSource _remote;
   final AuthTokenStore _tokens;
   final OAuthCodeProvider _oauth;
+
+  /// 로그아웃하면 고른 아이도 지웁니다. **안 지우면 다음 사용자가 남의 아이를
+  /// 봅니다** - 토큰과 같은 시점에 사라져야 하는 값이라 여기서 함께 지웁니다.
+  final SelectedChildStore _selectedChild;
   Set<String> _agreedIds = <String>{};
 
   @override
@@ -149,5 +160,6 @@ class AuthRepositoryImpl implements AuthRepository {
       }
     }
     await _tokens.clear();
+    await _selectedChild.clear();
   }
 }

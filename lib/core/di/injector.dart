@@ -61,6 +61,7 @@ import '../push/push_registrar.dart';
 import '../push/push_service.dart';
 import '../router/app_router.dart';
 import '../router/app_routes.dart';
+import '../storage/selected_child_store.dart';
 
 /// 앱 전역 서비스 로케이터.
 ///
@@ -122,6 +123,7 @@ Future<void> configureDependencies() async {
         getIt<AuthRemoteDataSource>(),
         getIt<AuthTokenStore>(),
         getIt<OAuthCodeProvider>(),
+        getIt<SelectedChildStore>(),
       ),
     )
     ..registerLazySingleton<GetAuthOptionsUseCase>(
@@ -329,8 +331,13 @@ Future<void> configureDependencies() async {
   //
   final ChildProfileRemoteDataSource childProfileRemote =
       ChildProfileRemoteDataSource(getIt<DioClient>());
+  // 고른 아이는 기기에 남아 있습니다. **여기서 한 번 읽어 둬야** 화면들이
+  // 동기 getter(selectedChildId)로 곧바로 그 값을 봅니다.
+  final SelectedChildStore selectedChildStore = SelectedChildStore();
+  await selectedChildStore.load();
   final MyPageRepositoryImpl myPageRepository = MyPageRepositoryImpl(
     childProfileRemote,
+    selectedChild: selectedChildStore,
   );
   final SettingsRemoteDataSource settingsRemote = SettingsRemoteDataSource(
     getIt<DioClient>(),
@@ -354,6 +361,7 @@ Future<void> configureDependencies() async {
   getIt
     ..registerLazySingleton<GuardianGate>(GuardianGate.new)
     ..registerSingleton<ChildProfileRemoteDataSource>(childProfileRemote)
+    ..registerSingleton<SelectedChildStore>(selectedChildStore)
     ..registerSingleton<MyPageRepository>(myPageRepository)
     ..registerSingleton<ChildProfileRepository>(myPageRepository)
     ..registerSingleton<ReportRemoteDataSource>(reportRemote)
@@ -365,6 +373,9 @@ Future<void> configureDependencies() async {
     )
     ..registerLazySingleton<CreateMyPageChildUseCase>(
       () => CreateMyPageChildUseCase(getIt<ChildProfileRepository>()),
+    )
+    ..registerLazySingleton<UpdateMyPageChildUseCase>(
+      () => UpdateMyPageChildUseCase(getIt<ChildProfileRepository>()),
     )
     ..registerLazySingleton<GetMyPageChildrenUseCase>(
       () => GetMyPageChildrenUseCase(getIt<ChildProfileRepository>()),
@@ -411,6 +422,8 @@ void _handleUnauthorized() {
 Future<void> _signOutAndRedirectToLogin() async {
   try {
     await getIt<AuthTokenStore>().clear();
+    // 세션이 끊기는 자리라 고른 아이도 함께 지웁니다.
+    await getIt<SelectedChildStore>().clear();
     appRouter.go(AppRoutes.login);
   } finally {
     _redirectingToLogin = false;

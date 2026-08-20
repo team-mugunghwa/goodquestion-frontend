@@ -167,6 +167,7 @@ class PlayProgress {
   const PlayProgress({
     this.mode,
     this.accumulatedElements = const <String>[],
+    this.newElements = const <String>[],
     this.missingElements = const <String>[],
     this.turnCount = 0,
     this.maxTurns = 0,
@@ -177,6 +178,14 @@ class PlayProgress {
 
   /// 현재 장면에서 지금까지 채운 요소. **이번 턴이 반영된 뒤의 값**이다.
   final List<String> accumulatedElements;
+
+  /// **이번 턴에 새로 인정된 요소.** 서버가 표정·반응을 고르라고 따로 주는
+  /// 값이다 — 누적만 보면 "이번에 무엇이 통했는지"를 알 수 없어 매 턴 같은
+  /// 표정이 된다. → `docs/API.md` ProgressResponse
+  ///
+  /// 프런트가 누적을 직접 diff 하는 방법도 있지만, 이어하기로 들어오면 직전
+  /// 누적을 모르는 채로 시작해 첫 턴에 엉뚱한 표정이 나온다.
+  final List<String> newElements;
   final List<String> missingElements;
   final int turnCount;
   final int maxTurns;

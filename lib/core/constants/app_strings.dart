@@ -414,6 +414,15 @@ abstract final class MyPageStrings {
   static String completedStories(int count) => '완주한 이야기 $count편';
   static String stardust(int count) => '별가루 $count';
 
+  /// 아이를 새로 추가할 때 받는 필수 동의. **아이마다 따로 받습니다** -
+  /// 아동 개인정보 수집은 계정 약관과 별도 항목이고(PRD F-01), 서버도 아이별로
+  /// 동의 기록을 요구합니다(없으면 이야기 시작이 409 로 막힙니다).
+  /// 문서 원본은 설정에서 여는 것과 같은 번들 문서입니다.
+  static const String childConsentLabel = '아동 개인정보 수집·이용에 동의합니다';
+  static const String childConsentRequired = '필수';
+  static const String childConsentView = '보기';
+  static const String childConsentMissing = '동의해야 아이를 추가할 수 있어요.';
+
   static const String switchChild = '프로필 전환';
   static const String editChild = '프로필 수정';
 
@@ -654,14 +663,21 @@ abstract final class AuthRecoveryStrings {
   static const String guardianName = '보호자 이름';
   static const String childName = '아이 이름';
   static const String childNameHint = '예: 지우';
-  static const String childBirthYear = '아이 출생연도';
-  static const String childBirthYearHint = '예: 2018';
+
+  /// **지금 나이를 받습니다.** 가입할 때 고른 나이를 그대로 넣으면 해가
+  /// 바뀐 만큼 어긋나 못 찾습니다 - 서버는 나이를 저장하지 않고 출생연도만
+  /// 들고 있어 나이를 매번 다시 계산하기 때문입니다. 라벨에 "지금"을 넣어
+  /// 두었다가 뺐습니다(2026-08): 대부분은 아이의 현재 나이를 적으므로,
+  /// 드문 경우를 위해 라벨을 길게 두는 것보다 등록 화면과 같은 말로
+  /// 부르는 편이 낫습니다.
+  static const String childAge = '아이 나이';
+  static const String childAgeHint = '예: 8';
   static const String findIdAction = '가입 이메일 확인하기';
 
   /// 아이 정보를 왜 다 받는지. **비워 두면 못 찾습니다** - 서버가 아이 정보
   /// 없이 찾을 때는 아이가 등록된 계정을 결과에서 빼기 때문입니다(아이 정보
   /// 없이 남의 계정을 캐낼 수 없게 하는 조건).
-  static const String childInfoNotice = '아이 이름과 출생연도를 모두 입력해야 계정을 찾을 수 있어요.';
+  static const String childInfoNotice = '아이 이름과 나이를 모두 입력해야 계정을 찾을 수 있어요.';
 
   static const String resetTitle = '비밀번호를 다시 설정해요';
   static const String resetDescription = '가입한 이메일로 안전한 비밀번호 재설정 링크를 보내드립니다.';
@@ -670,7 +686,7 @@ abstract final class AuthRecoveryStrings {
   static const String resetAction = '재설정 링크 받기';
 
   static const String requiredFields = '입력하지 않은 항목이 있어요.';
-  static const String invalidBirthYear = '출생연도를 네 자리로 입력해 주세요. (예: 2018)';
+  static const String invalidChildAge = '아이 나이를 숫자로 입력해 주세요. (예: 8)';
   static const String invalidEmail = '올바른 이메일 주소를 입력해 주세요.';
   static const String requestFailed = '요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.';
 
@@ -765,9 +781,27 @@ abstract final class FreeTalkStrings {
   static const String startFailed = '지금은 이야기를 시작하지 못했어. 다시 해볼까?';
 
   static const String exitTitle = '이야기를 그만할까?';
-  static const String exitMessage = '친구가 인사하고 보내 줄 거야.';
+
+  /// 나가는 길이 둘이라는 것을 카드 본문에서 **먼저** 말해 줍니다. 5~9세는
+  /// 버튼을 하나씩 읽기 전에 큰 글자부터 보기 때문에, 여기서 차이를 못 들으면
+  /// 아래 두 버튼이 같은 말로 보입니다.
+  static const String exitMessage = '인사를 듣고 가도 되고, 바로 나가도 돼.';
+
   static const String exitKeep = '더 이야기하기';
-  static const String exitLeave = '인사하고 끝내기';
+
+  /// 친구의 작별 인사를 듣고 나가는 쪽(`end`).
+  ///
+  /// [exitLeave] 와 **끝말을 일부러 맞췄습니다** — '나가기'가 같으니 아이 눈이
+  /// 다른 앞말('인사하고' 대 '바로')로 갑니다. 끝말까지 다르면('끝내기' 대
+  /// '나가기') 두 줄이 그냥 다른 말로 보여 무엇이 다른지가 흐려집니다.
+  static const String exitFarewell = '인사하고 나가기';
+
+  /// 인사 없이 곧장 홈으로 가는 쪽(`leave`).
+  ///
+  /// '마무리하기'·'종료'처럼 어른이 쓰는 말을 넣지 않습니다 — 7세가 읽어서
+  /// 뜻이 바로 오는 말만 씁니다. '바로'는 이 갈래를 고르는 이유(기다리지 않는
+  /// 다)를 그대로 가리키는 말이기도 합니다.
+  static const String exitLeave = '바로 나가기';
 
   // ── 또 만나자 ──
   static const String farewellTitle = '또 만나자!';

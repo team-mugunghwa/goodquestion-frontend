@@ -27,12 +27,12 @@ void main() {
               ({
                 required String parentName,
                 String? childName,
-                int? childBirthYear,
+                int? childAge,
               }) async {
                 sent = <String, Object?>{
                   'parentName': parentName,
                   'childName': childName,
-                  'childBirthYear': childBirthYear,
+                  'childAge': childAge,
                 };
                 return emails;
               },
@@ -42,28 +42,30 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// ID 찾기 폼을 채웁니다. 필드 순서: 보호자 이름 · 아이 이름 · 출생연도.
+  /// ID 찾기 폼을 채웁니다. 필드 순서: 보호자 이름 · 아이 이름 · 나이.
   Future<void> fillFindId(
     WidgetTester tester, {
     String parentName = '김보호',
     String childName = '지우',
-    String birthYear = '2018',
+    String childAge = '8',
   }) async {
     final Finder fields = find.byType(TextField);
     await tester.enterText(fields.at(0), parentName);
     await tester.enterText(fields.at(1), childName);
-    await tester.enterText(fields.at(2), birthYear);
+    await tester.enterText(fields.at(2), childAge);
   }
 
-  testWidgets('ID 찾기는 보호자 이름과 아이 이름·출생연도를 받는다', (WidgetTester tester) async {
+  testWidgets('ID 찾기는 보호자 이름과 아이 이름·나이를 받는다', (WidgetTester tester) async {
     await pump(tester, AccountRecoveryMode.findId);
 
     expect(find.text(AuthRecoveryStrings.findIdTitle), findsOneWidget);
     expect(find.text(AuthRecoveryStrings.guardianName), findsOneWidget);
     expect(find.text(AuthRecoveryStrings.childName), findsOneWidget);
-    expect(find.text(AuthRecoveryStrings.childBirthYear), findsOneWidget);
-    // 서버가 안 쓰는 값입니다.
+    // 아이 등록과 같은 기준(나이)입니다. 두 화면에서 다른 값을 다루게 하면
+    // 변환이 어긋나 못 찾습니다.
+    expect(find.text(AuthRecoveryStrings.childAge), findsOneWidget);
     expect(find.text('보호자 생년월일'), findsNothing);
+    expect(find.text('아이 출생연도'), findsNothing);
 
     await tester.tap(find.text(AuthRecoveryStrings.findIdAction));
     await tester.pump();
@@ -76,7 +78,7 @@ void main() {
 
     // 아이 정보가 하나라도 비면 서버는 아이가 등록된 계정을 결과에서 뺍니다
     // - 실사용자는 전원 아이가 있으니 사실상 항상 빈 결과입니다.
-    await fillFindId(tester, childName: '', birthYear: '');
+    await fillFindId(tester, childName: '', childAge: '');
     await tester.tap(find.text(AuthRecoveryStrings.findIdAction));
     await tester.pump();
 
@@ -86,14 +88,20 @@ void main() {
     expect(find.text(AuthRecoveryStrings.childInfoNotice), findsOneWidget);
   });
 
-  testWidgets('출생연도는 네 자리 연도만 받는다', (WidgetTester tester) async {
+  testWidgets('나이는 숫자로만 받는다', (WidgetTester tester) async {
     await pump(tester, AccountRecoveryMode.findId);
 
-    await fillFindId(tester, birthYear: '2018.03.15');
+    // 출생연도를 넣던 화면이라 2018 같은 값을 그대로 적을 수 있습니다.
+    await fillFindId(tester, childAge: '2018');
     await tester.tap(find.text(AuthRecoveryStrings.findIdAction));
     await tester.pump();
+    expect(find.text(AuthRecoveryStrings.invalidChildAge), findsOneWidget);
+    expect(sent, isNull);
 
-    expect(find.text(AuthRecoveryStrings.invalidBirthYear), findsOneWidget);
+    await fillFindId(tester, childAge: '여덟');
+    await tester.tap(find.text(AuthRecoveryStrings.findIdAction));
+    await tester.pump();
+    expect(find.text(AuthRecoveryStrings.invalidChildAge), findsOneWidget);
     expect(sent, isNull);
   });
 
@@ -107,7 +115,7 @@ void main() {
     expect(sent, <String, Object?>{
       'parentName': '김보호',
       'childName': '지우',
-      'childBirthYear': 2018,
+      'childAge': 8,
     });
     expect(find.text(AuthRecoveryStrings.findIdDoneTitle), findsOneWidget);
     // 마스킹은 서버가 합니다 - 화면에서 또 가리지 않습니다.

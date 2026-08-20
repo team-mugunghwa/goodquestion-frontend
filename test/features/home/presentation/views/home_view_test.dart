@@ -253,6 +253,12 @@ void main() {
 
 /// 아이 목록·전환은 홈의 곁가지라 테스트용 고정 저장소를 씁니다.
 class _StubChildren implements ChildProfileRepository {
+  @override
+  Future<void> updateChild({
+    required String childId,
+    required String name,
+    required int age,
+  }) async {}
   const _StubChildren();
 
   @override

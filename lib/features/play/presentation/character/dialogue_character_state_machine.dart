@@ -65,15 +65,25 @@ class DialogueCharacterStateMachine {
     final PlayAnalysis? analysis = result.analysis;
     final PlayProgress? progress = result.progress;
 
-    // 이번 턴에 새로 들어온 요소. accumulated가 있으면 그것이 기준이고(서버가 후처리로 걸러낸
-    // 최종 누적이다), 없으면 detectedElements로 대신한다.
+    // 이번 턴에 새로 들어온 요소.
+    //
+    // **서버의 newElements가 있으면 그것이 답이다** - 표정을 고르라고 따로
+    // 주는 값이라 이어하기로 들어와도 정확하다. 프런트가 누적을 직접 diff
+    // 하는 아래 길은 직전 누적을 모르면 첫 턴에 통째로 "새로 충족"이 된다.
+    // 옛 서버(newElements 이전)와 자유 대화 응답을 위해 폴백은 남겨 둔다.
     final Set<String> accumulated =
         progress?.accumulatedElements.toSet() ?? <String>{};
-    final Set<String> fresh = accumulated.isEmpty
-        ? (analysis?.detectedElements.toSet() ?? <String>{}).difference(
-            _seenElements,
-          )
-        : accumulated.difference(_seenElements);
+    final Set<String> reported = progress?.newElements.toSet() ?? <String>{};
+    final Set<String> fresh;
+    if (reported.isNotEmpty) {
+      fresh = reported;
+    } else if (accumulated.isEmpty) {
+      fresh = (analysis?.detectedElements.toSet() ?? <String>{}).difference(
+        _seenElements,
+      );
+    } else {
+      fresh = accumulated.difference(_seenElements);
+    }
     _seenElements = _seenElements.union(accumulated).union(fresh);
 
     // 1. 닫히는 턴. 종료 판정은 서버 몫이라 mode와 sceneTransition 둘 다 본다.

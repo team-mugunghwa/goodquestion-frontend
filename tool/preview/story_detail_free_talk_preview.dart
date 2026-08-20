@@ -271,6 +271,9 @@ class _StubFreeTalk implements FreeTalkRepository {
   );
 
   @override
+  Future<void> leave(String freeTalkId) async {}
+
+  @override
   Future<FreeTalkSpeech> end(String freeTalkId) async =>
       const FreeTalkSpeech(text: '오늘도 고마워. 다음에 또 보자!');
 }

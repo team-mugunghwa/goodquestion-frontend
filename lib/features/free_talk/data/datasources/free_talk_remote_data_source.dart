@@ -2,7 +2,7 @@ import '../../../../core/network/dio_client.dart';
 import '../../domain/entities/free_talk.dart';
 import '../dtos/free_talk_dto.dart';
 
-/// 자유 대화 엔드포인트 네 개.
+/// 자유 대화 엔드포인트 다섯 개.
 ///
 /// 인물 목록·시작은 아이 아래(`/children/{childId}/...`)에 있고, 대화가
 /// 시작된 뒤에는 `freeTalkId` 하나로 식별합니다 — 서버가 그 대화의 주인을
@@ -50,4 +50,14 @@ class FreeTalkRemoteDataSource {
     '/free-talk/$freeTalkId/end',
     parse: FreeTalkDto.closing,
   );
+
+  /// 인사 없이 대화만 닫습니다("바로 나가기"). 본문 없이 **204** 가 옵니다.
+  ///
+  /// [end] 와 굳이 갈라 둔 이유는 [end] 가 작별 대사를 **지어서** 옵니다 —
+  /// 모델 왕복이 붙고 값도 나갑니다. 그냥 나가려는 아이에게는 그 문장이
+  /// 필요 없으니, 여기서는 서버가 `ended_at` 만 찍으면 됩니다.
+  ///
+  /// 경로·상태코드는 백엔드 `FreeTalkController.leave` 와 대조해 확인했습니다.
+  Future<void> leave(String freeTalkId) =>
+      _client.post<void>('/free-talk/$freeTalkId/leave', parse: (_) {});
 }

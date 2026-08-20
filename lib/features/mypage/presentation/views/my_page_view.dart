@@ -9,12 +9,14 @@ import '../../../../core/constants/app_icons.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/app_state_views.dart';
 import '../../../../core/widgets/child_avatar.dart';
 import '../../../../core/widgets/guardian_list.dart';
 import '../../../../core/widgets/guardian_scaffold.dart';
+import '../../../../core/widgets/policy_document_view.dart';
 import '../../../../core/widgets/skeleton_box.dart';
 import '../../domain/entities/my_page_summary.dart';
 import '../../domain/guardian_gate.dart';
@@ -65,6 +67,7 @@ class MyPage extends StatelessWidget {
           create: (_) => MyPageViewModel(
             getIt<GetMyPageSummaryUseCase>(),
             getIt<CreateMyPageChildUseCase>(),
+            getIt<UpdateMyPageChildUseCase>(),
             getIt<GetMyPageChildrenUseCase>(),
             getIt<SelectMyPageChildUseCase>(),
           )..load(),
@@ -170,7 +173,9 @@ class MyPageView extends StatelessWidget {
     return ChildProfileCard(
       summary: summary,
       onSwitch: () => _openChildSwitch(context),
-      onEdit: () => _openChildForm(context),
+      // 연필은 **지금 아이를 고치는** 자리입니다. 값을 안 넘기면 빈 폼이
+      // 열리고, 저장하면 아이가 하나 더 생깁니다.
+      onEdit: () => _openChildForm(context, child: summary.child),
       onCreate: () => _openChildForm(context),
     );
   }
@@ -188,26 +193,37 @@ class MyPageView extends StatelessWidget {
     unawaited(context.push(AppRoutes.report));
   }
 
-  /// 아이 프로필 추가·수정 모달의 자리.
+  /// 아이 프로필 추가·수정 모달.
   ///
-  /// 모달 내부 폼은 별도 설계 범위라, 여기서는 호출 지점만 만들어 둡니다.
-  /// 지금은 최초 등록 화면(`/auth`)이 같은 일을 하므로 그리로 보냅니다.
-  Future<void> _openChildForm(BuildContext context) async {
+  /// [child] 가 있으면 **그 아이를 고치는** 폼입니다(지금 값이 채워진 채로
+  /// 열리고 저장하면 PATCH). 없으면 빈 폼으로 새로 만듭니다.
+  Future<void> _openChildForm(
+    BuildContext context, {
+    MyPageChild? child,
+  }) async {
     final _ChildFormValue? value = await showModalBottomSheet<_ChildFormValue>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (BuildContext sheetContext) => const _ChildProfileForm(),
+      builder: (BuildContext sheetContext) => _ChildProfileForm(child: child),
     );
     if (value == null || !context.mounted) return;
 
     final MyPageViewModel vm = context.read<MyPageViewModel>();
-    final bool saved = await vm.addChild(name: value.name, age: value.age);
+    final bool saved = child == null
+        ? await vm.addChild(name: value.name, age: value.age)
+        : await vm.updateChild(
+            childId: child.childId,
+            name: value.name,
+            age: value.age,
+          );
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          saved ? '아이 프로필이 저장되었습니다.' : vm.childSaveError ?? '저장하지 못했습니다.',
+          saved
+              ? (child == null ? '아이 프로필을 추가했습니다.' : '아이 프로필을 수정했습니다.')
+              : vm.childSaveError ?? '저장하지 못했습니다.',
         ),
       ),
     );
@@ -305,8 +321,16 @@ class _ChildFormValue {
   final int age;
 }
 
+/// 아이 프로필 폼. **추가와 수정이 같은 폼을 씁니다.**
+///
+/// 받는 것이 이름과 나이로 똑같아서, 나누면 검증과 나이 선택이 두 벌이 되고
+/// 한쪽만 고치는 실수가 생깁니다. 다른 것은 무엇을 하는 자리인지 알려 주는
+/// 제목·안내·버튼 문구뿐이라 [child] 유무로 갈라 씁니다.
 class _ChildProfileForm extends StatefulWidget {
-  const _ChildProfileForm();
+  const _ChildProfileForm({this.child});
+
+  /// null 이면 새로 만드는 폼, 있으면 그 아이를 고치는 폼입니다.
+  final MyPageChild? child;
 
   @override
   State<_ChildProfileForm> createState() => _ChildProfileFormState();
@@ -314,8 +338,24 @@ class _ChildProfileForm extends StatefulWidget {
 
 class _ChildProfileFormState extends State<_ChildProfileForm> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  final TextEditingController _nameController = TextEditingController();
-  int _age = 7;
+  late final TextEditingController _nameController = TextEditingController(
+    text: widget.child?.name ?? '',
+  );
+
+  /// 서버가 출생연도에서 계산해 내려준 나이를 그대로 씁니다. 목록에 없는
+  /// 나이면(선택지는 4~13세) 값이 사라지지 않게 목록에 끼워 넣습니다.
+  late int _age = widget.child?.age ?? 7;
+
+  bool get _isEdit => widget.child != null;
+
+  /// 아동 개인정보 수집 동의. **추가할 때만 받습니다** - 수정은 이미 동의를
+  /// 받아 둔 아이를 고치는 것이고, 서버 동의 기록도 아이 생성 시점에
+  /// 남습니다.
+  bool _consented = false;
+  bool _consentMissing = false;
+
+  List<int> get _ageOptions =>
+      <int>{for (int age = 4; age <= 13; age++) age, _age}.toList()..sort();
 
   @override
   void dispose() {
@@ -339,10 +379,13 @@ class _ChildProfileFormState extends State<_ChildProfileForm> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Text('아이 프로필 추가', style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                _isEdit ? '아이 프로필 수정' : '아이 프로필 추가',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                '아이의 이름과 나이를 입력해 주세요.',
+                _isEdit ? '바꿀 내용을 고쳐 주세요.' : '아이의 이름과 나이를 입력해 주세요.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: AppSpacing.lg),
@@ -366,13 +409,48 @@ class _ChildProfileFormState extends State<_ChildProfileForm> {
                 initialValue: _age,
                 decoration: const InputDecoration(labelText: '나이'),
                 items: <DropdownMenuItem<int>>[
-                  for (int age = 4; age <= 13; age++)
+                  for (final int age in _ageOptions)
                     DropdownMenuItem<int>(value: age, child: Text('$age세')),
                 ],
                 onChanged: (int? value) {
                   if (value != null) _age = value;
                 },
               ),
+              if (!_isEdit) ...<Widget>[
+                const SizedBox(height: AppSpacing.sm),
+                Row(
+                  children: <Widget>[
+                    Checkbox(
+                      value: _consented,
+                      onChanged: (bool? value) => setState(() {
+                        _consented = value ?? false;
+                        if (_consented) _consentMissing = false;
+                      }),
+                    ),
+                    Expanded(
+                      child: Text(
+                        '[${MyPageStrings.childConsentRequired}] '
+                        '${MyPageStrings.childConsentLabel}',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => _openChildPrivacy(context),
+                      child: const Text(MyPageStrings.childConsentView),
+                    ),
+                  ],
+                ),
+                if (_consentMissing)
+                  Padding(
+                    padding: const EdgeInsets.only(left: AppSpacing.md),
+                    child: Text(
+                      MyPageStrings.childConsentMissing,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: AppColors.danger),
+                    ),
+                  ),
+              ],
               const SizedBox(height: AppSpacing.lg),
               Row(
                 children: <Widget>[
@@ -386,7 +464,7 @@ class _ChildProfileFormState extends State<_ChildProfileForm> {
                   Expanded(
                     child: FilledButton(
                       onPressed: _submit,
-                      child: const Text('저장'),
+                      child: Text(_isEdit ? '수정' : '저장'),
                     ),
                   ),
                 ],
@@ -398,8 +476,32 @@ class _ChildProfileFormState extends State<_ChildProfileForm> {
     );
   }
 
+  /// 동의 내용을 실제로 읽을 수 있어야 합니다. 설정에서 여는 것과 **같은
+  /// 번들 문서**라 두 곳의 고지 내용이 갈리지 않습니다.
+  void _openChildPrivacy(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (BuildContext sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(sheetContext).size.height * .82,
+          child: const PolicyDocumentView(
+            title: SettingsStrings.childPrivacy,
+            assetPath: 'assets/policies/child_privacy.md',
+          ),
+        ),
+      ),
+    );
+  }
+
   void _submit() {
     if (_formKey.currentState?.validate() != true) return;
+    // 동의 없이 아이만 만들어지면 그 아이로는 이야기를 시작할 수 없습니다.
+    if (!_isEdit && !_consented) {
+      setState(() => _consentMissing = true);
+      return;
+    }
     Navigator.of(
       context,
     ).pop(_ChildFormValue(_nameController.text.trim(), _age));

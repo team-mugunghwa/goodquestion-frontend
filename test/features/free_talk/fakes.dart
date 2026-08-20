@@ -26,6 +26,8 @@ class FakeFreeTalkRepository implements FreeTalkRepository {
       text: '잘 가! 또 놀러 와.',
       audioUrl: '/tts/closing.mp3',
     ),
+    this.leaveError,
+    this.leaveGate,
   });
 
   final List<FreeTalkCharacter> charactersResult;
@@ -37,9 +39,21 @@ class FakeFreeTalkRepository implements FreeTalkRepository {
   final List<FreeTalkTurn> turns;
   final FreeTalkSpeech closing;
 
+  /// 닫기 요청이 깨지는 길. 그래도 아이는 나가야 합니다.
+  final Failure? leaveError;
+
+  /// 닫기 요청을 **끝나지 않게** 붙잡아 둡니다.
+  ///
+  /// 곧바로 끝나 버리는 가짜로는 "응답을 기다리지 않는다"를 확인할 수
+  /// 없습니다 — 기다리든 안 기다리든 같은 화면이 나오기 때문입니다.
+  /// 여기를 세워 두면 기다리는 구현은 홈에 도착하지 못합니다.
+  /// ([ControlledAudioPlayer] 가 낭독에 대해 하는 일과 같습니다)
+  final Completer<void>? leaveGate;
+
   int charactersCalls = 0;
   int startCalls = 0;
   int endCalls = 0;
+  int leaveCalls = 0;
   final List<String> sentTexts = <String>[];
   final List<String?> sentKeys = <String?>[];
 
@@ -102,6 +116,17 @@ class FakeFreeTalkRepository implements FreeTalkRepository {
   Future<FreeTalkSpeech> end(String freeTalkId) async {
     endCalls++;
     return closing;
+  }
+
+  @override
+  Future<void> leave(String freeTalkId) async {
+    // 세는 것은 기다리기 **전에** 합니다 - 붙잡아 둔 채로도 "불렸는지"를
+    // 확인할 수 있어야 합니다.
+    leaveCalls++;
+    final Completer<void>? gate = leaveGate;
+    if (gate != null) await gate.future;
+    final Failure? error = leaveError;
+    if (error != null) throw error;
   }
 }
 

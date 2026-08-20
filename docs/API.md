@@ -536,6 +536,7 @@ _(도메인별 코드는 기능 추가 시 여기에 계속 채웁니다)_
 | POST | `/api/children/{childId}/free-talk` | `{ storyId, characterId }` | `FreeTalkStartResponse` | ✅ |
 | POST | `/api/free-talk/{freeTalkId}/messages` | `{ text }` + `Idempotency-Key` | `FreeTalkTurnResponse` | ✅ |
 | POST | `/api/free-talk/{freeTalkId}/end` | — | `{ closing }` | ✅ |
+| POST | `/api/free-talk/{freeTalkId}/leave` | — | — (204) | ✅ |
 
 - `FreeTalkCharacterResponse` — `characterId` · `name` · `characterKey` ·
   `thumbnailUrl`(선택) · `lastTalkedAt`(선택)
@@ -549,6 +550,15 @@ _(도메인별 코드는 기능 추가 시 여기에 계속 채웁니다)_
   계속 이어 가려 듭니다.
 - `opening.audioUrl` 이 있으면 대사를 **문장으로 쪼개지 않고 통째로** 띄웁니다.
   문장별 실측 구간(`audioTimings`)이 없어서, 쪼개면 자막이 소리와 어긋납니다.
+- **나가는 길이 둘입니다.** `end` 는 작별 대사를 **지어서** 돌려주고(모델
+  왕복·비용이 붙습니다), `leave` 는 `ended_at` 만 찍고 본문 없이 204 를
+  돌려줍니다. 아이가 "바로 나가기"를 고르면 프런트는 `leave` 를 띄워만 놓고
+  **응답을 기다리지 않고** 홈으로 갑니다 — 실패해도 재시도하지 않고, 화면에
+  띄우지도 않습니다. 나가는 길을 막지 않는 것이 우선입니다.
+- `leave` 의 경로·메서드·상태코드는 백엔드 `FreeTalkController.leave` 와
+  대조해 확인했습니다(2026-08-19). 한쪽만 고치면 기능이 통째로 죽는 자리라,
+  바꿀 때는 이 표와 `free_talk_remote_data_source.dart`, 백엔드 컨트롤러를
+  같이 고칩니다.
 
 - `GET /api/children/{childId}/stories/completed` — **이 아이가 완주한 이야기의 id 들.**
   목록 카드의 "끝냈어" 도장이 이걸로 그려집니다. 완주한 게 없으면 빈 배열(404 아님).

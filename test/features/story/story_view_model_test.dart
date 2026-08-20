@@ -90,6 +90,9 @@ class _StubFreeTalkRepository implements FreeTalkRepository {
   }) => throw UnimplementedError();
 
   @override
+  Future<void> leave(String freeTalkId) async {}
+
+  @override
   Future<FreeTalkSpeech> end(String freeTalkId) => throw UnimplementedError();
 }
 

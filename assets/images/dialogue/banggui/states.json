@@ -17,12 +17,21 @@
     "한 턴에 여러 요소가 충족되면 statePriority 앞쪽이 이긴다.",
     "confusedState 가 null 인 장면은 표정을 바꾸지 않고 현재 상태를 유지한다.",
     "closingVia 가 있으면 그 상태를 잠시 보여준 뒤 closingState 로 넘어간다.",
-    "listening/thinking/speaking 은 별도 에셋 없이 현재 상태 이미지 위에 코드 모션으로 처리한다."
+    "listening/thinking/speaking 은 별도 에셋 없이 현재 상태 이미지 위에 코드 모션으로 처리한다.",
+    "",
+    "emotions 는 **후속 자유 대화**용이다. 자유 대화에는 사고 요소·진행 판단이 없고 서버가",
+    "CharacterEmotion 6종(NEUTRAL/HAPPY/SAD/WORRIED/SURPRISED/RELIEVED)만 내려준다.",
+    "그 값을 이 장면의 상태 키로 옮기는 표가 emotions 다. 없는 감정은 적지 않는다 -",
+    "빠진 감정은 표정을 그대로 두는 쪽이고, 어울리지 않는 얼굴을 억지로 붙이지 않는다."
   ],
   "version": 2,
   "story": "banggui",
   "storyId": "11111111-1111-1111-1111-111111111111",
-  "confusedValidity": ["PLAYFUL", "OFF_TOPIC", "UNCLEAR"],
+  "confusedValidity": [
+    "PLAYFUL",
+    "OFF_TOPIC",
+    "UNCLEAR"
+  ],
   "closingViaHoldMs": 1200,
   "scenes": {
     "33333333-3333-3333-3333-000000000003": {
@@ -37,14 +46,49 @@
       "closingVia": "hopeful",
       "confusedState": "hurt_confused",
       "states": {
-        "opening": { "asset": "character_opening.webp" },
-        "comforted": { "asset": "character_comforted.webp", "elements": ["EMOTION"] },
-        "considering": { "asset": "character_considering.webp", "elements": ["PERSPECTIVE"] },
-        "hopeful": { "asset": "character_hopeful.webp", "elements": ["SOLUTION"] },
-        "hurt_confused": { "asset": "character_hurt_confused.webp" },
-        "closing": { "asset": "character_closing.webp" }
+        "opening": {
+          "asset": "character_opening.webp"
+        },
+        "comforted": {
+          "asset": "character_comforted.webp",
+          "elements": [
+            "EMOTION"
+          ]
+        },
+        "considering": {
+          "asset": "character_considering.webp",
+          "elements": [
+            "PERSPECTIVE",
+            "REASON"
+          ]
+        },
+        "hopeful": {
+          "asset": "character_hopeful.webp",
+          "elements": [
+            "SOLUTION"
+          ]
+        },
+        "hurt_confused": {
+          "asset": "character_hurt_confused.webp"
+        },
+        "closing": {
+          "asset": "character_closing.webp"
+        }
       },
-      "statePriority": ["hurt_confused", "hopeful", "considering", "comforted"]
+      "statePriority": [
+        "hurt_confused",
+        "hopeful",
+        "considering",
+        "comforted"
+      ],
+      "emotions": {
+        "NEUTRAL": "opening",
+        "HAPPY": "hopeful",
+        "RELIEVED": "comforted",
+        "SAD": "hurt_confused",
+        "WORRIED": "hurt_confused",
+        "SURPRISED": "hurt_confused"
+      }
     },
     "33333333-3333-3333-3333-000000000005": {
       "sceneOrder": 5,
@@ -58,14 +102,49 @@
       "closingVia": "softened",
       "confusedState": "hurt_confused",
       "states": {
-        "opening": { "asset": "character_opening.webp" },
-        "considering": { "asset": "character_considering.webp", "elements": ["PERSPECTIVE", "REASON"] },
-        "softened": { "asset": "character_softened.webp", "elements": ["EMPATHY"] },
-        "reluctant": { "asset": "character_reluctant.webp", "elements": ["REQUEST"] },
-        "hurt_confused": { "asset": "character_hurt_confused.webp" },
-        "closing": { "asset": "character_closing.webp" }
+        "opening": {
+          "asset": "character_opening.webp"
+        },
+        "considering": {
+          "asset": "character_considering.webp",
+          "elements": [
+            "PERSPECTIVE",
+            "REASON"
+          ]
+        },
+        "softened": {
+          "asset": "character_softened.webp",
+          "elements": [
+            "EMPATHY"
+          ]
+        },
+        "reluctant": {
+          "asset": "character_reluctant.webp",
+          "elements": [
+            "REQUEST"
+          ]
+        },
+        "hurt_confused": {
+          "asset": "character_hurt_confused.webp"
+        },
+        "closing": {
+          "asset": "character_closing.webp"
+        }
       },
-      "statePriority": ["hurt_confused", "softened", "reluctant", "considering"]
+      "statePriority": [
+        "hurt_confused",
+        "softened",
+        "reluctant",
+        "considering"
+      ],
+      "emotions": {
+        "NEUTRAL": "opening",
+        "HAPPY": "softened",
+        "RELIEVED": "softened",
+        "SAD": "hurt_confused",
+        "WORRIED": "considering",
+        "SURPRISED": "hurt_confused"
+      }
     },
     "33333333-3333-3333-3333-000000000007": {
       "sceneOrder": 7,
@@ -79,13 +158,39 @@
       "closingVia": "result_hopeful",
       "confusedState": "hurt_confused",
       "states": {
-        "opening": { "asset": "character_opening.webp" },
-        "idea_interested": { "asset": "character_idea_interested.webp", "elements": ["SOLUTION"] },
-        "feasibility_considering": { "asset": "character_feasibility_considering.webp", "elements": ["REASON"] },
-        "safety_planning": { "asset": "character_safety_planning.webp", "elements": ["REQUEST"] },
-        "result_hopeful": { "asset": "character_result_hopeful.webp", "elements": ["RESULT"] },
-        "hurt_confused": { "asset": "character_hurt_confused.webp" },
-        "closing": { "asset": "character_closing.webp" }
+        "opening": {
+          "asset": "character_opening.webp"
+        },
+        "idea_interested": {
+          "asset": "character_idea_interested.webp",
+          "elements": [
+            "SOLUTION"
+          ]
+        },
+        "feasibility_considering": {
+          "asset": "character_feasibility_considering.webp",
+          "elements": [
+            "REASON"
+          ]
+        },
+        "safety_planning": {
+          "asset": "character_safety_planning.webp",
+          "elements": [
+            "REQUEST"
+          ]
+        },
+        "result_hopeful": {
+          "asset": "character_result_hopeful.webp",
+          "elements": [
+            "RESULT"
+          ]
+        },
+        "hurt_confused": {
+          "asset": "character_hurt_confused.webp"
+        },
+        "closing": {
+          "asset": "character_closing.webp"
+        }
       },
       "statePriority": [
         "hurt_confused",
@@ -93,7 +198,15 @@
         "result_hopeful",
         "feasibility_considering",
         "idea_interested"
-      ]
+      ],
+      "emotions": {
+        "NEUTRAL": "opening",
+        "HAPPY": "result_hopeful",
+        "RELIEVED": "result_hopeful",
+        "SAD": "hurt_confused",
+        "WORRIED": "feasibility_considering",
+        "SURPRISED": "idea_interested"
+      }
     },
     "33333333-3333-3333-3333-000000000009": {
       "sceneOrder": 9,
@@ -107,13 +220,37 @@
       "closingVia": "purposeful_hopeful",
       "confusedState": null,
       "states": {
-        "opening": { "asset": "character_opening.webp" },
-        "reassured": { "asset": "character_reassured.webp", "elements": ["PERSPECTIVE", "EMOTION"] },
-        "purposeful_hopeful": { "asset": "character_purposeful_hopeful.webp", "elements": ["SOLUTION", "RESULT"] },
-        "closing": { "asset": "character_closing.webp" }
+        "opening": {
+          "asset": "character_opening.webp"
+        },
+        "reassured": {
+          "asset": "character_reassured.webp",
+          "elements": [
+            "PERSPECTIVE",
+            "EMOTION"
+          ]
+        },
+        "purposeful_hopeful": {
+          "asset": "character_purposeful_hopeful.webp",
+          "elements": [
+            "SOLUTION",
+            "RESULT"
+          ]
+        },
+        "closing": {
+          "asset": "character_closing.webp"
+        }
       },
-      "statePriority": ["purposeful_hopeful", "reassured"],
-      "_todo": "character_closing.webp 와 character_purposeful_hopeful.webp 가 같은 그림이다(원본 PNG md5 동일). 문서상 다른 표정이라 closing 이미지 재생성이 필요하다."
+      "statePriority": [
+        "purposeful_hopeful",
+        "reassured"
+      ],
+      "_todo": "character_closing.webp 와 character_purposeful_hopeful.webp 가 같은 그림이다(원본 PNG md5 동일). 문서상 다른 표정이라 closing 이미지 재생성이 필요하다.",
+      "emotions": {
+        "NEUTRAL": "opening",
+        "HAPPY": "purposeful_hopeful",
+        "RELIEVED": "reassured"
+      }
     }
   }
 }
